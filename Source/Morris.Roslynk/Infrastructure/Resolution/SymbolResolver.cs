@@ -14,6 +14,10 @@ public sealed class SymbolResolver
 		typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
 		genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters);
 
+	/// <summary>The namespace-qualified name (no <c>global::</c> prefix) used as a symbol's identity.</summary>
+	public static string FullyQualifiedName(ISymbol symbol) =>
+		symbol.ToDisplayString(FullyQualifiedFormat);
+
 	public async Task<IReadOnlyList<ISymbol>> FindByFullyQualifiedNameAsync(Solution solution, string name, CancellationToken cancellationToken = default)
 	{
 		if (string.IsNullOrWhiteSpace(name))
@@ -30,7 +34,7 @@ public sealed class SymbolResolver
 			foreach (ISymbol symbol in await SymbolFinder.FindDeclarationsAsync(project, simpleName, ignoreCase: false, cancellationToken))
 			{
 				bool isMatch = qualified
-					? string.Equals(symbol.ToDisplayString(FullyQualifiedFormat), name, StringComparison.Ordinal)
+					? string.Equals(FullyQualifiedName(symbol), name, StringComparison.Ordinal)
 					: string.Equals(symbol.Name, name, StringComparison.Ordinal);
 
 				if (isMatch && seen.Add(symbol))
