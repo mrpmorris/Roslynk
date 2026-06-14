@@ -52,6 +52,26 @@ public sealed class InstanceRegistry : IDisposable
 		return loaded;
 	}
 
+	/// <summary>Closes a solution if loaded and loads it fresh from disk.</summary>
+	public async Task<RoslynInstance> ReloadAsync(string solutionPath)
+	{
+		TryClose(solutionPath);
+		return await GetOrAddAsync(solutionPath);
+	}
+
+	/// <summary>Closes and disposes every loaded solution. Returns how many were closed.</summary>
+	public int ClearAll()
+	{
+		int closed = 0;
+		foreach (SolutionKey key in Instances.Keys.ToArray())
+		{
+			if (TryClose(key.Path))
+				closed++;
+		}
+
+		return closed;
+	}
+
 	public void Dispose()
 	{
 		foreach (Lazy<Task<RoslynInstance>> lazy in Instances.Values)
