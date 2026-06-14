@@ -6,12 +6,13 @@ namespace Morris.Roslynk.Infrastructure.Lifecycle;
 /// <summary>
 /// One loaded solution shared by everyone using it: the <see cref="SolutionWorkspace"/> it was loaded
 /// from, the live <see cref="CurrentSolution"/> snapshot (swapped as changes are applied), and the
-/// single-writer lock that serializes those applies. Session ref-counting and eviction layer on later.
+/// single-writer lock that serializes those applies. The last-access stamp lets the registry idle-evict.
 /// </summary>
 public sealed class RoslynInstance : IDisposable
 {
 	private Solution CurrentSolutionField;
 	private volatile bool DirtyField;
+	private long LastAccessedTicks;
 	private IDisposable? Watcher;
 
 	public SolutionKey Key { get; }
@@ -25,7 +26,14 @@ public sealed class RoslynInstance : IDisposable
 		Key = key;
 		Workspace = workspace ?? throw new ArgumentNullException(nameof(workspace));
 		CurrentSolutionField = workspace.Solution;
+		LastAccessedTicks = DateTime.UtcNow.Ticks;
 	}
+
+	/// <summary>When the instance was last handed out, used by the registry to idle-evict unused solutions.</summary>
+	public DateTime LastAccessedUtc => new(Interlocked.Read(ref LastAccessedTicks), DateTimeKind.Utc);
+
+	/// <summary>Records that the instance was just used.</summary>
+	public void Touch() => Interlocked.Exchange(ref LastAccessedTicks, DateTime.UtcNow.Ticks);
 
 	/// <summary>
 	/// Set by the file watcher when a project / props / sln file changed on disk, which the immutable

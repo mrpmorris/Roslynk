@@ -10,8 +10,10 @@ builder.Services.AddWindowsService(options => options.ServiceName = "Roslynk");
 builder.AddLoopbackOnlyKestrel();
 builder.AddRoslynkObservability();
 
+builder.Services.AddRoslynk();
+builder.Services.AddHostedService<IdleEvictionService>();
+
 builder.Services
-	.AddRoslynk()
 	.AddMcpServer(McpServerRegistration.Configure)
 	.WithHttpTransport()
 	.WithToolsFromAssembly(typeof(ServicesRegistration).Assembly);

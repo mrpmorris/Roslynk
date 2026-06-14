@@ -26,7 +26,24 @@ public sealed class InstanceRegistry : IDisposable
 			instance = await GetOrLoadAsync(key);
 		}
 
+		instance.Touch();
 		return instance;
+	}
+
+	/// <summary>
+	/// Closes solutions not used for at least <paramref name="idleFor"/> as of <paramref name="nowUtc"/>,
+	/// so long-running hosts do not hold every solution ever opened in memory. Returns how many were closed.
+	/// </summary>
+	public int EvictIdle(TimeSpan idleFor, DateTime nowUtc)
+	{
+		int evicted = 0;
+		foreach (RoslynInstance instance in LoadedInstances())
+		{
+			if (nowUtc - instance.LastAccessedUtc >= idleFor && TryClose(instance.Key.Path))
+				evicted++;
+		}
+
+		return evicted;
 	}
 
 	private Task<RoslynInstance> GetOrLoadAsync(SolutionKey key)
