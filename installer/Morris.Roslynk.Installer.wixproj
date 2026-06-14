@@ -1,0 +1,14 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+
+	<PropertyGroup>
+		<OutputName>Roslynk-$(MSBuildProjectName)</OutputName>
+		<OutputType>Package</OutputType>
+		<!-- Point the harvest at the self-contained publish output produced by publish.ps1. -->
+		<DefineConstants>PublishDir=$(MSBuildThisFileDirectory)publish</DefineConstants>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<Compile Include="Roslynk.wxs" />
+	</ItemGroup>
+
+</Project>
