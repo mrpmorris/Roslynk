@@ -1,41 +1,35 @@
 <Project>
-
-	<PropertyGroup>
-		<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-	</PropertyGroup>
-
-	<ItemGroup>
-		<!-- Roslyn / MSBuild -->
-		<PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
-		<PackageVersion Include="Microsoft.Build.Framework" Version="17.11.48" />
-		<PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.3.0" />
-		<PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.3.0" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<!-- Hosting -->
-		<PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
-		<PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.9" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<!-- MCP -->
-		<PackageVersion Include="ModelContextProtocol.AspNetCore" Version="1.4.0" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<!-- OpenTelemetry -->
-		<PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
-		<PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
-		<PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2" />
-	</ItemGroup>
-
-	<ItemGroup>
-		<!-- Testing -->
-		<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
-		<PackageVersion Include="xunit" Version="2.9.2" />
-		<PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
-		<PackageVersion Include="coverlet.collector" Version="6.0.2" />
-	</ItemGroup>
-
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Roslyn / MSBuild -->
+    <PackageVersion Include="Microsoft.Build.Locator" Version="1.11.2" />
+    <PackageVersion Include="Microsoft.Build.Framework" Version="17.11.48" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.3.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.3.0" />
+    <PackageVersion Include="ModelContextProtocol" Version="1.4.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Hosting -->
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.9" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.9" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- MCP -->
+    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="1.4.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- OpenTelemetry -->
+    <PackageVersion Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
+    <PackageVersion Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.15.2" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Testing -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageVersion Include="xunit" Version="2.9.2" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageVersion Include="coverlet.collector" Version="6.0.2" />
+  </ItemGroup>
 </Project>
