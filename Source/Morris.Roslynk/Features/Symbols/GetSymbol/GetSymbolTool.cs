@@ -43,7 +43,10 @@ public sealed class GetSymbolTool
 		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(instance.CurrentSolution, symbolName);
 
 		if (matches.Count == 0)
-			return new GetSymbolResponse(Symbol: null, Candidates: []);
+		{
+			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(instance.CurrentSolution, symbolName);
+			return new GetSymbolResponse(Symbol: null, Candidates: suggestions);
+		}
 
 		if (matches.Count > 1)
 		{

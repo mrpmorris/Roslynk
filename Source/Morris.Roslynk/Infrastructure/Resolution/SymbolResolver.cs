@@ -92,6 +92,56 @@ public sealed class SymbolResolver
 	}
 
 	/// <summary>
+	/// Ranked fully-qualified-name suggestions for a name that did not resolve exactly — source symbols
+	/// whose simple name matches case-insensitively or by substring, best first. Used to turn a near-miss
+	/// into actionable candidates rather than an empty result.
+	/// </summary>
+	public async Task<IReadOnlyList<string>> SuggestAsync(Solution solution, string name, int maxResults = 10, CancellationToken cancellationToken = default)
+	{
+		if (string.IsNullOrWhiteSpace(name))
+			return [];
+
+		int lastDot = name.LastIndexOf('.');
+		string simpleName = lastDot >= 0 ? name[(lastDot + 1)..] : name;
+		if (simpleName.Length == 0)
+			return [];
+
+		var best = new Dictionary<string, int>(StringComparer.Ordinal);
+		foreach (Project project in solution.Projects)
+		{
+			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(project, candidate => IsCandidate(candidate, simpleName), cancellationToken))
+			{
+				string fullyQualified = FullyQualifiedName(symbol);
+				int score = Score(symbol.Name, simpleName);
+				if (!best.TryGetValue(fullyQualified, out int existing) || score < existing)
+					best[fullyQualified] = score;
+			}
+		}
+
+		return best
+			.OrderBy(entry => entry.Value)
+			.ThenBy(entry => entry.Key, StringComparer.Ordinal)
+			.Take(maxResults)
+			.Select(entry => entry.Key)
+			.ToArray();
+	}
+
+	private static bool IsCandidate(string candidate, string simpleName) =>
+		candidate.Contains(simpleName, StringComparison.OrdinalIgnoreCase)
+		|| simpleName.Contains(candidate, StringComparison.OrdinalIgnoreCase);
+
+	private static int Score(string candidate, string simpleName)
+	{
+		if (string.Equals(candidate, simpleName, StringComparison.Ordinal))
+			return 0;
+		if (string.Equals(candidate, simpleName, StringComparison.OrdinalIgnoreCase))
+			return 1;
+		if (candidate.StartsWith(simpleName, StringComparison.OrdinalIgnoreCase))
+			return 2;
+		return 3;
+	}
+
+	/// <summary>
 	/// Resolves the symbol referenced at a 1-based <paramref name="line"/>/<paramref name="column"/> in
 	/// the given file, or null if the file is not in the solution or no symbol sits there.
 	/// </summary>

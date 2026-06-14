@@ -46,6 +46,18 @@ public class GetSymbolTests
 	}
 
 	[Fact]
+	public async Task WhenTheNameNearlyMatches_ThenRankedCandidatesAreSuggested()
+	{
+		using var registry = new InstanceRegistry();
+		var subject = new GetSymbolTool(registry, new SymbolResolver());
+
+		GetSymbolResponse response = await subject.GetSymbol(TestSolutions.Simple, "SimpleLibrary.Greet");
+
+		Assert.Null(response.Symbol);
+		Assert.Contains("SimpleLibrary.Greeter", response.Candidates);
+	}
+
+	[Fact]
 	public async Task WhenAMetadataTypeIsRequested_ThenItResolvesFromTheReferencedAssembly()
 	{
 		using var registry = new InstanceRegistry();
