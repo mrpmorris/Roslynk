@@ -31,4 +31,17 @@ public class GetSymbolTests
 		Assert.Null(response.Symbol);
 		Assert.Empty(response.Candidates);
 	}
+
+	[Fact]
+	public async Task WhenTheSymbolHasDocumentation_ThenItIsIncluded()
+	{
+		using var registry = new InstanceRegistry();
+		var subject = new GetSymbolTool(registry, new SymbolResolver());
+
+		GetSymbolResponse response = await subject.GetSymbol(TestSolutions.Simple, "SimpleLibrary.Widget.Compute");
+
+		Assert.NotNull(response.Symbol);
+		Assert.Equal("own", response.Symbol!.Documentation.Source);
+		Assert.NotNull(response.Symbol.Documentation.Summary);
+	}
 }

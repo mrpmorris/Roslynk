@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
 
@@ -55,6 +56,7 @@ public sealed class GetSymbolTool
 
 	private static SymbolDto Map(ISymbol symbol)
 	{
+		SymbolDocumentation documentation = DocumentationReader.Read(symbol);
 		Location? location = symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
 		if (location is null)
 		{
@@ -68,7 +70,8 @@ public sealed class GetSymbolTool
 				StartLine: null,
 				StartColumn: null,
 				EndLine: null,
-				EndColumn: null);
+				EndColumn: null,
+				Documentation: documentation);
 		}
 
 		FileLinePositionSpan span = location.GetLineSpan();
@@ -82,6 +85,7 @@ public sealed class GetSymbolTool
 			StartLine: span.StartLinePosition.Line + 1,
 			StartColumn: span.StartLinePosition.Character + 1,
 			EndLine: span.EndLinePosition.Line + 1,
-			EndColumn: span.EndLinePosition.Character + 1);
+			EndColumn: span.EndLinePosition.Character + 1,
+			Documentation: documentation);
 	}
 }
