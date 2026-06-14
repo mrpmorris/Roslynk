@@ -19,6 +19,6 @@ public class EqualityTests
 	{
 		SolutionKey subject = SolutionKey.For("App.slnx");
 
-		Assert.True(System.IO.Path.IsPathFullyQualified(subject.Path));
+		Assert.True(System.IO.Path.IsPathFullyQualified(subject.FilePath));
 	}
 }

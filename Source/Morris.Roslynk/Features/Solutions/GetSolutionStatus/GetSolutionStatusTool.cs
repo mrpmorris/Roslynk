@@ -30,7 +30,7 @@ public sealed class GetSolutionStatusTool
 			.Select(instance =>
 			{
 				SolutionModel model = instance.CurrentModel;
-				return new LoadedSolutionStatus(instance.Key.Path, model.Status, model.SnapshotId, model.Solution?.Projects.Count() ?? 0);
+				return new LoadedSolutionStatus(instance.Key.FilePath, model.Status, model.SnapshotId, model.Solution?.Projects.Count() ?? 0);
 			})
 			.ToArray();
 

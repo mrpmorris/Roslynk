@@ -6,9 +6,9 @@ namespace Morris.Roslynk.Infrastructure.Lifecycle;
 /// </summary>
 public readonly struct SolutionKey : IEquatable<SolutionKey>
 {
-	public string Path { get; }
+	public string FilePath { get; }
 
-	private SolutionKey(string path) => Path = path;
+	private SolutionKey(string filePath) => FilePath = filePath;
 
 	public static SolutionKey For(string solutionPath)
 	{
@@ -19,13 +19,13 @@ public readonly struct SolutionKey : IEquatable<SolutionKey>
 	}
 
 	public bool Equals(SolutionKey other) =>
-		string.Equals(Path, other.Path, StringComparison.OrdinalIgnoreCase);
+		string.Equals(FilePath, other.FilePath, StringComparison.OrdinalIgnoreCase);
 
 	public override bool Equals(object? obj) =>
 		obj is SolutionKey other && Equals(other);
 
 	public override int GetHashCode() =>
-		StringComparer.OrdinalIgnoreCase.GetHashCode(Path);
+		StringComparer.OrdinalIgnoreCase.GetHashCode(FilePath);
 
-	public override string ToString() => Path;
+	public override string ToString() => FilePath;
 }

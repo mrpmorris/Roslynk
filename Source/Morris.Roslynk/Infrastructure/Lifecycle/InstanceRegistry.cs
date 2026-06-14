@@ -27,7 +27,7 @@ public sealed class InstanceRegistry : IDisposable
 
 		if (instance.IsDirty)
 		{
-			TryClose(key.Path);
+			TryClose(key.FilePath);
 			instance = GetOrCreate(key);
 			await instance.WaitUntilReadyAsync();
 		}
@@ -58,7 +58,7 @@ public sealed class InstanceRegistry : IDisposable
 		int evicted = 0;
 		foreach (RoslynInstance instance in LoadedInstances())
 		{
-			if (nowUtc - instance.LastAccessedUtc >= idleFor && TryClose(instance.Key.Path))
+			if (nowUtc - instance.LastAccessedUtc >= idleFor && TryClose(instance.Key.FilePath))
 				evicted++;
 		}
 
@@ -77,7 +77,7 @@ public sealed class InstanceRegistry : IDisposable
 	{
 		var instance = new RoslynInstance(key);
 		instance.BeginInitialLoad(
-			loader: () => SolutionWorkspace.LoadAsync(key.Path),
+			loader: () => SolutionWorkspace.LoadAsync(key.FilePath),
 			onReady: AttachWatcher);
 		return instance;
 	}
@@ -133,7 +133,7 @@ public sealed class InstanceRegistry : IDisposable
 		RoslynInstance instance = GetOrCreate(key);
 
 		if (instance.CurrentModel.Solution is not null)
-			instance.BeginRebuild(() => SolutionWorkspace.LoadAsync(key.Path), AttachWatcher);
+			instance.BeginRebuild(() => SolutionWorkspace.LoadAsync(key.FilePath), AttachWatcher);
 
 		instance.Touch();
 		return instance;
@@ -145,7 +145,7 @@ public sealed class InstanceRegistry : IDisposable
 		int closed = 0;
 		foreach (SolutionKey key in Instances.Keys.ToArray())
 		{
-			if (TryClose(key.Path))
+			if (TryClose(key.FilePath))
 				closed++;
 		}
 

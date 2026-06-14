@@ -49,7 +49,7 @@ public sealed class OpenSolutionTool
 			model.Status == SolutionStatus.Faulted
 				? Error.Faulted(model.FaultMessage ?? "The solution failed to load.")
 				: null,
-			solutionId: instance.Key.Path,
+			solutionId: instance.Key.FilePath,
 			projects: projects,
 			loadDiagnostics: instance.Workspace?.LoadDiagnostics ?? []);
 	}

@@ -6,11 +6,11 @@ namespace Morris.Roslynk.Infrastructure.Writing;
 /// </summary>
 public sealed class StaleWriteException : Exception
 {
-	public string Path { get; }
+	public string FilePath { get; }
 
-	public StaleWriteException(string path)
-		: base($"'{path}' changed on disk since it was loaded; the edit was not applied.")
+	public StaleWriteException(string filePath)
+		: base($"'{filePath}' changed on disk since it was loaded; the edit was not applied.")
 	{
-		Path = path;
+		FilePath = filePath;
 	}
 }

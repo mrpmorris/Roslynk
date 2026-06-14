@@ -42,7 +42,7 @@ public sealed class ReloadSolutionTool
 			model.Status == SolutionStatus.Faulted
 				? Error.Faulted(model.FaultMessage ?? "The reload failed.")
 				: null,
-			solutionId: instance.Key.Path,
+			solutionId: instance.Key.FilePath,
 			projectCount: model.Solution?.Projects.Count() ?? 0);
 	}
 }

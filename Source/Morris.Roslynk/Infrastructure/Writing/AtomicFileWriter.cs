@@ -13,9 +13,9 @@ public static class AtomicFileWriter
 		var staged = new List<StagedFile>();
 		foreach (PendingWrite write in writes)
 		{
-			string tempPath = write.Path + ".roslynk.tmp";
+			string tempPath = write.FilePath + ".roslynk.tmp";
 			await File.WriteAllTextAsync(tempPath, write.Text, cancellationToken);
-			staged.Add(new StagedFile(write.Path, tempPath, write.Path + ".roslynk.bak"));
+			staged.Add(new StagedFile(write.FilePath, tempPath, write.FilePath + ".roslynk.bak"));
 		}
 
 		Commit(staged);

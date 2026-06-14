@@ -6,12 +6,12 @@ namespace Morris.Roslynk.Features.Patching.ApplyPatch;
 /// <summary>A file the patch changed (or would change), with its resulting <c>documentVersion</c>.</summary>
 public sealed class ApplyPatchChange
 {
-	public string Path { get; }
+	public string FilePath { get; }
 	public string Version { get; }
 
-	public ApplyPatchChange(string path, string version)
+	public ApplyPatchChange(string filePath, string version)
 	{
-		Path = path;
+		FilePath = filePath;
 		Version = version;
 	}
 }

@@ -24,7 +24,7 @@ public sealed class ApplyPipeline
 			IReadOnlyList<PendingWrite> writes = await BuildWritesAsync(instance.CurrentSolution, updated, cancellationToken);
 			await AtomicFileWriter.WriteAllAsync(writes, cancellationToken);
 			instance.AdvanceTo(updated);
-			return writes.Select(write => write.Path).ToArray();
+			return writes.Select(write => write.FilePath).ToArray();
 		}
 		finally
 		{
