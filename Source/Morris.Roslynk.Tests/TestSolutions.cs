@@ -10,12 +10,16 @@ internal static class TestSolutions
 {
 	private static readonly Lazy<string> SimpleSolution = new(() => Prepare("SimpleSolution", "SimpleSolution.slnx"));
 	private static readonly Lazy<string> BrokenSolution = new(() => Prepare("BrokenSolution", "BrokenSolution.slnx"));
+	private static readonly Lazy<string> RazorSolutionPath = new(() => Prepare("RazorSolution", "RazorSolution.slnx"));
 
 	/// <summary>A clean single-project solution.</summary>
 	public static string Simple => SimpleSolution.Value;
 
 	/// <summary>A single-project solution containing a deliberate CS0029 compile error.</summary>
 	public static string Broken => BrokenSolution.Value;
+
+	/// <summary>A Razor Class Library with a component whose handler is wired only in markup.</summary>
+	public static string Razor => RazorSolutionPath.Value;
 
 	private static string Prepare(params string[] relativeParts)
 	{
