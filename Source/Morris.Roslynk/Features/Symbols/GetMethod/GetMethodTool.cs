@@ -4,6 +4,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Symbols.GetMethod;
 
@@ -35,20 +36,34 @@ public sealed class GetMethodTool
 		resolved by fully-qualified name. Overloads share a name, so every match is returned as its own
 		entry. If the name resolves only to non-methods, their fully-qualified names are returned instead.
 		""")]
-	public async Task<GetMethodResponse> GetMethod(
+	public async Task<GetMethodResult> GetMethod(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the method, e.g. 'MyNamespace.MyType.MyMethod'.")] string methodId)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(instance.CurrentSolution, methodId);
+		GetMethodResult Success(IReadOnlyList<MethodDto> methods) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Methods = methods };
+
+		GetMethodResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(model.Solution, methodId);
 
 		MethodDto[] methods = matches.OfType<IMethodSymbol>().Select(Map).ToArray();
 		if (methods.Length > 0)
-			return new GetMethodResponse(methods, []);
+			return Success(methods);
 
-		string[] candidates = matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
-		return new GetMethodResponse([], candidates);
+		string[] resolved = matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+		IReadOnlyList<string> candidates = resolved.Length > 0
+			? resolved
+			: await SymbolResolver.SuggestAsync(model.Solution, methodId);
+
+		return Failure(Error.NotFound($"No method matched '{methodId}'.", candidates.Count > 0 ? candidates : null));
 	}
 
 	private static MethodDto Map(IMethodSymbol method)
