@@ -9,12 +9,12 @@ namespace Morris.Roslynk.Features.Symbols.GetSymbol;
 /// fully-qualified names to disambiguate with; when nothing resolves it carries an
 /// <see cref="ErrorCode.NotFound"/> whose candidates are the fuzzy near-misses.
 /// </summary>
-public sealed record GetSymbolResult : ResultBase
+public sealed class GetSymbolResult : ResultBase
 {
 	public SymbolDto? Symbol { get; }
 
-	public GetSymbolResult(SolutionModel solutionModel, Error? error, SymbolDto? symbol)
-		: base(solutionModel, error)
+	public GetSymbolResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, SymbolDto? symbol)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		Symbol = symbol;
 	}

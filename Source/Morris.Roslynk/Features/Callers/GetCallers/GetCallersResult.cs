@@ -9,13 +9,13 @@ namespace Morris.Roslynk.Features.Callers.GetCallers;
 /// <see cref="ResultBase.Error"/> carries a <see cref="ErrorCode.NotFound"/> (nothing matched) or
 /// <see cref="ErrorCode.Ambiguous"/> (several matched) whose candidates list the matching names.
 /// </summary>
-public sealed record GetCallersResult : ResultBase
+public sealed class GetCallersResult : ResultBase
 {
 	public string? ResolvedSymbol { get; }
 	public IReadOnlyList<string>? Callers { get; }
 
-	public GetCallersResult(SolutionModel solutionModel, Error? error, string? resolvedSymbol, IReadOnlyList<string>? callers)
-		: base(solutionModel, error)
+	public GetCallersResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, string? resolvedSymbol, IReadOnlyList<string>? callers)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		ResolvedSymbol = resolvedSymbol;
 		Callers = callers;

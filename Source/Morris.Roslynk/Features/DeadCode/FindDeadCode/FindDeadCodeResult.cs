@@ -17,14 +17,14 @@ public sealed record DeadCodeCandidate(string Symbol, string Kind, string? Sourc
 /// null only when <see cref="ResultBase.Error"/> carries an <see cref="ErrorCode.Indexing"/> because the
 /// solution is still loading.
 /// </summary>
-public sealed record FindDeadCodeResult : ResultBase
+public sealed class FindDeadCodeResult : ResultBase
 {
 	public IReadOnlyList<DeadCodeCandidate>? Candidates { get; }
 	public bool? Truncated { get; }
 	public string? Note { get; }
 
-	public FindDeadCodeResult(SolutionModel solutionModel, Error? error, IReadOnlyList<DeadCodeCandidate>? candidates, bool? truncated, string? note)
-		: base(solutionModel, error)
+	public FindDeadCodeResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, IReadOnlyList<DeadCodeCandidate>? candidates, bool? truncated, string? note)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		Candidates = candidates;
 		Truncated = truncated;

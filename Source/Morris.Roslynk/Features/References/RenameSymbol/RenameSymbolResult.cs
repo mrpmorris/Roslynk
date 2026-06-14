@@ -9,14 +9,14 @@ namespace Morris.Roslynk.Features.References.RenameSymbol;
 /// <see cref="ResultBase.Error"/>: Invalid for a bad identifier, NotFound (with candidates) when nothing
 /// matched, Ambiguous when several symbols share the name.
 /// </summary>
-public sealed record RenameSymbolResult : ResultBase
+public sealed class RenameSymbolResult : ResultBase
 {
 	public bool Applied { get; }
 	public string? ResolvedSymbol { get; }
 	public IReadOnlyList<string>? ChangedFiles { get; }
 
-	public RenameSymbolResult(SolutionModel solutionModel, Error? error, bool applied, string? resolvedSymbol, IReadOnlyList<string>? changedFiles)
-		: base(solutionModel, error)
+	public RenameSymbolResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, bool applied, string? resolvedSymbol, IReadOnlyList<string>? changedFiles)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		Applied = applied;
 		ResolvedSymbol = resolvedSymbol;

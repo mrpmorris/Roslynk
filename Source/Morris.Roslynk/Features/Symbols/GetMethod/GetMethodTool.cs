@@ -43,9 +43,9 @@ public sealed class GetMethodTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		GetMethodResult Success(IReadOnlyList<MethodDto> methods) => new(model, error: null, methods);
+		GetMethodResult Success(IReadOnlyList<MethodDto> methods) => new(model.SnapshotId, model.Status, error: null, methods);
 
-		GetMethodResult Failure(Error error) => new(model, error, methods: null);
+		GetMethodResult Failure(Error error) => new(model.SnapshotId, model.Status, error, methods: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

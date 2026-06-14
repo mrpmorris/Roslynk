@@ -9,13 +9,13 @@ namespace Morris.Roslynk.Features.Solutions.ReloadSolution;
 /// <see cref="ProjectCount"/> reflects whatever snapshot is currently available. A load failure is carried
 /// as a Faulted <see cref="ResultBase.Error"/>.
 /// </summary>
-public sealed record ReloadSolutionResult : ResultBase
+public sealed class ReloadSolutionResult : ResultBase
 {
 	public string? SolutionId { get; }
 	public int ProjectCount { get; }
 
-	public ReloadSolutionResult(SolutionModel solutionModel, Error? error, string? solutionId, int projectCount)
-		: base(solutionModel, error)
+	public ReloadSolutionResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, string? solutionId, int projectCount)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		SolutionId = solutionId;
 		ProjectCount = projectCount;

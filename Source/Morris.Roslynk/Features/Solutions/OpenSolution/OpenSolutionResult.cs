@@ -10,14 +10,14 @@ namespace Morris.Roslynk.Features.Solutions.OpenSolution;
 /// snapshot is available; poll get_solution_status (or call open_solution again) until it is Ready. A
 /// load failure is carried as a Faulted <see cref="ResultBase.Error"/>.
 /// </summary>
-public sealed record OpenSolutionResult : ResultBase
+public sealed class OpenSolutionResult : ResultBase
 {
 	public string? SolutionId { get; }
 	public IReadOnlyList<OpenSolutionProject>? Projects { get; }
 	public IReadOnlyList<string>? LoadDiagnostics { get; }
 
-	public OpenSolutionResult(SolutionModel solutionModel, Error? error, string? solutionId, IReadOnlyList<OpenSolutionProject>? projects, IReadOnlyList<string>? loadDiagnostics)
-		: base(solutionModel, error)
+	public OpenSolutionResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, string? solutionId, IReadOnlyList<OpenSolutionProject>? projects, IReadOnlyList<string>? loadDiagnostics)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		SolutionId = solutionId;
 		Projects = projects;

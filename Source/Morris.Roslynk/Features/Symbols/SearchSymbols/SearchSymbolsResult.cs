@@ -7,13 +7,13 @@ namespace Morris.Roslynk.Features.Symbols.SearchSymbols;
 /// Symbols whose name matched the query. A query that matches nothing is a success with an empty
 /// <see cref="Results"/>, not a failure. <see cref="Truncated"/> is true when more matched than maxResults.
 /// </summary>
-public sealed record SearchSymbolsResult : ResultBase
+public sealed class SearchSymbolsResult : ResultBase
 {
 	public IReadOnlyList<SymbolSearchResult>? Results { get; }
 	public bool Truncated { get; }
 
-	public SearchSymbolsResult(SolutionModel solutionModel, Error? error, IReadOnlyList<SymbolSearchResult>? results, bool truncated)
-		: base(solutionModel, error)
+	public SearchSymbolsResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, IReadOnlyList<SymbolSearchResult>? results, bool truncated)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		Results = results;
 		Truncated = truncated;

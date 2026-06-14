@@ -10,14 +10,14 @@ namespace Morris.Roslynk.Features.References.FindReferences;
 /// <see cref="ErrorCode.NotFound"/> (whose candidates are ranked near-miss suggestions) or
 /// <see cref="ErrorCode.Ambiguous"/> (whose candidates are the matching display names).
 /// </summary>
-public sealed record FindReferencesResult : ResultBase
+public sealed class FindReferencesResult : ResultBase
 {
 	public string? ResolvedSymbol { get; }
 	public IReadOnlyList<ReferenceDto>? References { get; }
 	public bool Truncated { get; }
 
-	public FindReferencesResult(SolutionModel solutionModel, Error? error, string? resolvedSymbol, IReadOnlyList<ReferenceDto>? references, bool truncated)
-		: base(solutionModel, error)
+	public FindReferencesResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, string? resolvedSymbol, IReadOnlyList<ReferenceDto>? references, bool truncated)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		ResolvedSymbol = resolvedSymbol;
 		References = references;

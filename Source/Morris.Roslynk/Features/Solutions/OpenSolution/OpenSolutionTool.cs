@@ -44,7 +44,8 @@ public sealed class OpenSolutionTool
 				.ToArray();
 
 		return new OpenSolutionResult(
-			model,
+			model.SnapshotId,
+			model.Status,
 			model.Status == SolutionStatus.Faulted
 				? Error.Faulted(model.FaultMessage ?? "The solution failed to load.")
 				: null,

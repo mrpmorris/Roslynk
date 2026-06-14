@@ -37,7 +37,8 @@ public sealed class ReloadSolutionTool
 		SolutionModel model = instance.CurrentModel;
 
 		return new ReloadSolutionResult(
-			model,
+			model.SnapshotId,
+			model.Status,
 			model.Status == SolutionStatus.Faulted
 				? Error.Faulted(model.FaultMessage ?? "The reload failed.")
 				: null,

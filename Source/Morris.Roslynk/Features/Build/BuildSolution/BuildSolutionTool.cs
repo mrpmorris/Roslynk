@@ -39,10 +39,10 @@ public sealed partial class BuildSolutionTool
 		SolutionModel model = instance.CurrentModel;
 
 		BuildSolutionResult Success(bool succeeded, int errors, int warnings, IReadOnlyList<string> errorMessages) =>
-			new(model, error: null, succeeded, errors, warnings, errorMessages);
+			new(model.SnapshotId, model.Status, error: null, succeeded, errors, warnings, errorMessages);
 
 		BuildSolutionResult Failure(Error error) =>
-			new(model, error, succeeded: null, errors: null, warnings: null, errorMessages: null);
+			new(model.SnapshotId, model.Status, error, succeeded: null, errors: null, warnings: null, errorMessages: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

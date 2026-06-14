@@ -73,10 +73,10 @@ public sealed class FindDeadCodeTool
 		SolutionModel model = instance.CurrentModel;
 
 		FindDeadCodeResult Success(IReadOnlyList<DeadCodeCandidate> candidates, bool truncated, string note) =>
-			new(model, error: null, candidates, truncated, note);
+			new(model.SnapshotId, model.Status, error: null, candidates, truncated, note);
 
 		FindDeadCodeResult Failure(Error error) =>
-			new(model, error, candidates: null, truncated: null, note: null);
+			new(model.SnapshotId, model.Status, error, candidates: null, truncated: null, note: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

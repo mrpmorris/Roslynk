@@ -42,10 +42,10 @@ public sealed class FindImplementationsTool
 		SolutionModel model = instance.CurrentModel;
 
 		FindImplementationsResult Success(string resolvedSymbol, IReadOnlyList<string> implementations) =>
-			new(model, error: null, resolvedSymbol, implementations);
+			new(model.SnapshotId, model.Status, error: null, resolvedSymbol, implementations);
 
 		FindImplementationsResult Failure(Error error) =>
-			new(model, error, resolvedSymbol: null, implementations: null);
+			new(model.SnapshotId, model.Status, error, resolvedSymbol: null, implementations: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

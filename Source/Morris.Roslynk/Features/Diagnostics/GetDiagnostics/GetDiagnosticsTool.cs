@@ -48,10 +48,10 @@ public sealed class GetDiagnosticsTool
 		SolutionModel model = instance.CurrentModel;
 
 		GetDiagnosticsResult Success(IReadOnlyList<DiagnosticDto> diagnostics, DiagnosticCounts counts) =>
-			new(model, error: null, diagnostics, counts);
+			new(model.SnapshotId, model.Status, error: null, diagnostics, counts);
 
 		GetDiagnosticsResult Failure(Error error) =>
-			new(model, error, diagnostics: null, counts: null);
+			new(model.SnapshotId, model.Status, error, diagnostics: null, counts: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

@@ -5,10 +5,10 @@ namespace Morris.Roslynk.Tests.Infrastructure.Results.ResultBaseTests;
 
 public class ResultBaseTests
 {
-	private sealed record SampleResult : ResultBase
+	private sealed class SampleResult : ResultBase
 	{
-		public SampleResult(SolutionModel solutionModel, Error? error)
-			: base(solutionModel, error)
+		public SampleResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error)
+			: base(solutionCurrentSnapshotId, status, error)
 		{
 		}
 	}
@@ -16,7 +16,7 @@ public class ResultBaseTests
 	[Fact]
 	public void WhenThereIsNoError_ThenIsSuccessIsTrueAndTheSnapshotIdIsCarried()
 	{
-		var subject = new SampleResult(SolutionModel.Loading("7", solution: null), error: null);
+		var subject = new SampleResult("7", SolutionStatus.Building, error: null);
 
 		Assert.True(subject.IsSuccess);
 		Assert.Equal("7", subject.SolutionCurrentSnapshotId);
@@ -26,8 +26,14 @@ public class ResultBaseTests
 	[Fact]
 	public void WhenThereIsAnError_ThenIsSuccessIsFalse()
 	{
-		var subject = new SampleResult(SolutionModel.Loading("7", solution: null), Error.Invalid("bad"));
+		var subject = new SampleResult("7", SolutionStatus.Building, Error.Invalid("bad"));
 
 		Assert.False(subject.IsSuccess);
+	}
+
+	[Fact]
+	public void WhenTheSnapshotIdIsNull_ThenTheConstructorThrows()
+	{
+		Assert.Throws<ArgumentNullException>(() => new SampleResult(null!, SolutionStatus.Building, error: null));
 	}
 }

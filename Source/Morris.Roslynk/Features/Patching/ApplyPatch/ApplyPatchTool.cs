@@ -47,7 +47,7 @@ public sealed class ApplyPatchTool
 		SolutionModel model = instance.CurrentModel;
 
 		ApplyPatchResult Failure(Error error) =>
-			new(model, error, applied: false, changedFiles: null, staleFiles: null, rejectedFiles: null);
+			new(model.SnapshotId, model.Status, error, applied: false, changedFiles: null, staleFiles: null, rejectedFiles: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -74,7 +74,8 @@ public sealed class ApplyPatchTool
 
 		if (rejected.Count > 0)
 			return new ApplyPatchResult(
-				model,
+				model.SnapshotId,
+				model.Status,
 				Error.NotSupported(
 					"apply_patch edits existing solution-compiled .cs files only; file creation/deletion and non-source targets are not supported."),
 				applied: false,
@@ -110,7 +111,8 @@ public sealed class ApplyPatchTool
 
 			if (stale.Count > 0)
 				return new ApplyPatchResult(
-					model,
+					model.SnapshotId,
+					model.Status,
 					Error.Stale(
 						"Some targets changed on disk since the patch was based; rebase against the returned current text and retry.",
 						stale.Select(file => file.Path).ToArray()),
@@ -124,7 +126,7 @@ public sealed class ApplyPatchTool
 				.ToArray();
 
 			if (checkOnly)
-				return new ApplyPatchResult(model, error: null, applied: false, changedFiles: changes, staleFiles: null, rejectedFiles: null);
+				return new ApplyPatchResult(model.SnapshotId, model.Status, error: null, applied: false, changedFiles: changes, staleFiles: null, rejectedFiles: null);
 
 			await AtomicFileWriter.WriteAllAsync(
 				pending.Select(item => new PendingWrite(item.Path, item.NewText)).ToArray(),
@@ -138,7 +140,7 @@ public sealed class ApplyPatchTool
 			}
 
 			instance.AdvanceTo(updated);
-			return new ApplyPatchResult(instance.CurrentModel, error: null, applied: true, changedFiles: changes, staleFiles: null, rejectedFiles: null);
+			return new ApplyPatchResult(instance.CurrentModel.SnapshotId, instance.CurrentModel.Status, error: null, applied: true, changedFiles: changes, staleFiles: null, rejectedFiles: null);
 		}
 		finally
 		{

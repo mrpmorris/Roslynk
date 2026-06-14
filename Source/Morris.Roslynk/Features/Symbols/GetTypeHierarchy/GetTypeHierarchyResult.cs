@@ -9,7 +9,7 @@ namespace Morris.Roslynk.Features.Symbols.GetTypeHierarchy;
 /// <see cref="ErrorCode.NotFound"/> (nothing matched) or <see cref="ErrorCode.Ambiguous"/> (several
 /// matched) whose candidates list the matching fully-qualified names.
 /// </summary>
-public sealed record GetTypeHierarchyResult : ResultBase
+public sealed class GetTypeHierarchyResult : ResultBase
 {
 	public string? ResolvedType { get; }
 	public IReadOnlyList<string>? BaseTypes { get; }
@@ -17,13 +17,14 @@ public sealed record GetTypeHierarchyResult : ResultBase
 	public IReadOnlyList<string>? DerivedTypes { get; }
 
 	public GetTypeHierarchyResult(
-		SolutionModel solutionModel,
+		string solutionCurrentSnapshotId,
+		SolutionStatus status,
 		Error? error,
 		string? resolvedType,
 		IReadOnlyList<string>? baseTypes,
 		IReadOnlyList<string>? interfaces,
 		IReadOnlyList<string>? derivedTypes)
-		: base(solutionModel, error)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		ResolvedType = resolvedType;
 		BaseTypes = baseTypes;

@@ -47,10 +47,10 @@ public sealed class ApplyCodeActionTool
 		SolutionModel model = instance.CurrentModel;
 
 		ApplyCodeActionResult Success(bool applied, IReadOnlyList<string> changedFiles, string? action) =>
-			new(model, error: null, applied, changedFiles, action);
+			new(model.SnapshotId, model.Status, error: null, applied, changedFiles, action);
 
 		ApplyCodeActionResult Failure(Error error, string? action = null) =>
-			new(model, error, applied: false, changedFiles: null, action);
+			new(model.SnapshotId, model.Status, error, applied: false, changedFiles: null, action);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

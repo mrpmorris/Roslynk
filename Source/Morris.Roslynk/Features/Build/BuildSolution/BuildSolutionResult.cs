@@ -9,15 +9,15 @@ namespace Morris.Roslynk.Features.Build.BuildSolution;
 /// <see cref="ResultBase.Error"/> carries an <see cref="ErrorCode.Indexing"/> because the solution is
 /// still loading.
 /// </summary>
-public sealed record BuildSolutionResult : ResultBase
+public sealed class BuildSolutionResult : ResultBase
 {
 	public bool? Succeeded { get; }
 	public int? Errors { get; }
 	public int? Warnings { get; }
 	public IReadOnlyList<string>? ErrorMessages { get; }
 
-	public BuildSolutionResult(SolutionModel solutionModel, Error? error, bool? succeeded, int? errors, int? warnings, IReadOnlyList<string>? errorMessages)
-		: base(solutionModel, error)
+	public BuildSolutionResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, bool? succeeded, int? errors, int? warnings, IReadOnlyList<string>? errorMessages)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		Succeeded = succeeded;
 		Errors = errors;

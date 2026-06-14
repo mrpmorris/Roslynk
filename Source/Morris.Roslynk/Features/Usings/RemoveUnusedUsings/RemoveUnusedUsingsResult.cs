@@ -9,14 +9,14 @@ namespace Morris.Roslynk.Features.Usings.RemoveUnusedUsings;
 /// lists what was, or would be, rewritten and <see cref="RemovedCount"/> the number of directives removed.
 /// A document that cannot be resolved is carried as a NotFound on <see cref="ResultBase.Error"/>.
 /// </summary>
-public sealed record RemoveUnusedUsingsResult : ResultBase
+public sealed class RemoveUnusedUsingsResult : ResultBase
 {
 	public bool Applied { get; }
 	public IReadOnlyList<string>? ChangedFiles { get; }
 	public int RemovedCount { get; }
 
-	public RemoveUnusedUsingsResult(SolutionModel solutionModel, Error? error, bool applied, IReadOnlyList<string>? changedFiles, int removedCount)
-		: base(solutionModel, error)
+	public RemoveUnusedUsingsResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, bool applied, IReadOnlyList<string>? changedFiles, int removedCount)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		Applied = applied;
 		ChangedFiles = changedFiles;

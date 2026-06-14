@@ -47,10 +47,10 @@ public sealed class RemoveUnusedUsingsTool
 		SolutionModel model = instance.CurrentModel;
 
 		RemoveUnusedUsingsResult Success(bool applied, IReadOnlyList<string> changed, int removedCount) =>
-			new(model, error: null, applied, changed, removedCount);
+			new(model.SnapshotId, model.Status, error: null, applied, changed, removedCount);
 
 		RemoveUnusedUsingsResult Failure(Error error) =>
-			new(model, error, applied: false, changedFiles: null, removedCount: 0);
+			new(model.SnapshotId, model.Status, error, applied: false, changedFiles: null, removedCount: 0);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

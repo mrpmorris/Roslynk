@@ -19,7 +19,7 @@ public sealed record ApplyPatchStaleFile(string Path, string CurrentVersion, str
 /// <see cref="StaleFiles"/>), NotSupported (offending targets in <see cref="RejectedFiles"/>), Conflict
 /// when a hunk no longer matches, and Invalid when the patch cannot be parsed.
 /// </summary>
-public sealed record ApplyPatchResult : ResultBase
+public sealed class ApplyPatchResult : ResultBase
 {
 	public bool Applied { get; }
 	public IReadOnlyList<ApplyPatchChange>? ChangedFiles { get; }
@@ -27,13 +27,14 @@ public sealed record ApplyPatchResult : ResultBase
 	public IReadOnlyList<string>? RejectedFiles { get; }
 
 	public ApplyPatchResult(
-		SolutionModel solutionModel,
+		string solutionCurrentSnapshotId,
+		SolutionStatus status,
 		Error? error,
 		bool applied,
 		IReadOnlyList<ApplyPatchChange>? changedFiles,
 		IReadOnlyList<ApplyPatchStaleFile>? staleFiles,
 		IReadOnlyList<string>? rejectedFiles)
-		: base(solutionModel, error)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		Applied = applied;
 		ChangedFiles = changedFiles;

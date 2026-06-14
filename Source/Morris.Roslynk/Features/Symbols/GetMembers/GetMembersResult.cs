@@ -8,13 +8,13 @@ namespace Morris.Roslynk.Features.Symbols.GetMembers;
 /// type, <see cref="ResultBase.Error"/> carries an <see cref="ErrorCode.NotFound"/>; when it is ambiguous
 /// it carries an <see cref="ErrorCode.Ambiguous"/> whose candidates list the matches.
 /// </summary>
-public sealed record GetMembersResult : ResultBase
+public sealed class GetMembersResult : ResultBase
 {
 	public string? ResolvedType { get; }
 	public IReadOnlyList<MemberDto>? Members { get; }
 
-	public GetMembersResult(SolutionModel solutionModel, Error? error, string? resolvedType, IReadOnlyList<MemberDto>? members)
-		: base(solutionModel, error)
+	public GetMembersResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, string? resolvedType, IReadOnlyList<MemberDto>? members)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		ResolvedType = resolvedType;
 		Members = members;

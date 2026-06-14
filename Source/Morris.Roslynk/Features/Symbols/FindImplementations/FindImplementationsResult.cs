@@ -10,13 +10,13 @@ namespace Morris.Roslynk.Features.Symbols.FindImplementations;
 /// carries an <see cref="ErrorCode.Ambiguous"/> whose candidates list the matches. A symbol that resolves
 /// but has no implementations is a success with an empty list.
 /// </summary>
-public sealed record FindImplementationsResult : ResultBase
+public sealed class FindImplementationsResult : ResultBase
 {
 	public string? ResolvedSymbol { get; }
 	public IReadOnlyList<string>? Implementations { get; }
 
-	public FindImplementationsResult(SolutionModel solutionModel, Error? error, string? resolvedSymbol, IReadOnlyList<string>? implementations)
-		: base(solutionModel, error)
+	public FindImplementationsResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, string? resolvedSymbol, IReadOnlyList<string>? implementations)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		ResolvedSymbol = resolvedSymbol;
 		Implementations = implementations;

@@ -48,10 +48,10 @@ public sealed class GetCodeActionsTool
 		SolutionModel model = instance.CurrentModel;
 
 		GetCodeActionsResult Success(IReadOnlyList<CodeActionDto> actions) =>
-			new(model, error: null, actions);
+			new(model.SnapshotId, model.Status, error: null, actions);
 
 		GetCodeActionsResult Failure(Error error) =>
-			new(model, error, actions: null);
+			new(model.SnapshotId, model.Status, error, actions: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

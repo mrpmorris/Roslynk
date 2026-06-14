@@ -10,14 +10,14 @@ namespace Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
 /// <see cref="ResultBase.Error"/>: Invalid for a bad actionId, NotFound when the document or diagnostic is
 /// missing, NotSupported when no fix exists, Conflict when the action no longer resolves against the code.
 /// </summary>
-public sealed record ApplyCodeActionResult : ResultBase
+public sealed class ApplyCodeActionResult : ResultBase
 {
 	public bool Applied { get; }
 	public IReadOnlyList<string>? ChangedFiles { get; }
 	public string? Action { get; }
 
-	public ApplyCodeActionResult(SolutionModel solutionModel, Error? error, bool applied, IReadOnlyList<string>? changedFiles, string? action)
-		: base(solutionModel, error)
+	public ApplyCodeActionResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, bool applied, IReadOnlyList<string>? changedFiles, string? action)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		Applied = applied;
 		ChangedFiles = changedFiles;

@@ -8,12 +8,12 @@ namespace Morris.Roslynk.Features.Symbols.GetMethod;
 /// <see cref="ResultBase.Error"/> carries a <see cref="ErrorCode.NotFound"/> whose candidates list any
 /// non-method symbols that did resolve, or fuzzy near-misses when nothing matched at all.
 /// </summary>
-public sealed record GetMethodResult : ResultBase
+public sealed class GetMethodResult : ResultBase
 {
 	public IReadOnlyList<MethodDto>? Methods { get; }
 
-	public GetMethodResult(SolutionModel solutionModel, Error? error, IReadOnlyList<MethodDto>? methods)
-		: base(solutionModel, error)
+	public GetMethodResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, IReadOnlyList<MethodDto>? methods)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		Methods = methods;
 	}

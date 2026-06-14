@@ -10,15 +10,15 @@ namespace Morris.Roslynk.Features.Signatures.ChangeSignature;
 /// Invalid for bad input, NotFound/Ambiguous for resolution, NotSupported for an unsupported method shape
 /// (with the resolved name still in <see cref="ResolvedMethod"/>).
 /// </summary>
-public sealed record ChangeSignatureResult : ResultBase
+public sealed class ChangeSignatureResult : ResultBase
 {
 	public bool Applied { get; }
 	public string? ResolvedMethod { get; }
 	public IReadOnlyList<string>? ChangedFiles { get; }
 	public int UpdatedCallSites { get; }
 
-	public ChangeSignatureResult(SolutionModel solutionModel, Error? error, bool applied, string? resolvedMethod, IReadOnlyList<string>? changedFiles, int updatedCallSites)
-		: base(solutionModel, error)
+	public ChangeSignatureResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, bool applied, string? resolvedMethod, IReadOnlyList<string>? changedFiles, int updatedCallSites)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		Applied = applied;
 		ResolvedMethod = resolvedMethod;

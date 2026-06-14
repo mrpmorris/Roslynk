@@ -8,13 +8,13 @@ namespace Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 /// <see cref="Diagnostics"/> and <see cref="Counts"/> are null only when <see cref="ResultBase.Error"/>
 /// carries an <see cref="ErrorCode.Indexing"/> because the solution is still loading.
 /// </summary>
-public sealed record GetDiagnosticsResult : ResultBase
+public sealed class GetDiagnosticsResult : ResultBase
 {
 	public IReadOnlyList<DiagnosticDto>? Diagnostics { get; }
 	public DiagnosticCounts? Counts { get; }
 
-	public GetDiagnosticsResult(SolutionModel solutionModel, Error? error, IReadOnlyList<DiagnosticDto>? diagnostics, DiagnosticCounts? counts)
-		: base(solutionModel, error)
+	public GetDiagnosticsResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, IReadOnlyList<DiagnosticDto>? diagnostics, DiagnosticCounts? counts)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		Diagnostics = diagnostics;
 		Counts = counts;

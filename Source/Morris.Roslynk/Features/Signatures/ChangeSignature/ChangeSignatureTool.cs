@@ -57,13 +57,13 @@ public sealed class ChangeSignatureTool
 		SolutionModel model = instance.CurrentModel;
 
 		ChangeSignatureResult Success(bool applied, string resolvedMethod, IReadOnlyList<string> changed, int callSiteCount) =>
-			new(model, error: null, applied, resolvedMethod, changed, callSiteCount);
+			new(model.SnapshotId, model.Status, error: null, applied, resolvedMethod, changed, callSiteCount);
 
 		ChangeSignatureResult Failure(Error error) =>
-			new(model, error, applied: false, resolvedMethod: null, changedFiles: null, updatedCallSites: 0);
+			new(model.SnapshotId, model.Status, error, applied: false, resolvedMethod: null, changedFiles: null, updatedCallSites: 0);
 
 		ChangeSignatureResult NotSupported(string resolvedMethod, string message) =>
-			new(model, Error.NotSupported(message), applied: false, resolvedMethod, changedFiles: null, updatedCallSites: 0);
+			new(model.SnapshotId, model.Status, Error.NotSupported(message), applied: false, resolvedMethod, changedFiles: null, updatedCallSites: 0);
 
 		if (!SyntaxFacts.IsValidIdentifier(parameterName))
 			return Failure(Error.Invalid($"'{parameterName}' is not a valid C# identifier."));

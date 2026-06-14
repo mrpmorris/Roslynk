@@ -44,7 +44,7 @@ public sealed class FindDefinitionTool
 		SolutionModel model = instance.CurrentModel;
 
 		FindDefinitionResult Failure(Error error) =>
-			new(model, error, fullName: null, kind: null, sourcePath: null, startLine: null, startColumn: null, endLine: null, endColumn: null);
+			new(model.SnapshotId, model.Status, error, fullName: null, kind: null, sourcePath: null, startLine: null, startColumn: null, endLine: null, endColumn: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -60,7 +60,8 @@ public sealed class FindDefinitionTool
 		Location? location = symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
 		if (location is null)
 			return new FindDefinitionResult(
-				model,
+				model.SnapshotId,
+				model.Status,
 				error: null,
 				fullName: fullName,
 				kind: kind,
@@ -72,7 +73,8 @@ public sealed class FindDefinitionTool
 
 		FileLinePositionSpan span = location.GetLineSpan();
 		return new FindDefinitionResult(
-			model,
+			model.SnapshotId,
+			model.Status,
 			error: null,
 			fullName: fullName,
 			kind: kind,

@@ -44,10 +44,10 @@ public sealed class GetMembersTool
 		SolutionModel model = instance.CurrentModel;
 
 		GetMembersResult Success(string resolvedType, IReadOnlyList<MemberDto> members) =>
-			new(model, error: null, resolvedType, members);
+			new(model.SnapshotId, model.Status, error: null, resolvedType, members);
 
 		GetMembersResult Failure(Error error) =>
-			new(model, error, resolvedType: null, members: null);
+			new(model.SnapshotId, model.Status, error, resolvedType: null, members: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

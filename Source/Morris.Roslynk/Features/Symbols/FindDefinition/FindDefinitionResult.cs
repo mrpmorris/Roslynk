@@ -8,7 +8,7 @@ namespace Morris.Roslynk.Features.Symbols.FindDefinition;
 /// with no in-source declaration (metadata); line/column are 1-based. When nothing resolves at the
 /// position, <see cref="ResultBase.Error"/> carries an <see cref="ErrorCode.NotFound"/>.
 /// </summary>
-public sealed record FindDefinitionResult : ResultBase
+public sealed class FindDefinitionResult : ResultBase
 {
 	public string? FullName { get; }
 	public string? Kind { get; }
@@ -19,7 +19,8 @@ public sealed record FindDefinitionResult : ResultBase
 	public int? EndColumn { get; }
 
 	public FindDefinitionResult(
-		SolutionModel solutionModel,
+		string solutionCurrentSnapshotId,
+		SolutionStatus status,
 		Error? error,
 		string? fullName,
 		string? kind,
@@ -28,7 +29,7 @@ public sealed record FindDefinitionResult : ResultBase
 		int? startColumn,
 		int? endLine,
 		int? endColumn)
-		: base(solutionModel, error)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		FullName = fullName;
 		Kind = kind;

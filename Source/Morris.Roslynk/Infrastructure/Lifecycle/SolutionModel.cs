@@ -8,7 +8,7 @@ namespace Morris.Roslynk.Infrastructure.Lifecycle;
 /// <see cref="RoslynInstance"/>, so a reader always sees a consistent (solution, status) pair without
 /// locking. <see cref="Solution"/> is null only before the very first load completes.
 /// </summary>
-public sealed record SolutionModel
+public sealed class SolutionModel
 {
 	public required string SnapshotId { get; init; }
 	public required SolutionStatus Status { get; init; }

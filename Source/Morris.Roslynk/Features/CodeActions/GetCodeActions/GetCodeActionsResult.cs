@@ -8,12 +8,12 @@ namespace Morris.Roslynk.Features.CodeActions.GetCodeActions;
 /// (nothing applies there); an unresolved document is carried as a NotFound on
 /// <see cref="ResultBase.Error"/>.
 /// </summary>
-public sealed record GetCodeActionsResult : ResultBase
+public sealed class GetCodeActionsResult : ResultBase
 {
 	public IReadOnlyList<CodeActionDto>? Actions { get; }
 
-	public GetCodeActionsResult(SolutionModel solutionModel, Error? error, IReadOnlyList<CodeActionDto>? actions)
-		: base(solutionModel, error)
+	public GetCodeActionsResult(string solutionCurrentSnapshotId, SolutionStatus status, Error? error, IReadOnlyList<CodeActionDto>? actions)
+		: base(solutionCurrentSnapshotId, status, error)
 	{
 		Actions = actions;
 	}

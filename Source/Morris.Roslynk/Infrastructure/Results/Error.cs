@@ -5,7 +5,7 @@ namespace Morris.Roslynk.Infrastructure.Results;
 /// <see cref="Message"/> are always present; <see cref="Candidates"/> and <see cref="StaleFiles"/> carry
 /// the only payloads a caller acts on, for the ambiguous/not-found and stale cases respectively.
 /// </summary>
-public sealed record Error
+public sealed class Error
 {
 	public required ErrorCode Code { get; init; }
 	public required string Message { get; init; }

@@ -50,10 +50,10 @@ public sealed class RenameSymbolTool
 		SolutionModel model = instance.CurrentModel;
 
 		RenameSymbolResult Success(bool applied, string resolved, IReadOnlyList<string> changedFiles) =>
-			new(model, error: null, applied, resolved, changedFiles);
+			new(model.SnapshotId, model.Status, error: null, applied, resolved, changedFiles);
 
 		RenameSymbolResult Failure(Error error) =>
-			new(model, error, applied: false, resolvedSymbol: null, changedFiles: null);
+			new(model.SnapshotId, model.Status, error, applied: false, resolvedSymbol: null, changedFiles: null);
 
 		if (!SyntaxFacts.IsValidIdentifier(newName))
 			return Failure(Error.Invalid($"'{newName}' is not a valid C# identifier."));
