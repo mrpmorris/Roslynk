@@ -4,13 +4,35 @@ using Morris.Roslynk.Infrastructure.Results;
 namespace Morris.Roslynk.Features.Patching.ApplyPatch;
 
 /// <summary>A file the patch changed (or would change), with its resulting <c>documentVersion</c>.</summary>
-public sealed record ApplyPatchChange(string Path, string Version);
+public sealed class ApplyPatchChange
+{
+	public string Path { get; }
+	public string Version { get; }
+
+	public ApplyPatchChange(string path, string version)
+	{
+		Path = path;
+		Version = version;
+	}
+}
 
 /// <summary>
 /// A target that moved on disk since the patch was based. Carries the current version and current text so
 /// the model can rebase just this file in one step rather than re-reading the whole solution.
 /// </summary>
-public sealed record ApplyPatchStaleFile(string Path, string CurrentVersion, string CurrentText);
+public sealed class ApplyPatchStaleFile
+{
+	public string Path { get; }
+	public string CurrentVersion { get; }
+	public string CurrentText { get; }
+
+	public ApplyPatchStaleFile(string path, string currentVersion, string currentText)
+	{
+		Path = path;
+		CurrentVersion = currentVersion;
+		CurrentText = currentText;
+	}
+}
 
 /// <summary>
 /// The outcome of <c>apply_patch</c>. On success <see cref="Applied"/> is true — or false for a checkOnly

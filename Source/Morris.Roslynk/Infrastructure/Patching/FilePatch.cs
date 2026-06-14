@@ -5,8 +5,23 @@ namespace Morris.Roslynk.Infrastructure.Patching;
 /// and <c>b/</c> prefixes stripped). A <c>/dev/null</c> on either side marks a file creation or deletion,
 /// which the apply tool rejects in v1 (it edits existing solution-compiled <c>.cs</c> documents only).
 /// </summary>
-public sealed record FilePatch(string? OldPath, string? NewPath, bool IsCreation, bool IsDeletion, IReadOnlyList<Hunk> Hunks)
+public sealed class FilePatch
 {
+	public string? OldPath { get; }
+	public string? NewPath { get; }
+	public bool IsCreation { get; }
+	public bool IsDeletion { get; }
+	public IReadOnlyList<Hunk> Hunks { get; }
+
 	/// <summary>The path the patch targets: the new path for an edit, the old path for a deletion.</summary>
 	public string? Path => IsDeletion ? OldPath : NewPath;
+
+	public FilePatch(string? oldPath, string? newPath, bool isCreation, bool isDeletion, IReadOnlyList<Hunk> hunks)
+	{
+		OldPath = oldPath;
+		NewPath = newPath;
+		IsCreation = isCreation;
+		IsDeletion = isDeletion;
+		Hunks = hunks;
+	}
 }

@@ -8,7 +8,23 @@ namespace Morris.Roslynk.Features.DeadCode.FindDeadCode;
 /// suspected, and a confidence. <c>High</c> = no references at all to a non-public member; <c>Medium</c> =
 /// an unreferenced public member (it may be called externally) or one referenced only by test code.
 /// </summary>
-public sealed record DeadCodeCandidate(string Symbol, string Kind, string? SourcePath, string Reason, string Confidence);
+public sealed class DeadCodeCandidate
+{
+	public string Symbol { get; }
+	public string Kind { get; }
+	public string? SourcePath { get; }
+	public string Reason { get; }
+	public string Confidence { get; }
+
+	public DeadCodeCandidate(string symbol, string kind, string? sourcePath, string reason, string confidence)
+	{
+		Symbol = symbol;
+		Kind = kind;
+		SourcePath = sourcePath;
+		Reason = reason;
+		Confidence = confidence;
+	}
+}
 
 /// <summary>
 /// The suspected-dead symbols, most-confident first. <see cref="Truncated"/> is true when scanning stopped

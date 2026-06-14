@@ -68,7 +68,7 @@ public sealed class SolutionFileSync
 
 		var targets = new List<WatchTarget>();
 		foreach (string dir in projectDirs)
-			targets.Add(new WatchTarget(dir, Recursive: true));
+			targets.Add(new WatchTarget(dir, recursive: true));
 
 		var extraDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		foreach (string path in DocumentAndBuildFilePaths(solution))
@@ -81,7 +81,7 @@ public sealed class SolutionFileSync
 		}
 
 		foreach (string dir in extraDirs)
-			targets.Add(new WatchTarget(dir, Recursive: false));
+			targets.Add(new WatchTarget(dir, recursive: false));
 
 		return targets;
 	}

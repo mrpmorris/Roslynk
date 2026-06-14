@@ -8,15 +8,15 @@ public class LengthTests
 	public void WhenSpanHasStartAndEndChars_ThenLengthIsTheExclusiveDifference()
 	{
 		var subject = new SourceSpan(
-			SourcePath: @"C:\Solution\Foo.cs",
-			SourceType: SourceType.Source,
-			DocumentVersion: 17,
-			StartChar: 1200,
-			EndChar: 1450,
-			StartLine: 42,
-			StartColumn: 9,
-			EndLine: 50,
-			EndColumn: 5);
+			sourcePath: @"C:\Solution\Foo.cs",
+			sourceType: SourceType.Source,
+			documentVersion: 17,
+			startChar: 1200,
+			endChar: 1450,
+			startLine: 42,
+			startColumn: 9,
+			endLine: 50,
+			endColumn: 5);
 
 		Assert.Equal(250, subject.Length);
 	}

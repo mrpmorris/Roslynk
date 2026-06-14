@@ -85,10 +85,10 @@ public sealed class FindReferencesTool
 	{
 		FileLinePositionSpan span = location.GetLineSpan();
 		return new ReferenceDto(
-			SourcePath: span.Path,
-			StartLine: span.StartLinePosition.Line + 1,
-			StartColumn: span.StartLinePosition.Character + 1,
-			EndLine: span.EndLinePosition.Line + 1,
-			EndColumn: span.EndLinePosition.Character + 1);
+			sourcePath: span.Path,
+			startLine: span.StartLinePosition.Line + 1,
+			startColumn: span.StartLinePosition.Character + 1,
+			endLine: span.EndLinePosition.Line + 1,
+			endColumn: span.EndLinePosition.Character + 1);
 	}
 }

@@ -75,35 +75,35 @@ public sealed class GetSymbolTool
 		if (location is null)
 		{
 			return new SymbolDto(
-				Name: symbol.Name,
-				FullName: SymbolResolver.FullyQualifiedName(symbol),
-				Kind: symbol.Kind.ToString(),
-				Accessibility: symbol.DeclaredAccessibility.ToString(),
-				Signature: symbol.ToDisplayString(),
-				SourceType: "metadata",
-				Assembly: symbol.ContainingAssembly?.Name,
-				SourcePath: null,
-				StartLine: null,
-				StartColumn: null,
-				EndLine: null,
-				EndColumn: null,
-				Documentation: documentation);
+				name: symbol.Name,
+				fullName: SymbolResolver.FullyQualifiedName(symbol),
+				kind: symbol.Kind.ToString(),
+				accessibility: symbol.DeclaredAccessibility.ToString(),
+				signature: symbol.ToDisplayString(),
+				sourceType: "metadata",
+				assembly: symbol.ContainingAssembly?.Name,
+				sourcePath: null,
+				startLine: null,
+				startColumn: null,
+				endLine: null,
+				endColumn: null,
+				documentation: documentation);
 		}
 
 		FileLinePositionSpan span = location.GetLineSpan();
 		return new SymbolDto(
-			Name: symbol.Name,
-			FullName: SymbolResolver.FullyQualifiedName(symbol),
-			Kind: symbol.Kind.ToString(),
-			Accessibility: symbol.DeclaredAccessibility.ToString(),
-			Signature: symbol.ToDisplayString(),
-			SourceType: "source",
-			Assembly: null,
-			SourcePath: span.Path,
-			StartLine: span.StartLinePosition.Line + 1,
-			StartColumn: span.StartLinePosition.Character + 1,
-			EndLine: span.EndLinePosition.Line + 1,
-			EndColumn: span.EndLinePosition.Character + 1,
-			Documentation: documentation);
+			name: symbol.Name,
+			fullName: SymbolResolver.FullyQualifiedName(symbol),
+			kind: symbol.Kind.ToString(),
+			accessibility: symbol.DeclaredAccessibility.ToString(),
+			signature: symbol.ToDisplayString(),
+			sourceType: "source",
+			assembly: null,
+			sourcePath: span.Path,
+			startLine: span.StartLinePosition.Line + 1,
+			startColumn: span.StartLinePosition.Character + 1,
+			endLine: span.EndLinePosition.Line + 1,
+			endColumn: span.EndLinePosition.Character + 1,
+			documentation: documentation);
 	}
 }

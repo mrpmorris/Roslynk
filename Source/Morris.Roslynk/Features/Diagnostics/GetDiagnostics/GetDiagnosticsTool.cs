@@ -59,10 +59,10 @@ public sealed class GetDiagnosticsTool
 		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetAllDiagnosticsAsync(model.Solution, targetFramework, includeAnalyzers);
 
 		var counts = new DiagnosticCounts(
-			Errors: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),
-			Warnings: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning),
-			Infos: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Info),
-			Hidden: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Hidden));
+			errors: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),
+			warnings: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning),
+			infos: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Info),
+			hidden: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Hidden));
 
 		ImmutableArray<DiagnosticSeverity> wanted = ParseSeverities(severities);
 
@@ -80,14 +80,14 @@ public sealed class GetDiagnosticsTool
 	{
 		FileLinePositionSpan span = diagnostic.Location.GetLineSpan();
 		return new DiagnosticDto(
-			Id: diagnostic.Id,
-			Severity: diagnostic.Severity.ToString(),
-			Message: diagnostic.GetMessage(),
-			SourcePath: diagnostic.Location.IsInSource ? span.Path : null,
-			StartLine: span.StartLinePosition.Line + 1,
-			StartColumn: span.StartLinePosition.Character + 1,
-			EndLine: span.EndLinePosition.Line + 1,
-			EndColumn: span.EndLinePosition.Character + 1);
+			id: diagnostic.Id,
+			severity: diagnostic.Severity.ToString(),
+			message: diagnostic.GetMessage(),
+			sourcePath: diagnostic.Location.IsInSource ? span.Path : null,
+			startLine: span.StartLinePosition.Line + 1,
+			startColumn: span.StartLinePosition.Character + 1,
+			endLine: span.EndLinePosition.Line + 1,
+			endColumn: span.EndLinePosition.Character + 1);
 	}
 
 	private static ImmutableArray<DiagnosticSeverity> ParseSeverities(string[]? severities)

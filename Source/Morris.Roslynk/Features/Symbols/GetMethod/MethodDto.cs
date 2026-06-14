@@ -7,18 +7,52 @@ namespace Morris.Roslynk.Features.Symbols.GetMethod;
 /// type parameters, source location (1-based, null for metadata), and normalized documentation. Overloads
 /// are returned as separate entries since they share a fully-qualified name.
 /// </summary>
-public sealed record MethodDto(
-	string Name,
-	string FullName,
-	string Signature,
-	string ReturnType,
-	string Accessibility,
-	IReadOnlyList<string> Modifiers,
-	IReadOnlyList<ParameterDto> Parameters,
-	IReadOnlyList<string> TypeParameters,
-	string? SourcePath,
-	int? StartLine,
-	int? StartColumn,
-	int? EndLine,
-	int? EndColumn,
-	SymbolDocumentation Documentation);
+public sealed class MethodDto
+{
+	public string Name { get; }
+	public string FullName { get; }
+	public string Signature { get; }
+	public string ReturnType { get; }
+	public string Accessibility { get; }
+	public IReadOnlyList<string> Modifiers { get; }
+	public IReadOnlyList<ParameterDto> Parameters { get; }
+	public IReadOnlyList<string> TypeParameters { get; }
+	public string? SourcePath { get; }
+	public int? StartLine { get; }
+	public int? StartColumn { get; }
+	public int? EndLine { get; }
+	public int? EndColumn { get; }
+	public SymbolDocumentation Documentation { get; }
+
+	public MethodDto(
+		string name,
+		string fullName,
+		string signature,
+		string returnType,
+		string accessibility,
+		IReadOnlyList<string> modifiers,
+		IReadOnlyList<ParameterDto> parameters,
+		IReadOnlyList<string> typeParameters,
+		string? sourcePath,
+		int? startLine,
+		int? startColumn,
+		int? endLine,
+		int? endColumn,
+		SymbolDocumentation documentation)
+	{
+		Name = name;
+		FullName = fullName;
+		Signature = signature;
+		ReturnType = returnType;
+		Accessibility = accessibility;
+		Modifiers = modifiers;
+		Parameters = parameters;
+		TypeParameters = typeParameters;
+		SourcePath = sourcePath;
+		StartLine = startLine;
+		StartColumn = startColumn;
+		EndLine = endLine;
+		EndColumn = endColumn;
+		Documentation = documentation;
+	}
+}

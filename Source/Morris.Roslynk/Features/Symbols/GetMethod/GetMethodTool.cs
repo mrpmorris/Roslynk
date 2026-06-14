@@ -70,30 +70,30 @@ public sealed class GetMethodTool
 		FileLinePositionSpan? span = location?.GetLineSpan();
 
 		return new MethodDto(
-			Name: method.Name,
-			FullName: SymbolResolver.FullyQualifiedName(method),
-			Signature: method.ToDisplayString(),
-			ReturnType: method.ReturnsVoid ? "void" : method.ReturnType.ToDisplayString(),
-			Accessibility: method.DeclaredAccessibility.ToString(),
-			Modifiers: Modifiers(method),
-			Parameters: method.Parameters.Select(MapParameter).ToArray(),
-			TypeParameters: method.TypeParameters.Select(parameter => parameter.Name).ToArray(),
-			SourcePath: span?.Path,
-			StartLine: span is { } start ? start.StartLinePosition.Line + 1 : null,
-			StartColumn: span is { } startColumn ? startColumn.StartLinePosition.Character + 1 : null,
-			EndLine: span is { } end ? end.EndLinePosition.Line + 1 : null,
-			EndColumn: span is { } endColumn ? endColumn.EndLinePosition.Character + 1 : null,
-			Documentation: DocumentationReader.Read(method));
+			name: method.Name,
+			fullName: SymbolResolver.FullyQualifiedName(method),
+			signature: method.ToDisplayString(),
+			returnType: method.ReturnsVoid ? "void" : method.ReturnType.ToDisplayString(),
+			accessibility: method.DeclaredAccessibility.ToString(),
+			modifiers: Modifiers(method),
+			parameters: method.Parameters.Select(MapParameter).ToArray(),
+			typeParameters: method.TypeParameters.Select(parameter => parameter.Name).ToArray(),
+			sourcePath: span?.Path,
+			startLine: span is { } start ? start.StartLinePosition.Line + 1 : null,
+			startColumn: span is { } startColumn ? startColumn.StartLinePosition.Character + 1 : null,
+			endLine: span is { } end ? end.EndLinePosition.Line + 1 : null,
+			endColumn: span is { } endColumn ? endColumn.EndLinePosition.Character + 1 : null,
+			documentation: DocumentationReader.Read(method));
 	}
 
 	private static ParameterDto MapParameter(IParameterSymbol parameter) =>
 		new(
-			Name: parameter.Name,
-			Type: parameter.Type.ToDisplayString(),
-			IsOptional: parameter.IsOptional,
-			DefaultValue: parameter.HasExplicitDefaultValue ? FormatDefault(parameter.ExplicitDefaultValue) : null,
-			RefKind: parameter.RefKind.ToString(),
-			IsParams: parameter.IsParams);
+			name: parameter.Name,
+			type: parameter.Type.ToDisplayString(),
+			isOptional: parameter.IsOptional,
+			defaultValue: parameter.HasExplicitDefaultValue ? FormatDefault(parameter.ExplicitDefaultValue) : null,
+			refKind: parameter.RefKind.ToString(),
+			isParams: parameter.IsParams);
 
 	private static IReadOnlyList<string> Modifiers(IMethodSymbol method)
 	{
