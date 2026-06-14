@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.CodeActions.GetCodeActions;
@@ -9,5 +10,11 @@ namespace Morris.Roslynk.Features.CodeActions.GetCodeActions;
 /// </summary>
 public sealed record GetCodeActionsResult : ResultBase
 {
-	public IReadOnlyList<CodeActionDto>? Actions { get; init; }
+	public GetCodeActionsResult(SolutionModel solutionModel, Error? error, IReadOnlyList<CodeActionDto>? actions)
+		: base(solutionModel, error)
+	{
+		Actions = actions;
+	}
+
+	public IReadOnlyList<CodeActionDto>? Actions { get; }
 }

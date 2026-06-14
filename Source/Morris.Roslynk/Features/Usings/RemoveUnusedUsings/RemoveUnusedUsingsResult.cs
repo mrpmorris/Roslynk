@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Usings.RemoveUnusedUsings;
@@ -10,7 +11,15 @@ namespace Morris.Roslynk.Features.Usings.RemoveUnusedUsings;
 /// </summary>
 public sealed record RemoveUnusedUsingsResult : ResultBase
 {
-	public bool Applied { get; init; }
-	public IReadOnlyList<string>? ChangedFiles { get; init; }
-	public int RemovedCount { get; init; }
+	public RemoveUnusedUsingsResult(SolutionModel solutionModel, Error? error, bool applied, IReadOnlyList<string>? changedFiles, int removedCount)
+		: base(solutionModel, error)
+	{
+		Applied = applied;
+		ChangedFiles = changedFiles;
+		RemovedCount = removedCount;
+	}
+
+	public bool Applied { get; }
+	public IReadOnlyList<string>? ChangedFiles { get; }
+	public int RemovedCount { get; }
 }

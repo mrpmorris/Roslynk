@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Symbols.FindDefinition;
@@ -9,11 +10,32 @@ namespace Morris.Roslynk.Features.Symbols.FindDefinition;
 /// </summary>
 public sealed record FindDefinitionResult : ResultBase
 {
-	public string? FullName { get; init; }
-	public string? Kind { get; init; }
-	public string? SourcePath { get; init; }
-	public int? StartLine { get; init; }
-	public int? StartColumn { get; init; }
-	public int? EndLine { get; init; }
-	public int? EndColumn { get; init; }
+	public FindDefinitionResult(
+		SolutionModel solutionModel,
+		Error? error,
+		string? fullName,
+		string? kind,
+		string? sourcePath,
+		int? startLine,
+		int? startColumn,
+		int? endLine,
+		int? endColumn)
+		: base(solutionModel, error)
+	{
+		FullName = fullName;
+		Kind = kind;
+		SourcePath = sourcePath;
+		StartLine = startLine;
+		StartColumn = startColumn;
+		EndLine = endLine;
+		EndColumn = endColumn;
+	}
+
+	public string? FullName { get; }
+	public string? Kind { get; }
+	public string? SourcePath { get; }
+	public int? StartLine { get; }
+	public int? StartColumn { get; }
+	public int? EndLine { get; }
+	public int? EndColumn { get; }
 }

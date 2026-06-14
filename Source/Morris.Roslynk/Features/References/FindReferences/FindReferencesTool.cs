@@ -44,17 +44,10 @@ public sealed class FindReferencesTool
 		SolutionModel model = instance.CurrentModel;
 
 		FindReferencesResult Success(string resolvedSymbol, IReadOnlyList<ReferenceDto> references, bool truncated) =>
-			new()
-			{
-				SnapshotId = model.SnapshotId,
-				Status = model.Status,
-				ResolvedSymbol = resolvedSymbol,
-				References = references,
-				Truncated = truncated,
-			};
+			new(model, error: null, resolvedSymbol, references, truncated);
 
 		FindReferencesResult Failure(Error error) =>
-			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+			new(model, error, resolvedSymbol: null, references: null, truncated: false);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

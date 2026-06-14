@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Symbols.SearchSymbols;
@@ -8,6 +9,13 @@ namespace Morris.Roslynk.Features.Symbols.SearchSymbols;
 /// </summary>
 public sealed record SearchSymbolsResult : ResultBase
 {
-	public IReadOnlyList<SymbolSearchResult>? Results { get; init; }
-	public bool Truncated { get; init; }
+	public SearchSymbolsResult(SolutionModel solutionModel, Error? error, IReadOnlyList<SymbolSearchResult>? results, bool truncated)
+		: base(solutionModel, error)
+	{
+		Results = results;
+		Truncated = truncated;
+	}
+
+	public IReadOnlyList<SymbolSearchResult>? Results { get; }
+	public bool Truncated { get; }
 }

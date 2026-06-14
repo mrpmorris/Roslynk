@@ -41,10 +41,10 @@ public sealed class SearchSymbolsTool
 		SolutionModel model = instance.CurrentModel;
 
 		SearchSymbolsResult Success(IReadOnlyList<SymbolSearchResult> results, bool truncated) =>
-			new() { SnapshotId = model.SnapshotId, Status = model.Status, Results = results, Truncated = truncated };
+			new(model, error: null, results, truncated);
 
 		SearchSymbolsResult Failure(Error error) =>
-			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+			new(model, error, results: null, truncated: false);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

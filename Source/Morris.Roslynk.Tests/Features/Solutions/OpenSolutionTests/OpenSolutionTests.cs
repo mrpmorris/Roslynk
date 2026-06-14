@@ -14,6 +14,7 @@ public class OpenSolutionTests
 		OpenSolutionResult opening = subject.OpenSolution(TestSolutions.Simple);
 
 		Assert.Equal(SolutionStatus.Building, opening.Status);
+		Assert.False(string.IsNullOrEmpty(opening.SolutionCurrentSnapshotId));
 		Assert.Empty(opening.Projects!);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);

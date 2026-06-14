@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Callers.GetCallers;
@@ -10,6 +11,13 @@ namespace Morris.Roslynk.Features.Callers.GetCallers;
 /// </summary>
 public sealed record GetCallersResult : ResultBase
 {
-	public string? ResolvedSymbol { get; init; }
-	public IReadOnlyList<string>? Callers { get; init; }
+	public GetCallersResult(SolutionModel solutionModel, Error? error, string? resolvedSymbol, IReadOnlyList<string>? callers)
+		: base(solutionModel, error)
+	{
+		ResolvedSymbol = resolvedSymbol;
+		Callers = callers;
+	}
+
+	public string? ResolvedSymbol { get; }
+	public IReadOnlyList<string>? Callers { get; }
 }

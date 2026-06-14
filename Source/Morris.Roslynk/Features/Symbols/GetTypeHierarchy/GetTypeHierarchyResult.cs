@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Symbols.GetTypeHierarchy;
@@ -10,8 +11,23 @@ namespace Morris.Roslynk.Features.Symbols.GetTypeHierarchy;
 /// </summary>
 public sealed record GetTypeHierarchyResult : ResultBase
 {
-	public string? ResolvedType { get; init; }
-	public IReadOnlyList<string>? BaseTypes { get; init; }
-	public IReadOnlyList<string>? Interfaces { get; init; }
-	public IReadOnlyList<string>? DerivedTypes { get; init; }
+	public GetTypeHierarchyResult(
+		SolutionModel solutionModel,
+		Error? error,
+		string? resolvedType,
+		IReadOnlyList<string>? baseTypes,
+		IReadOnlyList<string>? interfaces,
+		IReadOnlyList<string>? derivedTypes)
+		: base(solutionModel, error)
+	{
+		ResolvedType = resolvedType;
+		BaseTypes = baseTypes;
+		Interfaces = interfaces;
+		DerivedTypes = derivedTypes;
+	}
+
+	public string? ResolvedType { get; }
+	public IReadOnlyList<string>? BaseTypes { get; }
+	public IReadOnlyList<string>? Interfaces { get; }
+	public IReadOnlyList<string>? DerivedTypes { get; }
 }

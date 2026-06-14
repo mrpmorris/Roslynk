@@ -50,10 +50,10 @@ public sealed class ApplyCodeFixTool
 		SolutionModel model = instance.CurrentModel;
 
 		ApplyCodeActionResult Success(bool applied, IReadOnlyList<string> changedFiles, string? action) =>
-			new() { SnapshotId = model.SnapshotId, Status = model.Status, Applied = applied, ChangedFiles = changedFiles, Action = action };
+			new(model, error: null, applied, changedFiles, action);
 
 		ApplyCodeActionResult Failure(Error error, string? action = null) =>
-			new() { SnapshotId = model.SnapshotId, Status = model.Status, Action = action, Error = error };
+			new(model, error, applied: false, changedFiles: null, action);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

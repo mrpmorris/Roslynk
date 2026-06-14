@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Patching.ApplyPatch;
@@ -20,8 +21,23 @@ public sealed record ApplyPatchStaleFile(string Path, string CurrentVersion, str
 /// </summary>
 public sealed record ApplyPatchResult : ResultBase
 {
-	public bool Applied { get; init; }
-	public IReadOnlyList<ApplyPatchChange>? ChangedFiles { get; init; }
-	public IReadOnlyList<ApplyPatchStaleFile>? StaleFiles { get; init; }
-	public IReadOnlyList<string>? RejectedFiles { get; init; }
+	public ApplyPatchResult(
+		SolutionModel solutionModel,
+		Error? error,
+		bool applied,
+		IReadOnlyList<ApplyPatchChange>? changedFiles,
+		IReadOnlyList<ApplyPatchStaleFile>? staleFiles,
+		IReadOnlyList<string>? rejectedFiles)
+		: base(solutionModel, error)
+	{
+		Applied = applied;
+		ChangedFiles = changedFiles;
+		StaleFiles = staleFiles;
+		RejectedFiles = rejectedFiles;
+	}
+
+	public bool Applied { get; }
+	public IReadOnlyList<ApplyPatchChange>? ChangedFiles { get; }
+	public IReadOnlyList<ApplyPatchStaleFile>? StaleFiles { get; }
+	public IReadOnlyList<string>? RejectedFiles { get; }
 }

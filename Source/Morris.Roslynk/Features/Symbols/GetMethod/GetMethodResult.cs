@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Symbols.GetMethod;
@@ -9,5 +10,11 @@ namespace Morris.Roslynk.Features.Symbols.GetMethod;
 /// </summary>
 public sealed record GetMethodResult : ResultBase
 {
-	public IReadOnlyList<MethodDto>? Methods { get; init; }
+	public GetMethodResult(SolutionModel solutionModel, Error? error, IReadOnlyList<MethodDto>? methods)
+		: base(solutionModel, error)
+	{
+		Methods = methods;
+	}
+
+	public IReadOnlyList<MethodDto>? Methods { get; }
 }

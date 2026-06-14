@@ -3,16 +3,27 @@ using Morris.Roslynk.Infrastructure.Lifecycle;
 namespace Morris.Roslynk.Infrastructure.Results;
 
 /// <summary>
-/// The envelope every tool result derives from: the <see cref="SnapshotId"/> of the solution snapshot
-/// that produced it, the model's <see cref="Status"/> at that point (so a caller can tell a fresh answer
-/// from one served while a rebuild is in flight), and a structured <see cref="Error"/> when the request
-/// did not succeed (null when it did). Each feature's payload lives on the derived type beside its tool.
+/// The envelope every tool result derives from. It is constructed from the <see cref="SolutionModel"/>
+/// the answer was computed against — so <see cref="SolutionCurrentSnapshotId"/> and <see cref="Status"/>
+/// are always consistent and a derived result cannot be built without them — plus a structured
+/// <see cref="Error"/> that is present when the request did not succeed (null when it did). The properties
+/// are get-only; each feature's payload lives on the derived type beside its tool.
 /// </summary>
 public abstract record ResultBase
 {
-	public required string SnapshotId { get; init; }
-	public required SolutionStatus Status { get; init; }
-	public Error? Error { get; init; }
+	protected ResultBase(SolutionModel solutionModel, Error? error)
+	{
+		if (solutionModel is null)
+			throw new ArgumentNullException(nameof(solutionModel));
+
+		SolutionCurrentSnapshotId = solutionModel.SnapshotId;
+		Status = solutionModel.Status;
+		Error = error;
+	}
+
+	public string SolutionCurrentSnapshotId { get; }
+	public SolutionStatus Status { get; }
+	public Error? Error { get; }
 
 	public bool IsSuccess => Error is null;
 }

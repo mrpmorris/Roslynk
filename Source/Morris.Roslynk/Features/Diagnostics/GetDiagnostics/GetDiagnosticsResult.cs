@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
@@ -9,6 +10,13 @@ namespace Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 /// </summary>
 public sealed record GetDiagnosticsResult : ResultBase
 {
-	public IReadOnlyList<DiagnosticDto>? Diagnostics { get; init; }
-	public DiagnosticCounts? Counts { get; init; }
+	public GetDiagnosticsResult(SolutionModel solutionModel, Error? error, IReadOnlyList<DiagnosticDto>? diagnostics, DiagnosticCounts? counts)
+		: base(solutionModel, error)
+	{
+		Diagnostics = diagnostics;
+		Counts = counts;
+	}
+
+	public IReadOnlyList<DiagnosticDto>? Diagnostics { get; }
+	public DiagnosticCounts? Counts { get; }
 }

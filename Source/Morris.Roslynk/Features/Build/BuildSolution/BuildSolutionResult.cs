@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Build.BuildSolution;
@@ -10,8 +11,17 @@ namespace Morris.Roslynk.Features.Build.BuildSolution;
 /// </summary>
 public sealed record BuildSolutionResult : ResultBase
 {
-	public bool? Succeeded { get; init; }
-	public int? Errors { get; init; }
-	public int? Warnings { get; init; }
-	public IReadOnlyList<string>? ErrorMessages { get; init; }
+	public BuildSolutionResult(SolutionModel solutionModel, Error? error, bool? succeeded, int? errors, int? warnings, IReadOnlyList<string>? errorMessages)
+		: base(solutionModel, error)
+	{
+		Succeeded = succeeded;
+		Errors = errors;
+		Warnings = warnings;
+		ErrorMessages = errorMessages;
+	}
+
+	public bool? Succeeded { get; }
+	public int? Errors { get; }
+	public int? Warnings { get; }
+	public IReadOnlyList<string>? ErrorMessages { get; }
 }

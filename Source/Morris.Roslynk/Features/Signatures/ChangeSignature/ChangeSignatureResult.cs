@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Signatures.ChangeSignature;
@@ -11,8 +12,17 @@ namespace Morris.Roslynk.Features.Signatures.ChangeSignature;
 /// </summary>
 public sealed record ChangeSignatureResult : ResultBase
 {
-	public bool Applied { get; init; }
-	public string? ResolvedMethod { get; init; }
-	public IReadOnlyList<string>? ChangedFiles { get; init; }
-	public int UpdatedCallSites { get; init; }
+	public ChangeSignatureResult(SolutionModel solutionModel, Error? error, bool applied, string? resolvedMethod, IReadOnlyList<string>? changedFiles, int updatedCallSites)
+		: base(solutionModel, error)
+	{
+		Applied = applied;
+		ResolvedMethod = resolvedMethod;
+		ChangedFiles = changedFiles;
+		UpdatedCallSites = updatedCallSites;
+	}
+
+	public bool Applied { get; }
+	public string? ResolvedMethod { get; }
+	public IReadOnlyList<string>? ChangedFiles { get; }
+	public int UpdatedCallSites { get; }
 }

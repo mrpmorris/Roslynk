@@ -43,10 +43,10 @@ public sealed class GetSymbolTool
 		SolutionModel model = instance.CurrentModel;
 
 		GetSymbolResult Success(SymbolDto symbol) =>
-			new() { SnapshotId = model.SnapshotId, Status = model.Status, Symbol = symbol };
+			new(model, error: null, symbol);
 
 		GetSymbolResult Failure(Error error) =>
-			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+			new(model, error, symbol: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

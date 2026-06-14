@@ -42,18 +42,10 @@ public sealed class GetTypeHierarchyTool
 		SolutionModel model = instance.CurrentModel;
 
 		GetTypeHierarchyResult Success(string resolvedType, IReadOnlyList<string> baseTypes, IReadOnlyList<string> interfaces, IReadOnlyList<string> derivedTypes) =>
-			new()
-			{
-				SnapshotId = model.SnapshotId,
-				Status = model.Status,
-				ResolvedType = resolvedType,
-				BaseTypes = baseTypes,
-				Interfaces = interfaces,
-				DerivedTypes = derivedTypes,
-			};
+			new(model, error: null, resolvedType, baseTypes, interfaces, derivedTypes);
 
 		GetTypeHierarchyResult Failure(Error error) =>
-			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+			new(model, error, resolvedType: null, baseTypes: null, interfaces: null, derivedTypes: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());

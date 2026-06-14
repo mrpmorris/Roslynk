@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
@@ -11,7 +12,15 @@ namespace Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
 /// </summary>
 public sealed record ApplyCodeActionResult : ResultBase
 {
-	public bool Applied { get; init; }
-	public IReadOnlyList<string>? ChangedFiles { get; init; }
-	public string? Action { get; init; }
+	public ApplyCodeActionResult(SolutionModel solutionModel, Error? error, bool applied, IReadOnlyList<string>? changedFiles, string? action)
+		: base(solutionModel, error)
+	{
+		Applied = applied;
+		ChangedFiles = changedFiles;
+		Action = action;
+	}
+
+	public bool Applied { get; }
+	public IReadOnlyList<string>? ChangedFiles { get; }
+	public string? Action { get; }
 }

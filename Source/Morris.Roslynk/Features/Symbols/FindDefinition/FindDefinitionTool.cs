@@ -44,7 +44,7 @@ public sealed class FindDefinitionTool
 		SolutionModel model = instance.CurrentModel;
 
 		FindDefinitionResult Failure(Error error) =>
-			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+			new(model, error, fullName: null, kind: null, sourcePath: null, startLine: null, startColumn: null, endLine: null, endColumn: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -59,26 +59,27 @@ public sealed class FindDefinitionTool
 
 		Location? location = symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
 		if (location is null)
-			return new FindDefinitionResult
-			{
-				SnapshotId = model.SnapshotId,
-				Status = model.Status,
-				FullName = fullName,
-				Kind = kind,
-			};
+			return new FindDefinitionResult(
+				model,
+				error: null,
+				fullName: fullName,
+				kind: kind,
+				sourcePath: null,
+				startLine: null,
+				startColumn: null,
+				endLine: null,
+				endColumn: null);
 
 		FileLinePositionSpan span = location.GetLineSpan();
-		return new FindDefinitionResult
-		{
-			SnapshotId = model.SnapshotId,
-			Status = model.Status,
-			FullName = fullName,
-			Kind = kind,
-			SourcePath = span.Path,
-			StartLine = span.StartLinePosition.Line + 1,
-			StartColumn = span.StartLinePosition.Character + 1,
-			EndLine = span.EndLinePosition.Line + 1,
-			EndColumn = span.EndLinePosition.Character + 1,
-		};
+		return new FindDefinitionResult(
+			model,
+			error: null,
+			fullName: fullName,
+			kind: kind,
+			sourcePath: span.Path,
+			startLine: span.StartLinePosition.Line + 1,
+			startColumn: span.StartLinePosition.Character + 1,
+			endLine: span.EndLinePosition.Line + 1,
+			endColumn: span.EndLinePosition.Character + 1);
 	}
 }

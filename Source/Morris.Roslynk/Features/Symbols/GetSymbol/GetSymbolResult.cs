@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Symbols.GetSymbol;
@@ -10,5 +11,11 @@ namespace Morris.Roslynk.Features.Symbols.GetSymbol;
 /// </summary>
 public sealed record GetSymbolResult : ResultBase
 {
-	public SymbolDto? Symbol { get; init; }
+	public GetSymbolResult(SolutionModel solutionModel, Error? error, SymbolDto? symbol)
+		: base(solutionModel, error)
+	{
+		Symbol = symbol;
+	}
+
+	public SymbolDto? Symbol { get; }
 }

@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.DeadCode.FindDeadCode;
@@ -18,7 +19,15 @@ public sealed record DeadCodeCandidate(string Symbol, string Kind, string? Sourc
 /// </summary>
 public sealed record FindDeadCodeResult : ResultBase
 {
-	public IReadOnlyList<DeadCodeCandidate>? Candidates { get; init; }
-	public bool? Truncated { get; init; }
-	public string? Note { get; init; }
+	public FindDeadCodeResult(SolutionModel solutionModel, Error? error, IReadOnlyList<DeadCodeCandidate>? candidates, bool? truncated, string? note)
+		: base(solutionModel, error)
+	{
+		Candidates = candidates;
+		Truncated = truncated;
+		Note = note;
+	}
+
+	public IReadOnlyList<DeadCodeCandidate>? Candidates { get; }
+	public bool? Truncated { get; }
+	public string? Note { get; }
 }

@@ -11,6 +11,13 @@ namespace Morris.Roslynk.Features.Solutions.ReloadSolution;
 /// </summary>
 public sealed record ReloadSolutionResult : ResultBase
 {
-	public string? SolutionId { get; init; }
-	public int ProjectCount { get; init; }
+	public ReloadSolutionResult(SolutionModel solutionModel, Error? error, string? solutionId, int projectCount)
+		: base(solutionModel, error)
+	{
+		SolutionId = solutionId;
+		ProjectCount = projectCount;
+	}
+
+	public string? SolutionId { get; }
+	public int ProjectCount { get; }
 }

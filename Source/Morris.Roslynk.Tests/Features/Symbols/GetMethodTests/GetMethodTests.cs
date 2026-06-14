@@ -18,7 +18,7 @@ public class GetMethodTests
 
 		Assert.True(result.IsSuccess);
 		Assert.Equal(SolutionStatus.Ready, result.Status);
-		Assert.False(string.IsNullOrEmpty(result.SnapshotId));
+		Assert.False(string.IsNullOrEmpty(result.SolutionCurrentSnapshotId));
 		MethodDto method = Assert.Single(result.Methods!);
 		Assert.Equal("int", method.ReturnType);
 		ParameterDto parameter = Assert.Single(method.Parameters);

@@ -36,15 +36,12 @@ public sealed class ReloadSolutionTool
 		RoslynInstance instance = InstanceRegistry.BeginReload(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		return new ReloadSolutionResult
-		{
-			SnapshotId = model.SnapshotId,
-			Status = model.Status,
-			SolutionId = instance.Key.Path,
-			ProjectCount = model.Solution?.Projects.Count() ?? 0,
-			Error = model.Status == SolutionStatus.Faulted
+		return new ReloadSolutionResult(
+			model,
+			model.Status == SolutionStatus.Faulted
 				? Error.Faulted(model.FaultMessage ?? "The reload failed.")
-				: null
-		};
+				: null,
+			solutionId: instance.Key.Path,
+			projectCount: model.Solution?.Projects.Count() ?? 0);
 	}
 }

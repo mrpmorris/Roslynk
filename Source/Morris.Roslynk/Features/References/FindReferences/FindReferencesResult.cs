@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.References.FindReferences;
@@ -11,7 +12,15 @@ namespace Morris.Roslynk.Features.References.FindReferences;
 /// </summary>
 public sealed record FindReferencesResult : ResultBase
 {
-	public string? ResolvedSymbol { get; init; }
-	public IReadOnlyList<ReferenceDto>? References { get; init; }
-	public bool Truncated { get; init; }
+	public FindReferencesResult(SolutionModel solutionModel, Error? error, string? resolvedSymbol, IReadOnlyList<ReferenceDto>? references, bool truncated)
+		: base(solutionModel, error)
+	{
+		ResolvedSymbol = resolvedSymbol;
+		References = references;
+		Truncated = truncated;
+	}
+
+	public string? ResolvedSymbol { get; }
+	public IReadOnlyList<ReferenceDto>? References { get; }
+	public bool Truncated { get; }
 }

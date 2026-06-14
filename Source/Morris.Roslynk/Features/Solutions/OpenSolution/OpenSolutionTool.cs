@@ -43,16 +43,13 @@ public sealed class OpenSolutionTool
 				.Select(project => new OpenSolutionProject(project.Name, project.Documents.Count()))
 				.ToArray();
 
-		return new OpenSolutionResult
-		{
-			SnapshotId = model.SnapshotId,
-			Status = model.Status,
-			SolutionId = instance.Key.Path,
-			Projects = projects,
-			LoadDiagnostics = instance.Workspace?.LoadDiagnostics ?? [],
-			Error = model.Status == SolutionStatus.Faulted
+		return new OpenSolutionResult(
+			model,
+			model.Status == SolutionStatus.Faulted
 				? Error.Faulted(model.FaultMessage ?? "The solution failed to load.")
-				: null
-		};
+				: null,
+			solutionId: instance.Key.Path,
+			projects: projects,
+			loadDiagnostics: instance.Workspace?.LoadDiagnostics ?? []);
 	}
 }

@@ -1,3 +1,4 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Symbols.GetMembers;
@@ -9,6 +10,13 @@ namespace Morris.Roslynk.Features.Symbols.GetMembers;
 /// </summary>
 public sealed record GetMembersResult : ResultBase
 {
-	public string? ResolvedType { get; init; }
-	public IReadOnlyList<MemberDto>? Members { get; init; }
+	public GetMembersResult(SolutionModel solutionModel, Error? error, string? resolvedType, IReadOnlyList<MemberDto>? members)
+		: base(solutionModel, error)
+	{
+		ResolvedType = resolvedType;
+		Members = members;
+	}
+
+	public string? ResolvedType { get; }
+	public IReadOnlyList<MemberDto>? Members { get; }
 }

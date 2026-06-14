@@ -42,10 +42,10 @@ public sealed class GetCallersTool
 		SolutionModel model = instance.CurrentModel;
 
 		GetCallersResult Success(string resolvedSymbol, IReadOnlyList<string> callers) =>
-			new() { SnapshotId = model.SnapshotId, Status = model.Status, ResolvedSymbol = resolvedSymbol, Callers = callers };
+			new(model, error: null, resolvedSymbol, callers);
 
 		GetCallersResult Failure(Error error) =>
-			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+			new(model, error, resolvedSymbol: null, callers: null);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
