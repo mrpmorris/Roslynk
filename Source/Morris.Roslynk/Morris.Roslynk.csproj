@@ -5,6 +5,8 @@
 		<PackageReference Include="Microsoft.Build.Locator" />
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
 		<PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" />
+		<PackageReference Include="Microsoft.CodeAnalysis.Features" />
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Features" />
 		<!-- Referenced for the MSBuildWorkspace API, but the runtime assembly must come from the
 		     SDK that MSBuildLocator resolves, not our output (per MSBL001). -->
 		<PackageReference Include="Microsoft.Build.Framework" ExcludeAssets="runtime" PrivateAssets="all" />
