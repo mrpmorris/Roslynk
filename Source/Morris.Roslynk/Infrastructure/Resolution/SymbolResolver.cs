@@ -1,11 +1,12 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Morris.Roslynk.Infrastructure.Resolution;
 
 /// <summary>
-/// Resolves a caller-supplied symbol name to Roslyn symbols. Currently matches by fully-qualified name
-/// (or simple name); fuzzy scoring and position-based resolution are layered on in later passes.
+/// Resolves a caller-supplied symbol reference to Roslyn symbols — by fully-qualified (or simple) name,
+/// or by a source position. Fuzzy scoring is layered on in a later pass.
 /// </summary>
 public sealed class SymbolResolver
 {
@@ -43,5 +44,47 @@ public sealed class SymbolResolver
 		}
 
 		return matches;
+	}
+
+	/// <summary>
+	/// Resolves the symbol referenced at a 1-based <paramref name="line"/>/<paramref name="column"/> in
+	/// the given file, or null if the file is not in the solution or no symbol sits there.
+	/// </summary>
+	public async Task<ISymbol?> ResolveAtPositionAsync(Solution solution, string filePath, int line, int column, CancellationToken cancellationToken = default)
+	{
+		Document? document = FindDocument(solution, filePath);
+		if (document is null)
+			return null;
+
+		SourceText text = await document.GetTextAsync(cancellationToken);
+		if (line < 1 || line > text.Lines.Count)
+			return null;
+
+		TextLine textLine = text.Lines[line - 1];
+		int position = Math.Min(textLine.Start + Math.Max(0, column - 1), textLine.End);
+
+		SemanticModel? semanticModel = await document.GetSemanticModelAsync(cancellationToken);
+		if (semanticModel is null)
+			return null;
+
+		return await SymbolFinder.FindSymbolAtPositionAsync(semanticModel, position, solution.Workspace, cancellationToken);
+	}
+
+	private static Document? FindDocument(Solution solution, string filePath)
+	{
+		string fullPath = Path.GetFullPath(filePath);
+		foreach (Project project in solution.Projects)
+		{
+			foreach (Document document in project.Documents)
+			{
+				if (document.FilePath is not null
+					&& string.Equals(Path.GetFullPath(document.FilePath), fullPath, StringComparison.OrdinalIgnoreCase))
+				{
+					return document;
+				}
+			}
+		}
+
+		return null;
 	}
 }

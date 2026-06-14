@@ -188,7 +188,7 @@ App|M:Sales.CustomerService.GetAsync(System.String)
 * [ ] `get_method(methodId)`
 * [ ] `get_members(typeId, includePrivate, includeInherited)`
 * [ ] `get_source_span(symbolId)`
-* [ ] `go_to_definition(...)` — resolve a usage to its declaration; accepts a `(filePath, line, column)` position as readily as a symbol reference (the host frequently has a location, not an ID).
+* [ ] `find_definition(...)` — resolve a usage to its declaration; accepts a `(filePath, line, column)` position as readily as a symbol reference (the host frequently has a location, not an ID). Named to match the `find_references` / `find_implementations` family.
 * [ ] `find_implementations(symbolId)` — implementations of an interface / abstract member, overrides, and derived types (`SymbolFinder.FindImplementationsAsync` / `FindDerivedClassesAsync`).
 * [ ] `get_type_hierarchy(typeId)` — base-type chain, implemented interfaces, and known derived types in one view.
 * [ ] Every symbol-taking tool here accepts **any** of the three identifier forms from *Symbol resolution* (doc-comment ID | fuzzy FQN | position) via the shared `resolve_symbol` helper — the model rarely has an exact ID.
