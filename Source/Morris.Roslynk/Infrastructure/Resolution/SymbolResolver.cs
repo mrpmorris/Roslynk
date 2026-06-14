@@ -13,7 +13,8 @@ public sealed class SymbolResolver
 	private static readonly SymbolDisplayFormat FullyQualifiedFormat = new(
 		globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
 		typeQualificationStyle: SymbolDisplayTypeQualificationStyle.NameAndContainingTypesAndNamespaces,
-		genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters);
+		genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
+		memberOptions: SymbolDisplayMemberOptions.IncludeContainingType);
 
 	/// <summary>The namespace-qualified name (no <c>global::</c> prefix) used as a symbol's identity.</summary>
 	public static string FullyQualifiedName(ISymbol symbol) =>
