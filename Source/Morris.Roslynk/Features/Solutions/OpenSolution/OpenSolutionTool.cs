@@ -35,7 +35,7 @@ public sealed class OpenSolutionTool
 		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionPath);
 
 		OpenSolutionProject[] projects =
-			instance.Workspace.Solution.Projects
+			instance.CurrentSolution.Projects
 				.Select(project => new OpenSolutionProject(project.Name, project.Documents.Count()))
 				.ToArray();
 

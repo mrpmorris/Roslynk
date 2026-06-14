@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk;
 
@@ -16,6 +17,7 @@ public static class ServicesRegistration
 		services.AddSingleton<InstanceRegistry>();
 		services.AddSingleton<DiagnosticsService>();
 		services.AddSingleton<SymbolResolver>();
+		services.AddSingleton<ApplyPipeline>();
 		return services;
 	}
 }

@@ -42,7 +42,7 @@ public sealed class GetDiagnosticsTool
 		[Description("Optional severities to include: error, warning, info, hidden. Defaults to error and warning.")] string[]? severities = null)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetAllDiagnosticsAsync(instance.Workspace.Solution);
+		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetAllDiagnosticsAsync(instance.CurrentSolution);
 
 		var counts = new DiagnosticCounts(
 			Errors: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),

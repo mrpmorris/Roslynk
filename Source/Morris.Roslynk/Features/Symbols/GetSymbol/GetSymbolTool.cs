@@ -39,7 +39,7 @@ public sealed class GetSymbolTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(instance.Workspace.Solution, symbolName);
+		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(instance.CurrentSolution, symbolName);
 
 		if (matches.Count == 0)
 			return new GetSymbolResponse(Symbol: null, Candidates: []);

@@ -39,7 +39,7 @@ public sealed class FindReferencesTool
 		[Description("Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'.")] string symbolName)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		Solution solution = instance.Workspace.Solution;
+		Solution solution = instance.CurrentSolution;
 
 		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, symbolName);
 

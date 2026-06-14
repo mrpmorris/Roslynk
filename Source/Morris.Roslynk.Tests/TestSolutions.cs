@@ -54,4 +54,33 @@ internal static class TestSolutions
 		if (process.ExitCode != 0)
 			throw new InvalidOperationException($"Restoring '{solutionPath}' failed:\n{process.StandardError.ReadToEnd()}");
 	}
+
+	/// <summary>
+	/// Copies the SimpleSolution fixture (source only) to a fresh temp directory and restores it, so
+	/// write tests can modify files without dirtying the committed fixture.
+	/// </summary>
+	public static string CreateScratchSimpleSolution()
+	{
+		string sourceDir = Path.Combine(FindTestFixturesRoot(), "SimpleSolution");
+		string destDir = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"), "SimpleSolution");
+		CopyExcludingBuildOutput(sourceDir, destDir);
+
+		string solutionPath = Path.Combine(destDir, "SimpleSolution.slnx");
+		Restore(solutionPath);
+		return solutionPath;
+	}
+
+	private static void CopyExcludingBuildOutput(string sourceDir, string destDir)
+	{
+		foreach (string file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
+		{
+			string relative = Path.GetRelativePath(sourceDir, file);
+			if (relative.Contains($"obj{Path.DirectorySeparatorChar}") || relative.Contains($"bin{Path.DirectorySeparatorChar}"))
+				continue;
+
+			string target = Path.Combine(destDir, relative);
+			Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+			File.Copy(file, target, overwrite: true);
+		}
+	}
 }
