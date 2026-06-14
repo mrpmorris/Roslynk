@@ -3,10 +3,10 @@
   WiX 5 source for the Roslynk MSI. It installs the published, self-contained service into
   Program Files and registers + starts the "Roslynk" Windows service.
 
-  Build (requires the WiX toolset — `dotnet tool install --global wix`, and a prior `publish.ps1`):
-      dotnet build installer/Morris.Roslynk.Installer.wixproj -c Release
+  Build (requires the free WiX v5 toolset, installed as a global dotnet tool, after publish.ps1):
+      wix build installer/Roslynk.wxs -d PublishDir=installer/publish -arch x64 -o Roslynk-1.0.0-x64.msi
 
-  The UpgradeCode below is the stable product identity across versions; do NOT change it once released.
+  The UpgradeCode below is the stable product identity across versions; do not change it once released.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 	<Package

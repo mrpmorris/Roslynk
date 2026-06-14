@@ -12,6 +12,11 @@ x86/
 artifacts/
 *.binlog
 
+## Installer build artifacts (self-contained publish + built MSI are large and regenerated)
+installer/publish/
+installer/*.msi
+installer/*.wixpdb
+
 ## Visual Studio / Rider / VS Code
 .vs/
 .vscode/
