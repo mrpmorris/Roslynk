@@ -44,4 +44,16 @@ public class GetMethodTests
 		Assert.Empty(response.Methods);
 		Assert.Empty(response.Candidates);
 	}
+
+	[Fact]
+	public async Task WhenAMetadataMethodIsRequested_ThenItsOverloadsResolveFromTheReferencedAssembly()
+	{
+		using var registry = new InstanceRegistry();
+		var subject = new GetMethodTool(registry, new SymbolResolver());
+
+		GetMethodResponse response = await subject.GetMethod(TestSolutions.Simple, "System.String.Substring");
+
+		Assert.NotEmpty(response.Methods);
+		Assert.All(response.Methods, method => Assert.Equal("Substring", method.Name));
+	}
 }

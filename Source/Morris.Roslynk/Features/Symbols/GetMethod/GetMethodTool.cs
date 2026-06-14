@@ -41,7 +41,7 @@ public sealed class GetMethodTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(instance.CurrentSolution, methodId);
+		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(instance.CurrentSolution, methodId);
 
 		MethodDto[] methods = matches.OfType<IMethodSymbol>().Select(Map).ToArray();
 		if (methods.Length > 0)

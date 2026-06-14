@@ -44,4 +44,19 @@ public class GetSymbolTests
 		Assert.Equal("own", response.Symbol!.Documentation.Source);
 		Assert.NotNull(response.Symbol.Documentation.Summary);
 	}
+
+	[Fact]
+	public async Task WhenAMetadataTypeIsRequested_ThenItResolvesFromTheReferencedAssembly()
+	{
+		using var registry = new InstanceRegistry();
+		var subject = new GetSymbolTool(registry, new SymbolResolver());
+
+		GetSymbolResponse response = await subject.GetSymbol(TestSolutions.Simple, "System.String");
+
+		Assert.NotNull(response.Symbol);
+		Assert.Equal("String", response.Symbol!.Name);
+		Assert.Equal("metadata", response.Symbol.SourceType);
+		Assert.False(string.IsNullOrEmpty(response.Symbol.Assembly));
+		Assert.Null(response.Symbol.SourcePath);
+	}
 }

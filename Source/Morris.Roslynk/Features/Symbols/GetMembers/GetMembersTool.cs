@@ -41,7 +41,7 @@ public sealed class GetMembersTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
 
-		List<INamedTypeSymbol> types = (await SymbolResolver.FindByFullyQualifiedNameAsync(instance.CurrentSolution, typeName))
+		List<INamedTypeSymbol> types = (await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(instance.CurrentSolution, typeName))
 			.OfType<INamedTypeSymbol>()
 			.ToList();
 

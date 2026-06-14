@@ -48,6 +48,50 @@ public sealed class SymbolResolver
 	}
 
 	/// <summary>
+	/// Like <see cref="FindByFullyQualifiedNameAsync"/>, but if nothing matches in source it falls back to
+	/// referenced-assembly metadata (BCL / NuGet) via <c>GetTypeByMetadataName</c> — so read tools can
+	/// resolve, e.g., <c>System.String</c> or <c>System.String.Substring</c>. Generic arity is not
+	/// inferred, so closed generic metadata types are out of scope for v1.
+	/// </summary>
+	public async Task<IReadOnlyList<ISymbol>> FindByFullyQualifiedNameWithMetadataAsync(Solution solution, string name, CancellationToken cancellationToken = default)
+	{
+		IReadOnlyList<ISymbol> source = await FindByFullyQualifiedNameAsync(solution, name, cancellationToken);
+		if (source.Count > 0 || string.IsNullOrWhiteSpace(name))
+			return source;
+
+		var matches = new List<ISymbol>();
+		var seen = new HashSet<string>(StringComparer.Ordinal);
+
+		void Add(ISymbol symbol)
+		{
+			if (seen.Add(FullyQualifiedName(symbol)))
+				matches.Add(symbol);
+		}
+
+		int lastDot = name.LastIndexOf('.');
+		string? containerName = lastDot > 0 ? name[..lastDot] : null;
+		string memberName = lastDot > 0 ? name[(lastDot + 1)..] : name;
+
+		foreach (Project project in solution.Projects)
+		{
+			Compilation? compilation = await project.GetCompilationAsync(cancellationToken);
+			if (compilation is null)
+				continue;
+
+			if (compilation.GetTypeByMetadataName(name) is INamedTypeSymbol type)
+				Add(type);
+
+			if (containerName is not null && compilation.GetTypeByMetadataName(containerName) is INamedTypeSymbol container)
+			{
+				foreach (ISymbol member in container.GetMembers(memberName))
+					Add(member);
+			}
+		}
+
+		return matches;
+	}
+
+	/// <summary>
 	/// Resolves the symbol referenced at a 1-based <paramref name="line"/>/<paramref name="column"/> in
 	/// the given file, or null if the file is not in the solution or no symbol sits there.
 	/// </summary>

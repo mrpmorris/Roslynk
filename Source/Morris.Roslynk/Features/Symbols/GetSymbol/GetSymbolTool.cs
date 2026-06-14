@@ -40,7 +40,7 @@ public sealed class GetSymbolTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(instance.CurrentSolution, symbolName);
+		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(instance.CurrentSolution, symbolName);
 
 		if (matches.Count == 0)
 			return new GetSymbolResponse(Symbol: null, Candidates: []);
@@ -66,6 +66,8 @@ public sealed class GetSymbolTool
 				Kind: symbol.Kind.ToString(),
 				Accessibility: symbol.DeclaredAccessibility.ToString(),
 				Signature: symbol.ToDisplayString(),
+				SourceType: "metadata",
+				Assembly: symbol.ContainingAssembly?.Name,
 				SourcePath: null,
 				StartLine: null,
 				StartColumn: null,
@@ -81,6 +83,8 @@ public sealed class GetSymbolTool
 			Kind: symbol.Kind.ToString(),
 			Accessibility: symbol.DeclaredAccessibility.ToString(),
 			Signature: symbol.ToDisplayString(),
+			SourceType: "source",
+			Assembly: null,
 			SourcePath: span.Path,
 			StartLine: span.StartLinePosition.Line + 1,
 			StartColumn: span.StartLinePosition.Character + 1,
