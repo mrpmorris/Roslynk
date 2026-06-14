@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 
 namespace Morris.Roslynk;
@@ -12,6 +13,7 @@ public static class ServicesRegistration
 	public static IServiceCollection AddRoslynk(this IServiceCollection services)
 	{
 		services.AddSingleton<InstanceRegistry>();
+		services.AddSingleton<DiagnosticsService>();
 		return services;
 	}
 }
