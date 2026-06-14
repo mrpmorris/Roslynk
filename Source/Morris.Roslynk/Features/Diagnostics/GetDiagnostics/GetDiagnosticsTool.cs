@@ -40,10 +40,11 @@ public sealed class GetDiagnosticsTool
 	public async Task<GetDiagnosticsResponse> GetDiagnostics(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Optional severities to include: error, warning, info, hidden. Defaults to error and warning.")] string[]? severities = null,
-		[Description("Optional target framework (e.g. net8.0) to limit a multi-targeted project to one compilation.")] string? targetFramework = null)
+		[Description("Optional target framework (e.g. net8.0) to limit a multi-targeted project to one compilation.")] string? targetFramework = null,
+		[Description("Also run the project's analyzers (NetAnalyzers etc.) — richer (CA/IDE diagnostics) but slower. Default false.")] bool includeAnalyzers = false)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetAllDiagnosticsAsync(instance.CurrentSolution, targetFramework);
+		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetAllDiagnosticsAsync(instance.CurrentSolution, targetFramework, includeAnalyzers);
 
 		var counts = new DiagnosticCounts(
 			Errors: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),

@@ -9,5 +9,5 @@ public class Widget
 
 	public int UseCompute() => Compute(21);
 
-	private int Unused() => GetHashCode();
+	private int Unused() => 42;
 }
