@@ -39,10 +39,11 @@ public sealed class GetDiagnosticsTool
 		""")]
 	public async Task<GetDiagnosticsResponse> GetDiagnostics(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Optional severities to include: error, warning, info, hidden. Defaults to error and warning.")] string[]? severities = null)
+		[Description("Optional severities to include: error, warning, info, hidden. Defaults to error and warning.")] string[]? severities = null,
+		[Description("Optional target framework (e.g. net8.0) to limit a multi-targeted project to one compilation.")] string? targetFramework = null)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetAllDiagnosticsAsync(instance.CurrentSolution);
+		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetAllDiagnosticsAsync(instance.CurrentSolution, targetFramework);
 
 		var counts = new DiagnosticCounts(
 			Errors: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),

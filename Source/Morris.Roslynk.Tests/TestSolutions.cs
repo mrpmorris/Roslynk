@@ -11,6 +11,7 @@ internal static class TestSolutions
 	private static readonly Lazy<string> SimpleSolution = new(() => Prepare("SimpleSolution", "SimpleSolution.slnx"));
 	private static readonly Lazy<string> BrokenSolution = new(() => Prepare("BrokenSolution", "BrokenSolution.slnx"));
 	private static readonly Lazy<string> RazorSolutionPath = new(() => Prepare("RazorSolution", "RazorSolution.slnx"));
+	private static readonly Lazy<string> MultiTargetSolutionPath = new(() => Prepare("MultiTargetSolution", "MultiTargetSolution.slnx"));
 
 	/// <summary>A clean single-project solution.</summary>
 	public static string Simple => SimpleSolution.Value;
@@ -20,6 +21,9 @@ internal static class TestSolutions
 
 	/// <summary>A Razor Class Library with a component whose handler is wired only in markup.</summary>
 	public static string Razor => RazorSolutionPath.Value;
+
+	/// <summary>A net8.0;net10.0 multi-targeted project with a CS0029 present only in the net8.0 compilation.</summary>
+	public static string MultiTarget => MultiTargetSolutionPath.Value;
 
 	private static string Prepare(params string[] relativeParts)
 	{
