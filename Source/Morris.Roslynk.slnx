@@ -1,0 +1,4 @@
+<Solution>
+	<Project Path="Morris.Roslynk/Morris.Roslynk.csproj" />
+	<Project Path="Morris.Roslynk.Tests/Morris.Roslynk.Tests.csproj" />
+</Solution>
