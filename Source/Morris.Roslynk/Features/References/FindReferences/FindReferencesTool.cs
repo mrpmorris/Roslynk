@@ -36,7 +36,8 @@ public sealed class FindReferencesTool
 		""")]
 	public async Task<FindReferencesResponse> FindReferences(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'.")] string symbolName)
+		[Description("Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'.")] string symbolName,
+		[Description("Maximum reference locations to return. Default 100.")] int maxResults = 100)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
 		Solution solution = instance.CurrentSolution;
@@ -44,12 +45,15 @@ public sealed class FindReferencesTool
 		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, symbolName);
 
 		if (matches.Count == 0)
-			return new FindReferencesResponse(ResolvedSymbol: null, References: [], Candidates: []);
+		{
+			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(solution, symbolName);
+			return new FindReferencesResponse(ResolvedSymbol: null, References: [], Candidates: suggestions, Truncated: false);
+		}
 
 		if (matches.Count > 1)
 		{
 			string[] candidates = matches.Select(match => match.ToDisplayString()).Distinct(StringComparer.Ordinal).ToArray();
-			return new FindReferencesResponse(ResolvedSymbol: null, References: [], Candidates: candidates);
+			return new FindReferencesResponse(ResolvedSymbol: null, References: [], Candidates: candidates, Truncated: false);
 		}
 
 		ISymbol symbol = matches[0];
@@ -63,7 +67,8 @@ public sealed class FindReferencesTool
 			}
 		}
 
-		return new FindReferencesResponse(symbol.ToDisplayString(), references, Candidates: []);
+		ReferenceDto[] page = references.Take(Math.Max(0, maxResults)).ToArray();
+		return new FindReferencesResponse(symbol.ToDisplayString(), page, Candidates: [], Truncated: references.Count > page.Length);
 	}
 
 	private static ReferenceDto Map(Location location)

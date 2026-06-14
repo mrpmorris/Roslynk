@@ -30,4 +30,17 @@ public class FindReferencesTests
 		Assert.Empty(response.References);
 		Assert.Empty(response.Candidates);
 	}
+
+	[Fact]
+	public async Task WhenMoreReferencesMatchThanMaxResults_ThenTheResultIsTruncated()
+	{
+		using var registry = new InstanceRegistry();
+		var subject = new FindReferencesTool(registry, new SymbolResolver());
+
+		FindReferencesResponse response = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Greeter", maxResults: 0);
+
+		Assert.NotNull(response.ResolvedSymbol);
+		Assert.Empty(response.References);
+		Assert.True(response.Truncated);
+	}
 }
