@@ -1,6 +1,7 @@
 using Morris.Roslynk.Features.Symbols.FindDefinition;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.FindDefinitionTests;
 
@@ -10,17 +11,36 @@ public class FindDefinitionTests
 	public async Task WhenGivenAUsagePosition_ThenTheDeclarationIsReturned()
 	{
 		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new FindDefinitionTool(registry, new SymbolResolver());
 
 		string callerPath = Path.Combine(Path.GetDirectoryName(TestSolutions.Simple)!, "SimpleLibrary", "Caller.cs");
 		string text = await File.ReadAllTextAsync(callerPath);
 		(int line, int column) = ToLineColumn(text, text.IndexOf("Greeter", StringComparison.Ordinal));
 
-		FindDefinitionResponse response = await subject.FindDefinition(TestSolutions.Simple, callerPath, line, column);
+		FindDefinitionResult result = await subject.FindDefinition(TestSolutions.Simple, callerPath, line, column);
 
-		Assert.NotNull(response.FullName);
-		Assert.Contains("Greeter", response.FullName);
-		Assert.EndsWith("Greeter.cs", response.SourcePath);
+		Assert.True(result.IsSuccess);
+		Assert.NotNull(result.FullName);
+		Assert.Contains("Greeter", result.FullName);
+		Assert.EndsWith("Greeter.cs", result.SourcePath);
+	}
+
+	[Fact]
+	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
+	{
+		using var registry = new InstanceRegistry();
+		var subject = new FindDefinitionTool(registry, new SymbolResolver());
+
+		string callerPath = Path.Combine(Path.GetDirectoryName(TestSolutions.Simple)!, "SimpleLibrary", "Caller.cs");
+
+		FindDefinitionResult result = await subject.FindDefinition(TestSolutions.Simple, callerPath, 1, 1);
+
+		Assert.False(result.IsSuccess);
+		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
+		Assert.Equal(SolutionStatus.Building, result.Status);
+
+		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
 
 	private static (int Line, int Column) ToLineColumn(string text, int index)

@@ -4,6 +4,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Symbols.GetSymbol;
 
@@ -34,27 +35,37 @@ public sealed class GetSymbolTool
 		resolved by fully-qualified name. If the name is ambiguous the candidate fully-qualified names
 		are returned instead.
 		""")]
-	public async Task<GetSymbolResponse> GetSymbol(
+	public async Task<GetSymbolResult> GetSymbol(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'.")] string symbolName)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(instance.CurrentSolution, symbolName);
+		GetSymbolResult Success(SymbolDto symbol) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Symbol = symbol };
+
+		GetSymbolResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(model.Solution, symbolName);
 
 		if (matches.Count == 0)
 		{
-			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(instance.CurrentSolution, symbolName);
-			return new GetSymbolResponse(Symbol: null, Candidates: suggestions);
+			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
+			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", suggestions.Count > 0 ? suggestions : null));
 		}
 
 		if (matches.Count > 1)
 		{
 			string[] candidates = matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
-			return new GetSymbolResponse(Symbol: null, Candidates: candidates);
+			return Failure(Error.Ambiguous($"'{symbolName}' matched multiple symbols.", candidates));
 		}
 
-		return new GetSymbolResponse(Map(matches[0]), Candidates: []);
+		return Success(Map(matches[0]));
 	}
 
 	private static SymbolDto Map(ISymbol symbol)

@@ -1,0 +1,17 @@
+using Morris.Roslynk.Infrastructure.Results;
+
+namespace Morris.Roslynk.Features.References.FindReferences;
+
+/// <summary>
+/// References to a resolved symbol. A symbol with no references is a success with an empty
+/// <see cref="References"/>; <see cref="Truncated"/> is true when more matched than maxResults. When the
+/// name does not resolve to a single symbol, <see cref="ResultBase.Error"/> carries a
+/// <see cref="ErrorCode.NotFound"/> (whose candidates are ranked near-miss suggestions) or
+/// <see cref="ErrorCode.Ambiguous"/> (whose candidates are the matching display names).
+/// </summary>
+public sealed record FindReferencesResult : ResultBase
+{
+	public string? ResolvedSymbol { get; init; }
+	public IReadOnlyList<ReferenceDto>? References { get; init; }
+	public bool Truncated { get; init; }
+}

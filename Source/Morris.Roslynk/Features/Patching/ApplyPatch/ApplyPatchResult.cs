@@ -1,0 +1,27 @@
+using Morris.Roslynk.Infrastructure.Results;
+
+namespace Morris.Roslynk.Features.Patching.ApplyPatch;
+
+/// <summary>A file the patch changed (or would change), with its resulting <c>documentVersion</c>.</summary>
+public sealed record ApplyPatchChange(string Path, string Version);
+
+/// <summary>
+/// A target that moved on disk since the patch was based. Carries the current version and current text so
+/// the model can rebase just this file in one step rather than re-reading the whole solution.
+/// </summary>
+public sealed record ApplyPatchStaleFile(string Path, string CurrentVersion, string CurrentText);
+
+/// <summary>
+/// The outcome of <c>apply_patch</c>. On success <see cref="Applied"/> is true — or false for a checkOnly
+/// preview — and <see cref="ChangedFiles"/> lists the affected files with their new versions. Failures are
+/// carried on <see cref="ResultBase.Error"/>: Stale (the self-healing rebase data also in
+/// <see cref="StaleFiles"/>), NotSupported (offending targets in <see cref="RejectedFiles"/>), Conflict
+/// when a hunk no longer matches, and Invalid when the patch cannot be parsed.
+/// </summary>
+public sealed record ApplyPatchResult : ResultBase
+{
+	public bool Applied { get; init; }
+	public IReadOnlyList<ApplyPatchChange>? ChangedFiles { get; init; }
+	public IReadOnlyList<ApplyPatchStaleFile>? StaleFiles { get; init; }
+	public IReadOnlyList<string>? RejectedFiles { get; init; }
+}

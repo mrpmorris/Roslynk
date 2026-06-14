@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Symbols.FindDefinition;
 
@@ -33,33 +34,51 @@ public sealed class FindDefinitionTool
 		is declared — the 'go to definition' jump, by position. Useful when you have a usage site but not
 		the symbol's name.
 		""")]
-	public async Task<FindDefinitionResponse> FindDefinition(
+	public async Task<FindDefinitionResult> FindDefinition(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Absolute path to the .cs file containing the usage.")] string filePath,
 		[Description("1-based line of the usage.")] int line,
 		[Description("1-based column of the usage.")] int column)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		ISymbol? symbol = await SymbolResolver.ResolveAtPositionAsync(instance.CurrentSolution, filePath, line, column);
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
+
+		FindDefinitionResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		ISymbol? symbol = await SymbolResolver.ResolveAtPositionAsync(model.Solution, filePath, line, column);
 
 		if (symbol is null)
-			return new FindDefinitionResponse(null, null, null, null, null, null, null);
+			return Failure(Error.NotFound($"No symbol resolved at {filePath} ({line}, {column})."));
 
 		string fullName = SymbolResolver.FullyQualifiedName(symbol);
 		string kind = symbol.Kind.ToString();
 
 		Location? location = symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
 		if (location is null)
-			return new FindDefinitionResponse(fullName, kind, null, null, null, null, null);
+			return new FindDefinitionResult
+			{
+				SnapshotId = model.SnapshotId,
+				Status = model.Status,
+				FullName = fullName,
+				Kind = kind,
+			};
 
 		FileLinePositionSpan span = location.GetLineSpan();
-		return new FindDefinitionResponse(
-			fullName,
-			kind,
-			span.Path,
-			span.StartLinePosition.Line + 1,
-			span.StartLinePosition.Character + 1,
-			span.EndLinePosition.Line + 1,
-			span.EndLinePosition.Character + 1);
+		return new FindDefinitionResult
+		{
+			SnapshotId = model.SnapshotId,
+			Status = model.Status,
+			FullName = fullName,
+			Kind = kind,
+			SourcePath = span.Path,
+			StartLine = span.StartLinePosition.Line + 1,
+			StartColumn = span.StartLinePosition.Character + 1,
+			EndLine = span.EndLinePosition.Line + 1,
+			EndColumn = span.EndLinePosition.Character + 1,
+		};
 	}
 }

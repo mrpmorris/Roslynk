@@ -7,6 +7,7 @@ using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Features.Signatures.ChangeSignature;
@@ -43,7 +44,7 @@ public sealed class ChangeSignatureTool
 		members and their implementations, partial methods, params methods, and constructors (returns Not
 		Supported). Pass checkOnly to preview the changed files without writing.
 		""")]
-	public async Task<ChangeSignatureResponse> ChangeSignature(
+	public async Task<ChangeSignatureResult> ChangeSignature(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the method to change, e.g. Namespace.Type.Method.")] string methodId,
 		[Description("The new parameter's type, e.g. System.Threading.CancellationToken.")] string parameterType,
@@ -52,33 +53,53 @@ public sealed class ChangeSignatureTool
 		[Description("Optional expression to pass at every call site as a named argument. If omitted, calls use the default.")] string? callSiteArgument = null,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false)
 	{
-		if (!SyntaxFacts.IsValidIdentifier(parameterName))
-			return ChangeSignatureResponse.Failed($"'{parameterName}' is not a valid C# identifier.");
-		if (string.IsNullOrWhiteSpace(parameterType))
-			return ChangeSignatureResponse.Failed("A parameter type is required.");
-		if (string.IsNullOrWhiteSpace(defaultValue))
-			return ChangeSignatureResponse.Failed("A default value is required so the added parameter is optional and the change stays backward-compatible.");
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
 
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		Solution solution = instance.CurrentSolution;
+		ChangeSignatureResult Success(bool applied, string resolvedMethod, IReadOnlyList<string> changed, int callSiteCount) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Applied = applied, ResolvedMethod = resolvedMethod, ChangedFiles = changed, UpdatedCallSites = callSiteCount };
+
+		ChangeSignatureResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		ChangeSignatureResult NotSupported(string resolvedMethod, string message) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, ResolvedMethod = resolvedMethod, Error = Error.NotSupported(message) };
+
+		if (!SyntaxFacts.IsValidIdentifier(parameterName))
+			return Failure(Error.Invalid($"'{parameterName}' is not a valid C# identifier."));
+		if (string.IsNullOrWhiteSpace(parameterType))
+			return Failure(Error.Invalid("A parameter type is required."));
+		if (string.IsNullOrWhiteSpace(defaultValue))
+			return Failure(Error.Invalid("A default value is required so the added parameter is optional and the change stays backward-compatible."));
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		Solution solution = model.Solution;
 
 		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, methodId);
 		if (matches.Count == 0)
-			return ChangeSignatureResponse.Failed($"No symbol matched '{methodId}'.");
+		{
+			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(solution, methodId);
+			return Failure(Error.NotFound($"No symbol matched '{methodId}'.", suggestions.Count > 0 ? suggestions : null));
+		}
 		if (matches.Count > 1)
-			return ChangeSignatureResponse.Failed($"'{methodId}' is ambiguous ({matches.Count} matches, likely overloads); v1 cannot target a specific overload.");
+		{
+			string[] candidates = matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+			return Failure(Error.Ambiguous($"'{methodId}' is ambiguous ({matches.Count} matches, likely overloads); v1 cannot target a specific overload.", candidates));
+		}
 		if (matches[0] is not IMethodSymbol method)
-			return ChangeSignatureResponse.Failed($"'{methodId}' is not a method.");
+			return Failure(Error.NotSupported($"'{methodId}' is not a method."));
 
 		string resolved = SymbolResolver.FullyQualifiedName(method);
 
 		string? rejection = Reject(method, parameterName);
 		if (rejection is not null)
-			return ChangeSignatureResponse.NotSupported(resolved, rejection);
+			return NotSupported(resolved, rejection);
 
 		SyntaxNode declarationNode = await method.DeclaringSyntaxReferences[0].GetSyntaxAsync();
 		if (declarationNode is not MethodDeclarationSyntax methodDeclaration)
-			return ChangeSignatureResponse.NotSupported(resolved, "The method is not an ordinary method declaration.");
+			return NotSupported(resolved, "The method is not an ordinary method declaration.");
 
 		Document declarationDocument = solution.GetDocument(methodDeclaration.SyntaxTree)!;
 
@@ -110,11 +131,11 @@ public sealed class ChangeSignatureTool
 		if (checkOnly)
 		{
 			IReadOnlyList<string> preview = ApplyPipeline.GetChangedFilePaths(solution, updated);
-			return new ChangeSignatureResponse(Applied: false, resolved, preview, callSites.Count, "Preview only; nothing was written.");
+			return Success(applied: false, resolved, preview, callSites.Count);
 		}
 
 		IReadOnlyList<string> changed = await ApplyPipeline.ApplyAsync(instance, updated);
-		return new ChangeSignatureResponse(Applied: true, resolved, changed, callSites.Count, Message: null);
+		return Success(applied: true, resolved, changed, callSites.Count);
 	}
 
 	private static string? Reject(IMethodSymbol method, string parameterName)

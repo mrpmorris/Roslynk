@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Build.BuildSolution;
 
@@ -9,6 +11,13 @@ namespace Morris.Roslynk.Features.Build.BuildSolution;
 public sealed partial class BuildSolutionTool
 {
 	public const string BuildSolutionName = "build_solution";
+
+	private readonly InstanceRegistry InstanceRegistry;
+
+	public BuildSolutionTool(InstanceRegistry instanceRegistry)
+	{
+		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
+	}
 
 	[McpServerTool(
 		Name = BuildSolutionName,
@@ -23,9 +32,21 @@ public sealed partial class BuildSolutionTool
 		error/warning counts and the first error messages. Slower than get_diagnostics (which is an
 		in-process compile); use it for full verification.
 		""")]
-	public async Task<BuildSolutionResponse> BuildSolution(
+	public async Task<BuildSolutionResult> BuildSolution(
 		[Description("Solution handle returned by open_solution (the .sln/.slnx path).")] string solutionId)
 	{
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
+
+		BuildSolutionResult Success(bool succeeded, int errors, int warnings, IReadOnlyList<string> errorMessages) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Succeeded = succeeded, Errors = errors, Warnings = warnings, ErrorMessages = errorMessages };
+
+		BuildSolutionResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
 		var startInfo = new ProcessStartInfo("dotnet", $"build \"{solutionId}\" --nologo")
 		{
 			RedirectStandardOutput = true,
@@ -51,7 +72,7 @@ public sealed partial class BuildSolutionTool
 			.Take(20)
 			.ToArray();
 
-		return new BuildSolutionResponse(process.ExitCode == 0, errors, warnings, errorMessages);
+		return Success(process.ExitCode == 0, errors, warnings, errorMessages);
 	}
 
 	private static int ParseCount(string output, Regex regex)

@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis.Rename;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Features.References.RenameSymbol;
@@ -39,23 +40,40 @@ public sealed class RenameSymbolTool
 		identifier and reports candidates when the name is ambiguous. Pass checkOnly to preview the
 		files that would change without writing.
 		""")]
-	public async Task<RenameSymbolResponse> RenameSymbol(
+	public async Task<RenameSymbolResult> RenameSymbol(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the symbol to rename.")] string symbolName,
 		[Description("The new name (must be a valid C# identifier).")] string newName,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false)
 	{
-		if (!SyntaxFacts.IsValidIdentifier(newName))
-			return RenameSymbolResponse.Failed($"'{newName}' is not a valid C# identifier.");
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
 
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		Solution solution = instance.CurrentSolution;
+		RenameSymbolResult Success(bool applied, string resolved, IReadOnlyList<string> changedFiles) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Applied = applied, ResolvedSymbol = resolved, ChangedFiles = changedFiles };
+
+		RenameSymbolResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (!SyntaxFacts.IsValidIdentifier(newName))
+			return Failure(Error.Invalid($"'{newName}' is not a valid C# identifier."));
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		Solution solution = model.Solution;
 
 		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, symbolName);
 		if (matches.Count == 0)
-			return RenameSymbolResponse.Failed($"No symbol matched '{symbolName}'.");
+		{
+			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(solution, symbolName);
+			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", suggestions.Count > 0 ? suggestions : null));
+		}
 		if (matches.Count > 1)
-			return RenameSymbolResponse.Ambiguous(matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray());
+		{
+			string[] candidates = matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+			return Failure(Error.Ambiguous("The name is ambiguous; rename using one of the candidate fully-qualified names.", candidates));
+		}
 
 		ISymbol symbol = matches[0];
 		string resolved = SymbolResolver.FullyQualifiedName(symbol);
@@ -64,11 +82,10 @@ public sealed class RenameSymbolTool
 		if (checkOnly)
 		{
 			IReadOnlyList<string> preview = ApplyPipeline.GetChangedFilePaths(solution, renamed);
-			return new RenameSymbolResponse(Applied: false, ResolvedSymbol: resolved, ChangedFiles: preview, Candidates: [],
-				Message: "Preview only; nothing was written.");
+			return Success(applied: false, resolved, preview);
 		}
 
 		IReadOnlyList<string> changed = await ApplyPipeline.ApplyAsync(instance, renamed);
-		return new RenameSymbolResponse(Applied: true, ResolvedSymbol: resolved, ChangedFiles: changed, Candidates: [], Message: null);
+		return Success(applied: true, resolved, changed);
 	}
 }

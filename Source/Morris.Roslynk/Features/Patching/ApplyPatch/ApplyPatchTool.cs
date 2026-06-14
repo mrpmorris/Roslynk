@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Patching;
+using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Features.Patching.ApplyPatch;
@@ -35,19 +36,27 @@ public sealed class ApplyPatchTool
 		baseVersions (the documentVersion each file was read at) to be told if a file moved since; pass
 		checkOnly to preview the changed files without writing.
 		""")]
-	public async Task<ApplyPatchResponse> ApplyPatch(
+	public async Task<ApplyPatchResult> ApplyPatch(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("A git unified diff (--- / +++ / @@ hunks) targeting one or more .cs files.")] string patch,
 		[Description("Optional: the documentVersion each touched file was based on, to detect external edits.")] IReadOnlyList<FileVersion>? baseVersions = null,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		Solution solution = instance.CurrentSolution;
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
+
+		ApplyPatchResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		Solution solution = model.Solution;
 
 		IReadOnlyList<FilePatch> patches = UnifiedDiffParser.Parse(patch);
 		if (patches.Count == 0)
-			return ApplyPatchResponse.Failed("No file hunks were found in the patch.");
+			return Failure(Error.Invalid("No file hunks were found in the patch."));
 
 		var targets = new List<PatchTarget>();
 		var rejected = new List<string>();
@@ -64,7 +73,14 @@ public sealed class ApplyPatchTool
 		}
 
 		if (rejected.Count > 0)
-			return ApplyPatchResponse.NotSupported(rejected);
+			return new ApplyPatchResult
+			{
+				SnapshotId = model.SnapshotId,
+				Status = model.Status,
+				RejectedFiles = rejected,
+				Error = Error.NotSupported(
+					"apply_patch edits existing solution-compiled .cs files only; file creation/deletion and non-source targets are not supported.")
+			};
 
 		IReadOnlyDictionary<string, string> expectedVersions = BuildExpectedVersions(baseVersions);
 
@@ -87,20 +103,28 @@ public sealed class ApplyPatchTool
 
 				PatchApplyResult result = PatchApplier.Apply(diskText, target.FilePatch);
 				if (!result.Success)
-					return ApplyPatchResponse.Failed($"{target.Path}: {result.FailureReason}");
+					return Failure(Error.Conflict($"{target.Path}: {result.FailureReason}"));
 
 				pending.Add(new PendingPatch(target.DocumentId, target.Path, result.NewText!));
 			}
 
 			if (stale.Count > 0)
-				return ApplyPatchResponse.Stale(stale);
+				return new ApplyPatchResult
+				{
+					SnapshotId = model.SnapshotId,
+					Status = model.Status,
+					StaleFiles = stale,
+					Error = Error.Stale(
+						"Some targets changed on disk since the patch was based; rebase against the returned current text and retry.",
+						stale.Select(file => file.Path).ToArray())
+				};
 
 			IReadOnlyList<ApplyPatchChange> changes = pending
 				.Select(item => new ApplyPatchChange(item.Path, FileHash.Of(item.NewText)))
 				.ToArray();
 
 			if (checkOnly)
-				return new ApplyPatchResponse(ApplyPatchOutcome.Preview, changes, [], [], "Preview only; nothing was written.");
+				return new ApplyPatchResult { SnapshotId = model.SnapshotId, Status = model.Status, Applied = false, ChangedFiles = changes };
 
 			await AtomicFileWriter.WriteAllAsync(
 				pending.Select(item => new PendingWrite(item.Path, item.NewText)).ToArray(),
@@ -114,7 +138,7 @@ public sealed class ApplyPatchTool
 			}
 
 			instance.AdvanceTo(updated);
-			return new ApplyPatchResponse(ApplyPatchOutcome.Applied, changes, [], [], null);
+			return new ApplyPatchResult { SnapshotId = instance.CurrentModel.SnapshotId, Status = instance.CurrentModel.Status, Applied = true, ChangedFiles = changes };
 		}
 		finally
 		{

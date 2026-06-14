@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Symbols.GetTypeHierarchy;
 
@@ -33,20 +34,48 @@ public sealed class GetTypeHierarchyTool
 		Returns a type's base-type chain, implemented interfaces, and known derived types, resolved by
 		fully-qualified name. Ambiguous names return candidate fully-qualified names instead.
 		""")]
-	public async Task<TypeHierarchyResponse> GetTypeHierarchy(
+	public async Task<GetTypeHierarchyResult> GetTypeHierarchy(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the type, e.g. 'MyNamespace.MyType'.")] string typeName)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		Solution solution = instance.CurrentSolution;
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, typeName);
+		GetTypeHierarchyResult Success(string resolvedType, IReadOnlyList<string> baseTypes, IReadOnlyList<string> interfaces, IReadOnlyList<string> derivedTypes) =>
+			new()
+			{
+				SnapshotId = model.SnapshotId,
+				Status = model.Status,
+				ResolvedType = resolvedType,
+				BaseTypes = baseTypes,
+				Interfaces = interfaces,
+				DerivedTypes = derivedTypes,
+			};
+
+		GetTypeHierarchyResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(model.Solution, typeName);
 		List<INamedTypeSymbol> types = matches.OfType<INamedTypeSymbol>().ToList();
 
 		if (types.Count == 0)
-			return new TypeHierarchyResponse(null, [], [], [], []);
+		{
+			string[] resolved = matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+			IReadOnlyList<string> candidates = resolved.Length > 0
+				? resolved
+				: await SymbolResolver.SuggestAsync(model.Solution, typeName);
+
+			return Failure(Error.NotFound($"No type matched '{typeName}'.", candidates.Count > 0 ? candidates : null));
+		}
+
 		if (types.Count > 1)
-			return new TypeHierarchyResponse(null, [], [], [], types.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray());
+		{
+			string[] candidates = types.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+			return Failure(Error.Ambiguous($"'{typeName}' matched several types.", candidates));
+		}
 
 		INamedTypeSymbol type = types[0];
 
@@ -56,9 +85,9 @@ public sealed class GetTypeHierarchyTool
 
 		string[] interfaces = type.AllInterfaces.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
 
-		IEnumerable<INamedTypeSymbol> derived = await SymbolFinder.FindDerivedClassesAsync(type, solution);
+		IEnumerable<INamedTypeSymbol> derived = await SymbolFinder.FindDerivedClassesAsync(type, model.Solution);
 		string[] derivedTypes = derived.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
 
-		return new TypeHierarchyResponse(SymbolResolver.FullyQualifiedName(type), baseTypes, interfaces, derivedTypes, []);
+		return Success(SymbolResolver.FullyQualifiedName(type), baseTypes, interfaces, derivedTypes);
 	}
 }

@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Features.Usings.RemoveUnusedUsings;
@@ -36,21 +37,32 @@ public sealed class RemoveUnusedUsingsTool
 		documentPath is given — the recurring cleanup after moves and renames. Written atomically through the
 		same safe write path as the other tools. Pass checkOnly to preview the changed files without writing.
 		""")]
-	public async Task<RemoveUnusedUsingsResponse> RemoveUnusedUsings(
+	public async Task<RemoveUnusedUsingsResult> RemoveUnusedUsings(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Optional path of a single .cs file to clean. Omit to clean the whole solution.")] string? documentPath = null,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		Solution solution = instance.CurrentSolution;
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
+
+		RemoveUnusedUsingsResult Success(bool applied, IReadOnlyList<string> changed, int removedCount) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Applied = applied, ChangedFiles = changed, RemovedCount = removedCount };
+
+		RemoveUnusedUsingsResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		Solution solution = model.Solution;
 
 		HashSet<DocumentId>? targetDocuments = null;
 		if (documentPath is not null)
 		{
 			Document? document = ResolveDocument(solution, documentPath);
 			if (document is null)
-				return new RemoveUnusedUsingsResponse(Applied: false, [], 0, $"'{documentPath}' is not a solution-compiled .cs document.");
+				return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs document."));
 			targetDocuments = [document.Id];
 		}
 
@@ -89,13 +101,13 @@ public sealed class RemoveUnusedUsingsTool
 		}
 
 		if (removed == 0)
-			return new RemoveUnusedUsingsResponse(Applied: false, [], 0, "No unnecessary using directives were found.");
+			return Success(applied: false, [], 0);
 
 		if (checkOnly)
-			return new RemoveUnusedUsingsResponse(Applied: false, ApplyPipeline.GetChangedFilePaths(solution, updated), removed, "Preview only; nothing was written.");
+			return Success(applied: false, ApplyPipeline.GetChangedFilePaths(solution, updated), removed);
 
 		IReadOnlyList<string> changed = await ApplyPipeline.ApplyAsync(instance, updated, cancellationToken);
-		return new RemoveUnusedUsingsResponse(Applied: true, changed, removed, Message: null);
+		return Success(applied: true, changed, removed);
 	}
 
 	private static readonly string[] GeneratedSuffixes = [".g.cs", ".g.i.cs", ".designer.cs", ".generated.cs"];

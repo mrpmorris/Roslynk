@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Callers.GetCallers;
 
@@ -33,26 +34,43 @@ public sealed class GetCallersTool
 		Finds the methods that call the resolved method (by fully-qualified name). Ambiguous names return
 		candidate fully-qualified names instead.
 		""")]
-	public async Task<GetCallersResponse> GetCallers(
+	public async Task<GetCallersResult> GetCallers(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the method, e.g. 'MyNamespace.MyType.MyMethod'.")] string methodName)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		Solution solution = instance.CurrentSolution;
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, methodName);
+		GetCallersResult Success(string resolvedSymbol, IReadOnlyList<string> callers) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, ResolvedSymbol = resolvedSymbol, Callers = callers };
+
+		GetCallersResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(model.Solution, methodName);
+
 		if (matches.Count == 0)
-			return new GetCallersResponse(null, [], []);
+		{
+			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, methodName);
+			return Failure(Error.NotFound($"No symbol matched '{methodName}'.", candidates.Count > 0 ? candidates : null));
+		}
+
 		if (matches.Count > 1)
-			return new GetCallersResponse(null, [], matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray());
+		{
+			string[] candidates = matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+			return Failure(Error.Ambiguous($"'{methodName}' matched several symbols.", candidates));
+		}
 
 		ISymbol symbol = matches[0];
-		IEnumerable<SymbolCallerInfo> callers = await SymbolFinder.FindCallersAsync(symbol, solution);
+		IEnumerable<SymbolCallerInfo> callers = await SymbolFinder.FindCallersAsync(symbol, model.Solution);
 		string[] callerNames = callers
 			.Select(caller => SymbolResolver.FullyQualifiedName(caller.CallingSymbol))
 			.Distinct(StringComparer.Ordinal)
 			.ToArray();
 
-		return new GetCallersResponse(SymbolResolver.FullyQualifiedName(symbol), callerNames, []);
+		return Success(SymbolResolver.FullyQualifiedName(symbol), callerNames);
 	}
 }

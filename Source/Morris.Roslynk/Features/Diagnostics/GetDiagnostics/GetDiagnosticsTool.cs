@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 
@@ -37,14 +38,25 @@ public sealed class GetDiagnosticsTool
 		'severities' (error, warning, info, hidden) to widen or narrow. Per-severity counts are always
 		included so filtering is never silent, and errors are listed before warnings.
 		""")]
-	public async Task<GetDiagnosticsResponse> GetDiagnostics(
+	public async Task<GetDiagnosticsResult> GetDiagnostics(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Optional severities to include: error, warning, info, hidden. Defaults to error and warning.")] string[]? severities = null,
 		[Description("Optional target framework (e.g. net8.0) to limit a multi-targeted project to one compilation.")] string? targetFramework = null,
 		[Description("Also run the project's analyzers (NetAnalyzers etc.) — richer (CA/IDE diagnostics) but slower. Default false.")] bool includeAnalyzers = false)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetAllDiagnosticsAsync(instance.CurrentSolution, targetFramework, includeAnalyzers);
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
+
+		GetDiagnosticsResult Success(IReadOnlyList<DiagnosticDto> diagnostics, DiagnosticCounts counts) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Diagnostics = diagnostics, Counts = counts };
+
+		GetDiagnosticsResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetAllDiagnosticsAsync(model.Solution, targetFramework, includeAnalyzers);
 
 		var counts = new DiagnosticCounts(
 			Errors: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),
@@ -61,7 +73,7 @@ public sealed class GetDiagnosticsTool
 			.Select(Map)
 			.ToArray();
 
-		return new GetDiagnosticsResponse(items, counts);
+		return Success(items, counts);
 	}
 
 	private static DiagnosticDto Map(Diagnostic diagnostic)

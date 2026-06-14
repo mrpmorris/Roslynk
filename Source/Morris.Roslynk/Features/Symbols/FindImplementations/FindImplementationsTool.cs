@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Symbols.FindImplementations;
 
@@ -33,23 +34,35 @@ public sealed class FindImplementationsTool
 		Finds the implementations or overrides of an interface, interface member, or abstract member,
 		resolved by fully-qualified name. Ambiguous names return candidate fully-qualified names instead.
 		""")]
-	public async Task<FindImplementationsResponse> FindImplementations(
+	public async Task<FindImplementationsResult> FindImplementations(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the interface/abstract symbol, e.g. 'MyNamespace.IMyType'.")] string symbolName)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		Solution solution = instance.CurrentSolution;
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, symbolName);
+		FindImplementationsResult Success(string resolvedSymbol, IReadOnlyList<string> implementations) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, ResolvedSymbol = resolvedSymbol, Implementations = implementations };
+
+		FindImplementationsResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(model.Solution, symbolName);
 		if (matches.Count == 0)
-			return new FindImplementationsResponse(null, [], []);
+			return Failure(Error.NotFound($"No symbol matched '{symbolName}'."));
 		if (matches.Count > 1)
-			return new FindImplementationsResponse(null, [], matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray());
+		{
+			string[] candidates = matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+			return Failure(Error.Ambiguous($"'{symbolName}' matched multiple symbols.", candidates));
+		}
 
 		ISymbol symbol = matches[0];
-		IEnumerable<ISymbol> implementations = await SymbolFinder.FindImplementationsAsync(symbol, solution);
+		IEnumerable<ISymbol> implementations = await SymbolFinder.FindImplementationsAsync(symbol, model.Solution);
 		string[] names = implementations.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
 
-		return new FindImplementationsResponse(SymbolResolver.FullyQualifiedName(symbol), names, []);
+		return Success(SymbolResolver.FullyQualifiedName(symbol), names);
 	}
 }

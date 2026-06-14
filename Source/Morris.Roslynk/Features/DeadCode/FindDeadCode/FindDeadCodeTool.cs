@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.DeadCode.FindDeadCode;
 
@@ -62,14 +63,25 @@ public sealed class FindDeadCodeTool
 		API surface. Each candidate carries a confidence and the reason it is suspected; the host decides
 		whether to remove it. Scan is per-symbol, so narrow large solutions with scope.
 		""")]
-	public async Task<FindDeadCodeResponse> FindDeadCode(
+	public async Task<FindDeadCodeResult> FindDeadCode(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Optional fully-qualified-name prefix to limit the scan, e.g. MyApp.Services. Omit for the whole solution.")] string? scope = null,
 		[Description("Include unreferenced public/protected members (the API surface). Default false.")] bool includePublic = false,
 		[Description("Maximum candidates to return. Default 50.")] int maxResults = 50)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		Solution solution = instance.CurrentSolution;
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
+
+		FindDeadCodeResult Success(IReadOnlyList<DeadCodeCandidate> candidates, bool truncated, string note) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Candidates = candidates, Truncated = truncated, Note = note };
+
+		FindDeadCodeResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		Solution solution = model.Solution;
 
 		HashSet<ProjectId> testProjects = IdentifyTestProjects(solution);
 
@@ -116,7 +128,7 @@ public sealed class FindDeadCodeTool
 			}
 		}
 
-		return new FindDeadCodeResponse(results, truncated, Caveat);
+		return Success(results, truncated, Caveat);
 	}
 
 	private static async Task<DeadCodeCandidate?> EvaluateAsync(Solution solution, ISymbol symbol, HashSet<ProjectId> testProjects)

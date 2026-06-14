@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Symbols.GetMembers;
 
@@ -33,22 +34,35 @@ public sealed class GetMembersTool
 		signature, resolved by fully-qualified name. Private members and inherited members are excluded
 		unless requested. Ambiguous names return candidate fully-qualified names instead.
 		""")]
-	public async Task<GetMembersResponse> GetMembers(
+	public async Task<GetMembersResult> GetMembers(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the type, e.g. 'MyNamespace.MyType'.")] string typeName,
 		[Description("Include private members. Default false.")] bool includePrivate = false,
 		[Description("Include members inherited from base types. Default false.")] bool includeInherited = false)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
 
-		List<INamedTypeSymbol> types = (await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(instance.CurrentSolution, typeName))
+		GetMembersResult Success(string resolvedType, IReadOnlyList<MemberDto> members) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, ResolvedType = resolvedType, Members = members };
+
+		GetMembersResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		List<INamedTypeSymbol> types = (await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(model.Solution, typeName))
 			.OfType<INamedTypeSymbol>()
 			.ToList();
 
 		if (types.Count == 0)
-			return new GetMembersResponse(null, [], []);
+			return Failure(Error.NotFound($"No type matched '{typeName}'."));
 		if (types.Count > 1)
-			return new GetMembersResponse(null, [], types.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray());
+		{
+			string[] candidates = types.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+			return Failure(Error.Ambiguous($"'{typeName}' matched multiple types.", candidates));
+		}
 
 		INamedTypeSymbol type = types[0];
 
@@ -58,7 +72,7 @@ public sealed class GetMembersTool
 			.Select(member => new MemberDto(member.Name, member.Kind.ToString(), member.DeclaredAccessibility.ToString(), member.ToDisplayString()))
 			.ToArray();
 
-		return new GetMembersResponse(SymbolResolver.FullyQualifiedName(type), members, []);
+		return Success(SymbolResolver.FullyQualifiedName(type), members);
 	}
 
 	private static IEnumerable<ISymbol> Collect(INamedTypeSymbol type, bool includeInherited)

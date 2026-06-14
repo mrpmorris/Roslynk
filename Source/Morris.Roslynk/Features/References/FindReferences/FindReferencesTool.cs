@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.References.FindReferences;
 
@@ -34,31 +35,47 @@ public sealed class FindReferencesTool
 		'Namespace.Type' or 'Namespace.Type.Member'). If the name resolves to more than one symbol the
 		candidate fully-qualified names are returned instead, so you can disambiguate.
 		""")]
-	public async Task<FindReferencesResponse> FindReferences(
+	public async Task<FindReferencesResult> FindReferences(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'.")] string symbolName,
 		[Description("Maximum reference locations to return. Default 100.")] int maxResults = 100)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		Solution solution = instance.CurrentSolution;
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, symbolName);
+		FindReferencesResult Success(string resolvedSymbol, IReadOnlyList<ReferenceDto> references, bool truncated) =>
+			new()
+			{
+				SnapshotId = model.SnapshotId,
+				Status = model.Status,
+				ResolvedSymbol = resolvedSymbol,
+				References = references,
+				Truncated = truncated,
+			};
+
+		FindReferencesResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(model.Solution, symbolName);
 
 		if (matches.Count == 0)
 		{
-			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(solution, symbolName);
-			return new FindReferencesResponse(ResolvedSymbol: null, References: [], Candidates: suggestions, Truncated: false);
+			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
+			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", candidates.Count > 0 ? candidates : null));
 		}
 
 		if (matches.Count > 1)
 		{
 			string[] candidates = matches.Select(match => match.ToDisplayString()).Distinct(StringComparer.Ordinal).ToArray();
-			return new FindReferencesResponse(ResolvedSymbol: null, References: [], Candidates: candidates, Truncated: false);
+			return Failure(Error.Ambiguous($"'{symbolName}' matched several symbols.", candidates));
 		}
 
 		ISymbol symbol = matches[0];
 		var references = new List<ReferenceDto>();
-		foreach (ReferencedSymbol referenced in await SymbolFinder.FindReferencesAsync(symbol, solution))
+		foreach (ReferencedSymbol referenced in await SymbolFinder.FindReferencesAsync(symbol, model.Solution))
 		{
 			foreach (ReferenceLocation reference in referenced.Locations)
 			{
@@ -68,7 +85,7 @@ public sealed class FindReferencesTool
 		}
 
 		ReferenceDto[] page = references.Take(Math.Max(0, maxResults)).ToArray();
-		return new FindReferencesResponse(symbol.ToDisplayString(), page, Candidates: [], Truncated: references.Count > page.Length);
+		return Success(symbol.ToDisplayString(), page, truncated: references.Count > page.Length);
 	}
 
 	private static ReferenceDto Map(Location location)
