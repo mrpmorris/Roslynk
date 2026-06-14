@@ -42,6 +42,6 @@ public sealed class OpenSolutionTool
 		return new OpenSolutionResponse(
 			SolutionId: instance.Key.Path,
 			Projects: projects,
-			LoadDiagnostics: instance.Workspace.LoadDiagnostics);
+			LoadDiagnostics: instance.Workspace?.LoadDiagnostics ?? []);
 	}
 }

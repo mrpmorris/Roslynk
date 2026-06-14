@@ -6,26 +6,45 @@ namespace Morris.Roslynk.Infrastructure.Lifecycle;
 
 /// <summary>
 /// The process-singleton that holds one <see cref="RoslynInstance"/> per solution, shared across
-/// sessions. Concurrent requests for the same solution load it exactly once (the <see cref="Lazy{T}"/>
-/// guards the load); requests for different solutions get independent instances.
+/// sessions. Concurrent requests for the same solution create it exactly once (the <see cref="Lazy{T}"/>
+/// guards the create); the instance loads in the background, so creation is immediate and callers that
+/// need the snapshot await <see cref="RoslynInstance.WaitUntilReadyAsync"/>.
 /// </summary>
 public sealed class InstanceRegistry : IDisposable
 {
-	private readonly ConcurrentDictionary<SolutionKey, Lazy<Task<RoslynInstance>>> Instances = new();
+	private readonly ConcurrentDictionary<SolutionKey, Lazy<RoslynInstance>> Instances = new();
 
+	/// <summary>
+	/// Returns the instance for <paramref name="solutionPath"/>, creating it (and starting its background
+	/// load) if needed, and awaits its first load so the caller sees a ready snapshot. A dirty instance —
+	/// one a build-file edit invalidated — is reloaded here on its next use.
+	/// </summary>
 	public async Task<RoslynInstance> GetOrAddAsync(string solutionPath)
 	{
 		SolutionKey key = SolutionKey.For(solutionPath);
-		RoslynInstance instance = await GetOrLoadAsync(key);
+		RoslynInstance instance = GetOrCreate(key);
+		await instance.WaitUntilReadyAsync();
 
-		// A project / props / sln edit the snapshot could not absorb leaves the instance dirty; reload it
-		// here, on its next use, so reads always see an up-to-date model without an explicit reload call.
 		if (instance.IsDirty)
 		{
 			TryClose(key.Path);
-			instance = await GetOrLoadAsync(key);
+			instance = GetOrCreate(key);
+			await instance.WaitUntilReadyAsync();
 		}
 
+		instance.Touch();
+		return instance;
+	}
+
+	/// <summary>
+	/// Returns the instance for <paramref name="solutionPath"/>, creating it and starting its background
+	/// load if needed, but without awaiting the load — the caller reads <see cref="RoslynInstance.CurrentModel"/>
+	/// and gets <see cref="SolutionStatus.Building"/> until the first snapshot is ready.
+	/// </summary>
+	public RoslynInstance GetOrBegin(string solutionPath)
+	{
+		SolutionKey key = SolutionKey.For(solutionPath);
+		RoslynInstance instance = GetOrCreate(key);
 		instance.Touch();
 		return instance;
 	}
@@ -46,53 +65,61 @@ public sealed class InstanceRegistry : IDisposable
 		return evicted;
 	}
 
-	private Task<RoslynInstance> GetOrLoadAsync(SolutionKey key)
+	private RoslynInstance GetOrCreate(SolutionKey key)
 	{
-		Lazy<Task<RoslynInstance>> lazy = Instances.GetOrAdd(
+		Lazy<RoslynInstance> lazy = Instances.GetOrAdd(
 			key,
-			k => new Lazy<Task<RoslynInstance>>(() => LoadAsync(k)));
+			k => new Lazy<RoslynInstance>(() => CreateAndBeginLoad(k)));
 		return lazy.Value;
 	}
 
-	private static async Task<RoslynInstance> LoadAsync(SolutionKey key)
+	private static RoslynInstance CreateAndBeginLoad(SolutionKey key)
 	{
-		SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(key.Path);
-		var instance = new RoslynInstance(key, workspace);
+		var instance = new RoslynInstance(key);
+		instance.BeginInitialLoad(
+			loader: () => SolutionWorkspace.LoadAsync(key.Path),
+			onReady: AttachWatcher);
+		return instance;
+	}
+
+	private static void AttachWatcher(RoslynInstance instance)
+	{
 		var sync = new SolutionFileSync(instance);
 		instance.AttachWatcher(new SolutionFileWatcher(sync));
-		return instance;
 	}
 
 	/// <summary>Removes a loaded solution and disposes it. Returns false if it was not loaded.</summary>
 	public bool TryClose(string solutionPath)
 	{
-		if (!Instances.TryRemove(SolutionKey.For(solutionPath), out Lazy<Task<RoslynInstance>>? lazy))
+		if (!Instances.TryRemove(SolutionKey.For(solutionPath), out Lazy<RoslynInstance>? lazy))
 			return false;
 
-		if (lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully)
-			lazy.Value.Result.Dispose();
+		if (lazy.IsValueCreated)
+			lazy.Value.Dispose();
 
 		return true;
 	}
 
-	/// <summary>The instances whose load has completed successfully.</summary>
+	/// <summary>The instances that have been created (each may be loading, ready, or faulted).</summary>
 	public IReadOnlyList<RoslynInstance> LoadedInstances()
 	{
 		var loaded = new List<RoslynInstance>();
-		foreach (Lazy<Task<RoslynInstance>> lazy in Instances.Values)
+		foreach (Lazy<RoslynInstance> lazy in Instances.Values)
 		{
-			if (lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully)
-				loaded.Add(lazy.Value.Result);
+			if (lazy.IsValueCreated)
+				loaded.Add(lazy.Value);
 		}
 
 		return loaded;
 	}
 
-	/// <summary>Closes a solution if loaded and loads it fresh from disk.</summary>
+	/// <summary>Closes a solution if loaded and loads it fresh from disk, awaiting its first load.</summary>
 	public async Task<RoslynInstance> ReloadAsync(string solutionPath)
 	{
 		TryClose(solutionPath);
-		return await GetOrLoadAsync(SolutionKey.For(solutionPath));
+		RoslynInstance instance = GetOrCreate(SolutionKey.For(solutionPath));
+		await instance.WaitUntilReadyAsync();
+		return instance;
 	}
 
 	/// <summary>Closes and disposes every loaded solution. Returns how many were closed.</summary>
@@ -110,10 +137,10 @@ public sealed class InstanceRegistry : IDisposable
 
 	public void Dispose()
 	{
-		foreach (Lazy<Task<RoslynInstance>> lazy in Instances.Values)
+		foreach (Lazy<RoslynInstance> lazy in Instances.Values)
 		{
-			if (lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully)
-				lazy.Value.Result.Dispose();
+			if (lazy.IsValueCreated)
+				lazy.Value.Dispose();
 		}
 
 		Instances.Clear();
