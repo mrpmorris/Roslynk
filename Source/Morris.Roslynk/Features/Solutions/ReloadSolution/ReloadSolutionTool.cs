@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Solutions.ReloadSolution;
 
@@ -23,11 +24,27 @@ public sealed class ReloadSolutionTool
 		Idempotent = true,
 		Destructive = false,
 		OpenWorld = false)]
-	[Description("Discards the in-memory workspace for a solution and loads it fresh from disk. No effect on files.")]
-	public async Task<ReloadSolutionResponse> ReloadSolution(
+	[Description(
+		"""
+		Reloads a solution from disk in the background — the cleanup after a project or build-file change the
+		incremental model cannot absorb. Returns immediately; the previous snapshot keeps serving reads
+		(status Building) until the fresh one is ready. No effect on files.
+		""")]
+	public ReloadSolutionResult ReloadSolution(
 		[Description("Solution handle returned by open_solution.")] string solutionId)
 	{
-		RoslynInstance instance = await InstanceRegistry.ReloadAsync(solutionId);
-		return new ReloadSolutionResponse(instance.Key.Path, instance.CurrentSolution.Projects.Count());
+		RoslynInstance instance = InstanceRegistry.BeginReload(solutionId);
+		SolutionModel model = instance.CurrentModel;
+
+		return new ReloadSolutionResult
+		{
+			SnapshotId = model.SnapshotId,
+			Status = model.Status,
+			SolutionId = instance.Key.Path,
+			ProjectCount = model.Solution?.Projects.Count() ?? 0,
+			Error = model.Status == SolutionStatus.Faulted
+				? Error.Faulted(model.FaultMessage ?? "The reload failed.")
+				: null
+		};
 	}
 }

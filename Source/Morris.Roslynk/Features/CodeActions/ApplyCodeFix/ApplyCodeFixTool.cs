@@ -5,6 +5,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Features.CodeActions.ApplyCodeFix;
@@ -38,41 +39,52 @@ public sealed class ApplyCodeFixTool
 		quick path when you already know which diagnostic to clear, without first listing actions. Written
 		atomically through the same safe write path. Pass checkOnly to preview without writing.
 		""")]
-	public async Task<ApplyCodeActionResponse> ApplyCodeFix(
+	public async Task<ApplyCodeActionResult> ApplyCodeFix(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Path of the .cs file.")] string documentPath,
 		[Description("The compiler diagnostic id to fix, e.g. CS0219.")] string diagnosticId,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		Solution solution = instance.CurrentSolution;
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
+
+		ApplyCodeActionResult Success(bool applied, IReadOnlyList<string> changedFiles, string? action) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Applied = applied, ChangedFiles = changedFiles, Action = action };
+
+		ApplyCodeActionResult Failure(Error error, string? action = null) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Action = action, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		Solution solution = model.Solution;
 
 		Document? document = CodeActionService.FindDocument(solution, documentPath);
 		if (document is null)
-			return new ApplyCodeActionResponse(Applied: false, [], null, $"'{documentPath}' is not a solution-compiled .cs document.");
+			return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs document."));
 
 		Compilation? compilation = await document.Project.GetCompilationAsync(cancellationToken);
 		SyntaxTree? tree = await document.GetSyntaxTreeAsync(cancellationToken);
 		Diagnostic? diagnostic = compilation?.GetDiagnostics(cancellationToken)
 			.FirstOrDefault(candidate => candidate.Id == diagnosticId && candidate.Location.SourceTree == tree);
 		if (diagnostic is null)
-			return new ApplyCodeActionResponse(Applied: false, [], null, $"No {diagnosticId} diagnostic was found in '{documentPath}'.");
+			return Failure(Error.NotFound($"No {diagnosticId} diagnostic was found in '{documentPath}'."));
 
 		TextSpan span = diagnostic.Location.SourceSpan;
 		IReadOnlyList<DiscoveredAction> actions = await CodeActionService.DiscoverAsync(document, span, cancellationToken);
 		DiscoveredAction? fix = actions.FirstOrDefault(action => action.DiagnosticId == diagnosticId);
 		if (fix is null)
-			return new ApplyCodeActionResponse(Applied: false, [], null, $"No fix is available for {diagnosticId}.");
+			return Failure(Error.NotSupported($"No fix is available for {diagnosticId}."));
 
 		Solution? changed = await CodeActionService.ChangedSolutionAsync(fix.Action, cancellationToken);
 		if (changed is null)
-			return new ApplyCodeActionResponse(Applied: false, [], fix.Action.Title, "The fix produced no changes.");
+			return Failure(Error.Conflict("The fix produced no changes."), fix.Action.Title);
 
 		if (checkOnly)
-			return new ApplyCodeActionResponse(Applied: false, ApplyPipeline.GetChangedFilePaths(solution, changed), fix.Action.Title, "Preview only; nothing was written.");
+			return Success(applied: false, ApplyPipeline.GetChangedFilePaths(solution, changed), fix.Action.Title);
 
 		IReadOnlyList<string> files = await ApplyPipeline.ApplyAsync(instance, changed, cancellationToken);
-		return new ApplyCodeActionResponse(Applied: true, files, fix.Action.Title, Message: null);
+		return Success(applied: true, files, fix.Action.Title);
 	}
 }

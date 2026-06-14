@@ -15,6 +15,9 @@ public sealed record Error
 	public static Error Indexing(string message = "The solution is still loading; retry shortly.") =>
 		new() { Code = ErrorCode.Indexing, Message = message };
 
+	public static Error Faulted(string message) =>
+		new() { Code = ErrorCode.Faulted, Message = message };
+
 	public static Error NotFound(string message, IReadOnlyList<string>? candidates = null) =>
 		new() { Code = ErrorCode.NotFound, Message = message, Candidates = candidates };
 

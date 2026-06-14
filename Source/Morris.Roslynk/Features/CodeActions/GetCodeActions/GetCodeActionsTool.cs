@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.CodeActions.GetCodeActions;
 
@@ -34,7 +35,7 @@ public sealed class GetCodeActionsTool
 		each with a stable actionId to pass to apply_code_action. Fixes are driven by the compiler
 		diagnostics at that span; refactorings by the span itself. Line and column are 1-based.
 		""")]
-	public async Task<GetCodeActionsResponse> GetCodeActions(
+	public async Task<GetCodeActionsResult> GetCodeActions(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Path of the .cs file.")] string documentPath,
 		[Description("1-based line of the position.")] int line,
@@ -43,10 +44,21 @@ public sealed class GetCodeActionsTool
 		[Description("Optional 1-based end column for a selection.")] int? endColumn = null,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrAddAsync(solutionId);
-		Document? document = CodeActionService.FindDocument(instance.CurrentSolution, documentPath);
+		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		SolutionModel model = instance.CurrentModel;
+
+		GetCodeActionsResult Success(IReadOnlyList<CodeActionDto> actions) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Actions = actions };
+
+		GetCodeActionsResult Failure(Error error) =>
+			new() { SnapshotId = model.SnapshotId, Status = model.Status, Error = error };
+
+		if (model.Solution is null)
+			return Failure(Error.Indexing());
+
+		Document? document = CodeActionService.FindDocument(model.Solution, documentPath);
 		if (document?.FilePath is null)
-			return new GetCodeActionsResponse([], $"'{documentPath}' is not a solution-compiled .cs document.");
+			return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs document."));
 
 		SourceText text = await document.GetTextAsync(cancellationToken);
 		TextSpan span = CodeActionService.SpanFor(text, line, column, endLine, endColumn);
@@ -60,6 +72,6 @@ public sealed class GetCodeActionsTool
 				action.DiagnosticId))
 			.ToArray();
 
-		return new GetCodeActionsResponse(dtos, dtos.Length == 0 ? "No code actions are available at that position." : null);
+		return Success(dtos);
 	}
 }

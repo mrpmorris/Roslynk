@@ -2,6 +2,7 @@ using Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
 using Morris.Roslynk.Features.CodeActions.GetCodeActions;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Writing;
 using Morris.Roslynk.Tests.Helpers;
 
@@ -19,9 +20,10 @@ public class ApplyCodeActionTests
 		string actionId = await DiscoverRemoveUnusedAsync(registry, service, solutionPath, greeter, unusedLine);
 		var subject = new ApplyCodeActionTool(registry, service, new ApplyPipeline());
 
-		ApplyCodeActionResponse response = await subject.ApplyCodeAction(solutionPath, actionId);
+		ApplyCodeActionResult result = await subject.ApplyCodeAction(solutionPath, actionId);
 
-		Assert.True(response.Applied);
+		Assert.True(result.IsSuccess);
+		Assert.True(result.Applied);
 		Assert.DoesNotContain("int unused", await File.ReadAllTextAsync(greeter));
 	}
 
@@ -36,10 +38,11 @@ public class ApplyCodeActionTests
 		string actionId = await DiscoverRemoveUnusedAsync(registry, service, solutionPath, greeter, unusedLine);
 		var subject = new ApplyCodeActionTool(registry, service, new ApplyPipeline());
 
-		ApplyCodeActionResponse response = await subject.ApplyCodeAction(solutionPath, actionId, checkOnly: true);
+		ApplyCodeActionResult result = await subject.ApplyCodeAction(solutionPath, actionId, checkOnly: true);
 
-		Assert.False(response.Applied);
-		Assert.NotEmpty(response.ChangedFiles);
+		Assert.True(result.IsSuccess);
+		Assert.False(result.Applied);
+		Assert.NotEmpty(result.ChangedFiles!);
 		Assert.Equal(before, await File.ReadAllTextAsync(greeter));
 	}
 
@@ -50,16 +53,30 @@ public class ApplyCodeActionTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new ApplyCodeActionTool(registry, new CodeActionService(), new ApplyPipeline());
 
-		ApplyCodeActionResponse response = await subject.ApplyCodeAction(TestSolutions.Simple, "not-a-valid-id");
+		ApplyCodeActionResult result = await subject.ApplyCodeAction(TestSolutions.Simple, "not-a-valid-id");
 
-		Assert.False(response.Applied);
-		Assert.NotNull(response.Message);
+		Assert.False(result.IsSuccess);
+		Assert.Equal(ErrorCode.Invalid, result.Error!.Code);
+	}
+
+	[Fact]
+	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
+	{
+		using var registry = new InstanceRegistry();
+		var subject = new ApplyCodeActionTool(registry, new CodeActionService(), new ApplyPipeline());
+
+		ApplyCodeActionResult result = await subject.ApplyCodeAction(TestSolutions.Simple, "anything");
+
+		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
+		Assert.Equal(SolutionStatus.Building, result.Status);
+
+		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
 
 	private static async Task<string> DiscoverRemoveUnusedAsync(InstanceRegistry registry, CodeActionService service, string solutionPath, string greeter, int unusedLine)
 	{
 		var getActions = new GetCodeActionsTool(registry, service);
-		GetCodeActionsResponse actions = await getActions.GetCodeActions(solutionPath, greeter, unusedLine, 3, unusedLine, 20);
-		return actions.Actions.First(action => action.DiagnosticId == "CS0219").ActionId;
+		GetCodeActionsResult actions = await getActions.GetCodeActions(solutionPath, greeter, unusedLine, 3, unusedLine, 20);
+		return actions.Actions!.First(action => action.DiagnosticId == "CS0219").ActionId;
 	}
 }

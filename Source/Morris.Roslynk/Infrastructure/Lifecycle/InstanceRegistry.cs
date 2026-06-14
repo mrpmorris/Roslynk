@@ -122,6 +122,23 @@ public sealed class InstanceRegistry : IDisposable
 		return instance;
 	}
 
+	/// <summary>
+	/// Rebuilds a solution from disk without blocking: an already-loaded instance keeps serving its current
+	/// snapshot as <see cref="SolutionStatus.Building"/> while the fresh one loads in the background, then
+	/// swaps it in. A not-yet-loaded instance simply continues its initial load. Returns the instance.
+	/// </summary>
+	public RoslynInstance BeginReload(string solutionPath)
+	{
+		SolutionKey key = SolutionKey.For(solutionPath);
+		RoslynInstance instance = GetOrCreate(key);
+
+		if (instance.CurrentModel.Solution is not null)
+			instance.BeginRebuild(() => SolutionWorkspace.LoadAsync(key.Path), AttachWatcher);
+
+		instance.Touch();
+		return instance;
+	}
+
 	/// <summary>Closes and disposes every loaded solution. Returns how many were closed.</summary>
 	public int ClearAll()
 	{

@@ -61,8 +61,13 @@ public sealed class RoslynInstance : IDisposable
 
 	public void MarkDirty() => DirtyField = true;
 
-	/// <summary>Hands the instance the watcher that keeps it fresh, so the two share a lifetime.</summary>
-	public void AttachWatcher(IDisposable watcher) => Watcher = watcher;
+	/// <summary>Hands the instance the watcher that keeps it fresh, disposing any previous one (a rebuild
+	/// re-attaches), so the two share a lifetime.</summary>
+	public void AttachWatcher(IDisposable watcher)
+	{
+		Watcher?.Dispose();
+		Watcher = watcher;
+	}
 
 	/// <summary>A task that completes when the first load finishes, whether it became Ready or Faulted.</summary>
 	public Task WaitUntilReadyAsync() => ReadySignal.Task;

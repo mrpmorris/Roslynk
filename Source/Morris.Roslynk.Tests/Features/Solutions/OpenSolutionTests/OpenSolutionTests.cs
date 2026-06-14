@@ -6,14 +6,21 @@ namespace Morris.Roslynk.Tests.Features.Solutions.OpenSolutionTests;
 public class OpenSolutionTests
 {
 	[Fact]
-	public async Task WhenOpeningASolution_ThenItsProjectsAreReturned()
+	public async Task WhenOpeningASolution_ThenItReturnsImmediatelyAndBuildsInTheBackground()
 	{
 		using var registry = new InstanceRegistry();
 		var subject = new OpenSolutionTool(registry);
 
-		OpenSolutionResponse response = await subject.OpenSolution(TestSolutions.Simple);
+		OpenSolutionResult opening = subject.OpenSolution(TestSolutions.Simple);
 
-		OpenSolutionProject project = Assert.Single(response.Projects);
+		Assert.Equal(SolutionStatus.Building, opening.Status);
+		Assert.Empty(opening.Projects!);
+
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		OpenSolutionResult ready = subject.OpenSolution(TestSolutions.Simple);
+
+		Assert.Equal(SolutionStatus.Ready, ready.Status);
+		OpenSolutionProject project = Assert.Single(ready.Projects!);
 		Assert.Equal("SimpleLibrary", project.Name);
 	}
 }

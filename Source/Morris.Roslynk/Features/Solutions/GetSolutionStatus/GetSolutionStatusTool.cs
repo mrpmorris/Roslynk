@@ -27,7 +27,11 @@ public sealed class GetSolutionStatusTool
 	public GetSolutionStatusResponse GetSolutionStatus()
 	{
 		LoadedSolutionStatus[] solutions = InstanceRegistry.LoadedInstances()
-			.Select(instance => new LoadedSolutionStatus(instance.Key.Path, instance.CurrentSolution.Projects.Count()))
+			.Select(instance =>
+			{
+				SolutionModel model = instance.CurrentModel;
+				return new LoadedSolutionStatus(instance.Key.Path, model.Status, model.SnapshotId, model.Solution?.Projects.Count() ?? 0);
+			})
 			.ToArray();
 
 		return new GetSolutionStatusResponse(solutions);

@@ -9,6 +9,9 @@ public enum ErrorCode
 	/// <summary>The solution model is still loading and no snapshot is available yet. Retry shortly.</summary>
 	Indexing,
 
+	/// <summary>The solution failed to load; the message carries the build/load failure. Fix and reload.</summary>
+	Faulted,
+
 	/// <summary>Nothing matched the requested name, symbol, document, or solution handle.</summary>
 	NotFound,
 
