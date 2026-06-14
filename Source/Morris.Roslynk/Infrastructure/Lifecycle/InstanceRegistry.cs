@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Morris.Roslynk.Infrastructure.Watching;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.Lifecycle;
@@ -12,19 +13,37 @@ public sealed class InstanceRegistry : IDisposable
 {
 	private readonly ConcurrentDictionary<SolutionKey, Lazy<Task<RoslynInstance>>> Instances = new();
 
-	public Task<RoslynInstance> GetOrAddAsync(string solutionPath)
+	public async Task<RoslynInstance> GetOrAddAsync(string solutionPath)
 	{
 		SolutionKey key = SolutionKey.For(solutionPath);
+		RoslynInstance instance = await GetOrLoadAsync(key);
+
+		// A project / props / sln edit the snapshot could not absorb leaves the instance dirty; reload it
+		// here, on its next use, so reads always see an up-to-date model without an explicit reload call.
+		if (instance.IsDirty)
+		{
+			TryClose(key.Path);
+			instance = await GetOrLoadAsync(key);
+		}
+
+		return instance;
+	}
+
+	private Task<RoslynInstance> GetOrLoadAsync(SolutionKey key)
+	{
 		Lazy<Task<RoslynInstance>> lazy = Instances.GetOrAdd(
 			key,
-			static k => new Lazy<Task<RoslynInstance>>(() => LoadAsync(k)));
+			k => new Lazy<Task<RoslynInstance>>(() => LoadAsync(k)));
 		return lazy.Value;
 	}
 
 	private static async Task<RoslynInstance> LoadAsync(SolutionKey key)
 	{
 		SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(key.Path);
-		return new RoslynInstance(key, workspace);
+		var instance = new RoslynInstance(key, workspace);
+		var sync = new SolutionFileSync(instance);
+		instance.AttachWatcher(new SolutionFileWatcher(sync));
+		return instance;
 	}
 
 	/// <summary>Removes a loaded solution and disposes it. Returns false if it was not loaded.</summary>
@@ -56,7 +75,7 @@ public sealed class InstanceRegistry : IDisposable
 	public async Task<RoslynInstance> ReloadAsync(string solutionPath)
 	{
 		TryClose(solutionPath);
-		return await GetOrAddAsync(solutionPath);
+		return await GetOrLoadAsync(SolutionKey.For(solutionPath));
 	}
 
 	/// <summary>Closes and disposes every loaded solution. Returns how many were closed.</summary>

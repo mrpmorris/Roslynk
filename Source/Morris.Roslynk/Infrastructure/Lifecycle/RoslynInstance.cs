@@ -11,6 +11,8 @@ namespace Morris.Roslynk.Infrastructure.Lifecycle;
 public sealed class RoslynInstance : IDisposable
 {
 	private Solution CurrentSolutionField;
+	private volatile bool DirtyField;
+	private IDisposable? Watcher;
 
 	public SolutionKey Key { get; }
 	public SolutionWorkspace Workspace { get; }
@@ -26,6 +28,17 @@ public sealed class RoslynInstance : IDisposable
 	}
 
 	/// <summary>
+	/// Set by the file watcher when a project / props / sln file changed on disk, which the immutable
+	/// snapshot cannot absorb incrementally. The registry reloads the instance on its next use.
+	/// </summary>
+	public bool IsDirty => DirtyField;
+
+	public void MarkDirty() => DirtyField = true;
+
+	/// <summary>Hands the instance the watcher that keeps it fresh, so the two share a lifetime.</summary>
+	public void AttachWatcher(IDisposable watcher) => Watcher = watcher;
+
+	/// <summary>
 	/// The live solution snapshot. Starts as the loaded solution and is swapped after each applied
 	/// change, so reads always see the latest in-memory state.
 	/// </summary>
@@ -36,6 +49,7 @@ public sealed class RoslynInstance : IDisposable
 
 	public void Dispose()
 	{
+		Watcher?.Dispose();
 		Workspace.Dispose();
 		WriteLock.Dispose();
 	}
