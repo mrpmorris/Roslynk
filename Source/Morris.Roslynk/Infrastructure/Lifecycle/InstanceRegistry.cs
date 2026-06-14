@@ -27,6 +27,31 @@ public sealed class InstanceRegistry : IDisposable
 		return new RoslynInstance(key, workspace);
 	}
 
+	/// <summary>Removes a loaded solution and disposes it. Returns false if it was not loaded.</summary>
+	public bool TryClose(string solutionPath)
+	{
+		if (!Instances.TryRemove(SolutionKey.For(solutionPath), out Lazy<Task<RoslynInstance>>? lazy))
+			return false;
+
+		if (lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully)
+			lazy.Value.Result.Dispose();
+
+		return true;
+	}
+
+	/// <summary>The instances whose load has completed successfully.</summary>
+	public IReadOnlyList<RoslynInstance> LoadedInstances()
+	{
+		var loaded = new List<RoslynInstance>();
+		foreach (Lazy<Task<RoslynInstance>> lazy in Instances.Values)
+		{
+			if (lazy.IsValueCreated && lazy.Value.IsCompletedSuccessfully)
+				loaded.Add(lazy.Value.Result);
+		}
+
+		return loaded;
+	}
+
 	public void Dispose()
 	{
 		foreach (Lazy<Task<RoslynInstance>> lazy in Instances.Values)
