@@ -9,13 +9,13 @@ namespace Morris.Roslynk.Features.Symbols.SearchSymbols;
 /// </summary>
 public sealed record SearchSymbolsResult : ResultBase
 {
+	public IReadOnlyList<SymbolSearchResult>? Results { get; }
+	public bool Truncated { get; }
+
 	public SearchSymbolsResult(SolutionModel solutionModel, Error? error, IReadOnlyList<SymbolSearchResult>? results, bool truncated)
 		: base(solutionModel, error)
 	{
 		Results = results;
 		Truncated = truncated;
 	}
-
-	public IReadOnlyList<SymbolSearchResult>? Results { get; }
-	public bool Truncated { get; }
 }

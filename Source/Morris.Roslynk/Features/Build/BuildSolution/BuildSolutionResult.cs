@@ -11,6 +11,11 @@ namespace Morris.Roslynk.Features.Build.BuildSolution;
 /// </summary>
 public sealed record BuildSolutionResult : ResultBase
 {
+	public bool? Succeeded { get; }
+	public int? Errors { get; }
+	public int? Warnings { get; }
+	public IReadOnlyList<string>? ErrorMessages { get; }
+
 	public BuildSolutionResult(SolutionModel solutionModel, Error? error, bool? succeeded, int? errors, int? warnings, IReadOnlyList<string>? errorMessages)
 		: base(solutionModel, error)
 	{
@@ -19,9 +24,4 @@ public sealed record BuildSolutionResult : ResultBase
 		Warnings = warnings;
 		ErrorMessages = errorMessages;
 	}
-
-	public bool? Succeeded { get; }
-	public int? Errors { get; }
-	public int? Warnings { get; }
-	public IReadOnlyList<string>? ErrorMessages { get; }
 }

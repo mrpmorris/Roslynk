@@ -11,11 +11,11 @@ namespace Morris.Roslynk.Features.Symbols.GetSymbol;
 /// </summary>
 public sealed record GetSymbolResult : ResultBase
 {
+	public SymbolDto? Symbol { get; }
+
 	public GetSymbolResult(SolutionModel solutionModel, Error? error, SymbolDto? symbol)
 		: base(solutionModel, error)
 	{
 		Symbol = symbol;
 	}
-
-	public SymbolDto? Symbol { get; }
 }

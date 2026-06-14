@@ -21,6 +21,11 @@ public sealed record ApplyPatchStaleFile(string Path, string CurrentVersion, str
 /// </summary>
 public sealed record ApplyPatchResult : ResultBase
 {
+	public bool Applied { get; }
+	public IReadOnlyList<ApplyPatchChange>? ChangedFiles { get; }
+	public IReadOnlyList<ApplyPatchStaleFile>? StaleFiles { get; }
+	public IReadOnlyList<string>? RejectedFiles { get; }
+
 	public ApplyPatchResult(
 		SolutionModel solutionModel,
 		Error? error,
@@ -35,9 +40,4 @@ public sealed record ApplyPatchResult : ResultBase
 		StaleFiles = staleFiles;
 		RejectedFiles = rejectedFiles;
 	}
-
-	public bool Applied { get; }
-	public IReadOnlyList<ApplyPatchChange>? ChangedFiles { get; }
-	public IReadOnlyList<ApplyPatchStaleFile>? StaleFiles { get; }
-	public IReadOnlyList<string>? RejectedFiles { get; }
 }

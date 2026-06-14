@@ -11,6 +11,11 @@ namespace Morris.Roslynk.Features.Symbols.GetTypeHierarchy;
 /// </summary>
 public sealed record GetTypeHierarchyResult : ResultBase
 {
+	public string? ResolvedType { get; }
+	public IReadOnlyList<string>? BaseTypes { get; }
+	public IReadOnlyList<string>? Interfaces { get; }
+	public IReadOnlyList<string>? DerivedTypes { get; }
+
 	public GetTypeHierarchyResult(
 		SolutionModel solutionModel,
 		Error? error,
@@ -25,9 +30,4 @@ public sealed record GetTypeHierarchyResult : ResultBase
 		Interfaces = interfaces;
 		DerivedTypes = derivedTypes;
 	}
-
-	public string? ResolvedType { get; }
-	public IReadOnlyList<string>? BaseTypes { get; }
-	public IReadOnlyList<string>? Interfaces { get; }
-	public IReadOnlyList<string>? DerivedTypes { get; }
 }

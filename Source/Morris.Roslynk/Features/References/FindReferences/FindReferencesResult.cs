@@ -12,6 +12,10 @@ namespace Morris.Roslynk.Features.References.FindReferences;
 /// </summary>
 public sealed record FindReferencesResult : ResultBase
 {
+	public string? ResolvedSymbol { get; }
+	public IReadOnlyList<ReferenceDto>? References { get; }
+	public bool Truncated { get; }
+
 	public FindReferencesResult(SolutionModel solutionModel, Error? error, string? resolvedSymbol, IReadOnlyList<ReferenceDto>? references, bool truncated)
 		: base(solutionModel, error)
 	{
@@ -19,8 +23,4 @@ public sealed record FindReferencesResult : ResultBase
 		References = references;
 		Truncated = truncated;
 	}
-
-	public string? ResolvedSymbol { get; }
-	public IReadOnlyList<ReferenceDto>? References { get; }
-	public bool Truncated { get; }
 }

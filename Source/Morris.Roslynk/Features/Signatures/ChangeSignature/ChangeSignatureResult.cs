@@ -12,6 +12,11 @@ namespace Morris.Roslynk.Features.Signatures.ChangeSignature;
 /// </summary>
 public sealed record ChangeSignatureResult : ResultBase
 {
+	public bool Applied { get; }
+	public string? ResolvedMethod { get; }
+	public IReadOnlyList<string>? ChangedFiles { get; }
+	public int UpdatedCallSites { get; }
+
 	public ChangeSignatureResult(SolutionModel solutionModel, Error? error, bool applied, string? resolvedMethod, IReadOnlyList<string>? changedFiles, int updatedCallSites)
 		: base(solutionModel, error)
 	{
@@ -20,9 +25,4 @@ public sealed record ChangeSignatureResult : ResultBase
 		ChangedFiles = changedFiles;
 		UpdatedCallSites = updatedCallSites;
 	}
-
-	public bool Applied { get; }
-	public string? ResolvedMethod { get; }
-	public IReadOnlyList<string>? ChangedFiles { get; }
-	public int UpdatedCallSites { get; }
 }

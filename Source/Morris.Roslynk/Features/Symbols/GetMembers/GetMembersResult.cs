@@ -10,13 +10,13 @@ namespace Morris.Roslynk.Features.Symbols.GetMembers;
 /// </summary>
 public sealed record GetMembersResult : ResultBase
 {
+	public string? ResolvedType { get; }
+	public IReadOnlyList<MemberDto>? Members { get; }
+
 	public GetMembersResult(SolutionModel solutionModel, Error? error, string? resolvedType, IReadOnlyList<MemberDto>? members)
 		: base(solutionModel, error)
 	{
 		ResolvedType = resolvedType;
 		Members = members;
 	}
-
-	public string? ResolvedType { get; }
-	public IReadOnlyList<MemberDto>? Members { get; }
 }

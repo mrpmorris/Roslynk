@@ -10,6 +10,14 @@ namespace Morris.Roslynk.Features.Symbols.FindDefinition;
 /// </summary>
 public sealed record FindDefinitionResult : ResultBase
 {
+	public string? FullName { get; }
+	public string? Kind { get; }
+	public string? SourcePath { get; }
+	public int? StartLine { get; }
+	public int? StartColumn { get; }
+	public int? EndLine { get; }
+	public int? EndColumn { get; }
+
 	public FindDefinitionResult(
 		SolutionModel solutionModel,
 		Error? error,
@@ -30,12 +38,4 @@ public sealed record FindDefinitionResult : ResultBase
 		EndLine = endLine;
 		EndColumn = endColumn;
 	}
-
-	public string? FullName { get; }
-	public string? Kind { get; }
-	public string? SourcePath { get; }
-	public int? StartLine { get; }
-	public int? StartColumn { get; }
-	public int? EndLine { get; }
-	public int? EndColumn { get; }
 }

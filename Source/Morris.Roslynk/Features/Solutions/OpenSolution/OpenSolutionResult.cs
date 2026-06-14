@@ -12,6 +12,10 @@ namespace Morris.Roslynk.Features.Solutions.OpenSolution;
 /// </summary>
 public sealed record OpenSolutionResult : ResultBase
 {
+	public string? SolutionId { get; }
+	public IReadOnlyList<OpenSolutionProject>? Projects { get; }
+	public IReadOnlyList<string>? LoadDiagnostics { get; }
+
 	public OpenSolutionResult(SolutionModel solutionModel, Error? error, string? solutionId, IReadOnlyList<OpenSolutionProject>? projects, IReadOnlyList<string>? loadDiagnostics)
 		: base(solutionModel, error)
 	{
@@ -19,8 +23,4 @@ public sealed record OpenSolutionResult : ResultBase
 		Projects = projects;
 		LoadDiagnostics = loadDiagnostics;
 	}
-
-	public string? SolutionId { get; }
-	public IReadOnlyList<OpenSolutionProject>? Projects { get; }
-	public IReadOnlyList<string>? LoadDiagnostics { get; }
 }

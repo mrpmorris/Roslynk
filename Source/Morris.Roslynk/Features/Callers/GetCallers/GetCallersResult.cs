@@ -11,13 +11,13 @@ namespace Morris.Roslynk.Features.Callers.GetCallers;
 /// </summary>
 public sealed record GetCallersResult : ResultBase
 {
+	public string? ResolvedSymbol { get; }
+	public IReadOnlyList<string>? Callers { get; }
+
 	public GetCallersResult(SolutionModel solutionModel, Error? error, string? resolvedSymbol, IReadOnlyList<string>? callers)
 		: base(solutionModel, error)
 	{
 		ResolvedSymbol = resolvedSymbol;
 		Callers = callers;
 	}
-
-	public string? ResolvedSymbol { get; }
-	public IReadOnlyList<string>? Callers { get; }
 }

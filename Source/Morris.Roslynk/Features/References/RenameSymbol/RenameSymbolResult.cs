@@ -11,6 +11,10 @@ namespace Morris.Roslynk.Features.References.RenameSymbol;
 /// </summary>
 public sealed record RenameSymbolResult : ResultBase
 {
+	public bool Applied { get; }
+	public string? ResolvedSymbol { get; }
+	public IReadOnlyList<string>? ChangedFiles { get; }
+
 	public RenameSymbolResult(SolutionModel solutionModel, Error? error, bool applied, string? resolvedSymbol, IReadOnlyList<string>? changedFiles)
 		: base(solutionModel, error)
 	{
@@ -18,8 +22,4 @@ public sealed record RenameSymbolResult : ResultBase
 		ResolvedSymbol = resolvedSymbol;
 		ChangedFiles = changedFiles;
 	}
-
-	public bool Applied { get; }
-	public string? ResolvedSymbol { get; }
-	public IReadOnlyList<string>? ChangedFiles { get; }
 }

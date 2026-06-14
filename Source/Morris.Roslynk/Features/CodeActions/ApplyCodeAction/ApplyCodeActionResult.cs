@@ -12,6 +12,10 @@ namespace Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
 /// </summary>
 public sealed record ApplyCodeActionResult : ResultBase
 {
+	public bool Applied { get; }
+	public IReadOnlyList<string>? ChangedFiles { get; }
+	public string? Action { get; }
+
 	public ApplyCodeActionResult(SolutionModel solutionModel, Error? error, bool applied, IReadOnlyList<string>? changedFiles, string? action)
 		: base(solutionModel, error)
 	{
@@ -19,8 +23,4 @@ public sealed record ApplyCodeActionResult : ResultBase
 		ChangedFiles = changedFiles;
 		Action = action;
 	}
-
-	public bool Applied { get; }
-	public IReadOnlyList<string>? ChangedFiles { get; }
-	public string? Action { get; }
 }

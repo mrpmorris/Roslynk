@@ -10,13 +10,13 @@ namespace Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 /// </summary>
 public sealed record GetDiagnosticsResult : ResultBase
 {
+	public IReadOnlyList<DiagnosticDto>? Diagnostics { get; }
+	public DiagnosticCounts? Counts { get; }
+
 	public GetDiagnosticsResult(SolutionModel solutionModel, Error? error, IReadOnlyList<DiagnosticDto>? diagnostics, DiagnosticCounts? counts)
 		: base(solutionModel, error)
 	{
 		Diagnostics = diagnostics;
 		Counts = counts;
 	}
-
-	public IReadOnlyList<DiagnosticDto>? Diagnostics { get; }
-	public DiagnosticCounts? Counts { get; }
 }

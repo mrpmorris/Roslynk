@@ -12,13 +12,13 @@ namespace Morris.Roslynk.Features.Symbols.FindImplementations;
 /// </summary>
 public sealed record FindImplementationsResult : ResultBase
 {
+	public string? ResolvedSymbol { get; }
+	public IReadOnlyList<string>? Implementations { get; }
+
 	public FindImplementationsResult(SolutionModel solutionModel, Error? error, string? resolvedSymbol, IReadOnlyList<string>? implementations)
 		: base(solutionModel, error)
 	{
 		ResolvedSymbol = resolvedSymbol;
 		Implementations = implementations;
 	}
-
-	public string? ResolvedSymbol { get; }
-	public IReadOnlyList<string>? Implementations { get; }
 }

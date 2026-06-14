@@ -19,6 +19,10 @@ public sealed record DeadCodeCandidate(string Symbol, string Kind, string? Sourc
 /// </summary>
 public sealed record FindDeadCodeResult : ResultBase
 {
+	public IReadOnlyList<DeadCodeCandidate>? Candidates { get; }
+	public bool? Truncated { get; }
+	public string? Note { get; }
+
 	public FindDeadCodeResult(SolutionModel solutionModel, Error? error, IReadOnlyList<DeadCodeCandidate>? candidates, bool? truncated, string? note)
 		: base(solutionModel, error)
 	{
@@ -26,8 +30,4 @@ public sealed record FindDeadCodeResult : ResultBase
 		Truncated = truncated;
 		Note = note;
 	}
-
-	public IReadOnlyList<DeadCodeCandidate>? Candidates { get; }
-	public bool? Truncated { get; }
-	public string? Note { get; }
 }

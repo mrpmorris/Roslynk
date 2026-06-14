@@ -11,6 +11,12 @@ namespace Morris.Roslynk.Infrastructure.Results;
 /// </summary>
 public abstract record ResultBase
 {
+	public string SolutionCurrentSnapshotId { get; }
+	public SolutionStatus Status { get; }
+	public Error? Error { get; }
+
+	public bool IsSuccess => Error is null;
+
 	protected ResultBase(SolutionModel solutionModel, Error? error)
 	{
 		if (solutionModel is null)
@@ -20,10 +26,4 @@ public abstract record ResultBase
 		Status = solutionModel.Status;
 		Error = error;
 	}
-
-	public string SolutionCurrentSnapshotId { get; }
-	public SolutionStatus Status { get; }
-	public Error? Error { get; }
-
-	public bool IsSuccess => Error is null;
 }
