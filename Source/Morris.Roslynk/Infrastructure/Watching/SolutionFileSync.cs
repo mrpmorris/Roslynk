@@ -1,9 +1,9 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
-using System.Security.Cryptography;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Infrastructure.Watching;
 
@@ -268,9 +268,7 @@ public sealed class SolutionFileSync
 	{
 		try
 		{
-			return File.Exists(path)
-				? Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path)))
-				: null;
+			return File.Exists(path) ? FileHash.Of(File.ReadAllBytes(path)) : null;
 		}
 		catch (IOException)
 		{
