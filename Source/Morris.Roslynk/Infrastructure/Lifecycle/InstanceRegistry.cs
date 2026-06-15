@@ -14,6 +14,9 @@ public sealed class InstanceRegistry : IDisposable
 {
 	private readonly ConcurrentDictionary<SolutionKey, Lazy<RoslynInstance>> Instances = new();
 
+	/// <summary>The file paths of the solutions currently open, whether they are loading, ready, or faulted.</summary>
+	public IReadOnlyList<string> OpenSolutionPaths => Instances.Keys.Select(key => key.FilePath).ToArray();
+
 	/// <summary>
 	/// Returns the instance for <paramref name="solutionPath"/>, creating it (and starting its background
 	/// load) if needed, and awaits its first load so the caller sees a ready snapshot. A dirty instance —

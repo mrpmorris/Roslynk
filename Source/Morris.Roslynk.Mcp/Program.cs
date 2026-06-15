@@ -1,4 +1,5 @@
 using Morris.Roslynk;
+using Morris.Roslynk.Infrastructure.Observability;
 using Morris.Roslynk.Mcp;
 using Morris.Roslynk.Mcp.Hosting;
 using Morris.Roslynk.Mcp.Observability;
@@ -19,6 +20,10 @@ builder.Services
 	.WithToolsFromAssembly(typeof(ServicesRegistration).Assembly);
 
 WebApplication app = builder.Build();
+
+// Eagerly create the metrics publisher so its observable instrument is registered for the process
+// lifetime; without a resolve the singleton would never be constructed and the metric never appear.
+app.Services.GetRequiredService<SolutionMetrics>();
 
 app.MapMcp();
 
