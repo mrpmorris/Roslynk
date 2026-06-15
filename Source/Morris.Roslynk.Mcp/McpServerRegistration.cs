@@ -1,5 +1,6 @@
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Mcp.Observability;
 
 namespace Morris.Roslynk.Mcp;
 
@@ -28,5 +29,7 @@ internal static class McpServerRegistration
 			classes and generated code. Roslynk operates only on .cs compiled in the solution;
 			anything else is the host's job.
 			""";
+
+		options.NameTracesAfterTools();
 	}
 }

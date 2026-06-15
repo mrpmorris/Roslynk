@@ -38,7 +38,9 @@ public static class OpenTelemetryExtensions
 			.ConfigureResource(resource => resource.AddService(serviceName: "Roslynk"))
 			.WithTracing(tracing => tracing
 				.AddSource(RoslynkActivitySource.Name)
-				.AddAspNetCoreInstrumentation())
+				.AddSource(McpToolTraceNaming.McpActivitySourceName)
+				.AddAspNetCoreInstrumentation()
+				.AddProcessor(new McpToolSpanNameProcessor()))
 			.WithMetrics(metrics => metrics
 				.AddMeter(RoslynkMeter.Name)
 				.AddAspNetCoreInstrumentation())
