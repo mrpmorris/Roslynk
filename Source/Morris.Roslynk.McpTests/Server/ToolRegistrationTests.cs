@@ -27,7 +27,6 @@ public class ToolRegistrationTests
 			"apply_patch",
 			"change_signature",
 			"find_dead_code",
-			"get_method",
 			"remove_unused_usings",
 		})
 		{

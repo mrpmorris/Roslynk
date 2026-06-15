@@ -34,9 +34,11 @@ public sealed class GetMembersTool
 		signature, resolved by fully-qualified name. Private members and inherited members are excluded
 		unless requested. Narrow a large type with nameFilter (a trailing '*' matches by prefix, otherwise
 		a case-insensitive substring) and the include* kind toggles; these compose with includePrivate and
-		includeInherited. Ambiguous names return candidate fully-qualified names instead. Prefer this over
-		reading the .cs file to see what a type contains; it is the compiler's view, correct across partial
-		classes and (with includeInherited) base types.
+		includeInherited. Each member carries its source location (sourcePath with 1-based startLine and
+		endLine); to read a member's source code, open sourcePath and read startLine through endLine with the
+		file tool. Ambiguous names return candidate fully-qualified names instead. Prefer this over reading
+		the .cs file to see what a type contains; it is the compiler's view, correct across partial classes
+		and (with includeInherited) base types.
 		""")]
 	public async Task<GetMembersResult> GetMembers(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
@@ -102,10 +104,27 @@ public sealed class GetMembersTool
 			.Where(member => includePrivate || member.DeclaredAccessibility != Accessibility.Private)
 			.Where(KindIncluded)
 			.Where(member => NameMatches(member.Name))
-			.Select(member => new MemberDto(member.Name, member.Kind.ToString(), member.DeclaredAccessibility.ToString(), member.ToDisplayString()))
+			.Select(Map)
 			.ToArray();
 
 		return Success(SymbolResolver.FullyQualifiedName(type), members);
+	}
+
+	private static MemberDto Map(ISymbol member)
+	{
+		SyntaxReference? reference = member.DeclaringSyntaxReferences.FirstOrDefault();
+		FileLinePositionSpan? span = reference is null
+			? null
+			: reference.SyntaxTree.GetLineSpan(reference.Span);
+
+		return new MemberDto(
+			name: member.Name,
+			kind: member.Kind.ToString(),
+			accessibility: member.DeclaredAccessibility.ToString(),
+			signature: member.ToDisplayString(),
+			sourcePath: span?.Path,
+			startLine: span is { } start ? start.StartLinePosition.Line + 1 : null,
+			endLine: span is { } end ? end.EndLinePosition.Line + 1 : null);
 	}
 
 	private static IEnumerable<ISymbol> Collect(INamedTypeSymbol type, bool includeInherited)

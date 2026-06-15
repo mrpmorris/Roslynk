@@ -139,4 +139,35 @@ public class GetMembersTests
 		Assert.Contains(result.Members!, member => member.Kind == "Method");
 		Assert.Contains(result.Members!, member => member.Kind == "Property");
 	}
+
+	[Fact]
+	public async Task WhenAMemberHasSource_ThenItsSourceLocationIsReturnedForReadingTheBody()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMembersTool(registry, new SymbolResolver());
+
+		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "SimpleLibrary.Greeter", nameFilter: "Greet");
+
+		Assert.True(result.IsSuccess);
+		MemberDto member = Assert.Single(result.Members!, candidate => candidate.Name == "Greet");
+		Assert.False(string.IsNullOrEmpty(member.SourcePath));
+		Assert.NotNull(member.StartLine);
+		Assert.NotNull(member.EndLine);
+		Assert.True(member.EndLine >= member.StartLine);
+	}
+
+	[Fact]
+	public async Task WhenAMemberComesFromMetadata_ThenItHasNoSourceLocation()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMembersTool(registry, new SymbolResolver());
+
+		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String", nameFilter: "Substring");
+
+		Assert.True(result.IsSuccess);
+		Assert.NotEmpty(result.Members!);
+		Assert.All(result.Members!, member => Assert.Null(member.SourcePath));
+	}
 }
