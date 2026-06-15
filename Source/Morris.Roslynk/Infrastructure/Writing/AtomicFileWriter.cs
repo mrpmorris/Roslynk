@@ -65,5 +65,17 @@ public static class AtomicFileWriter
 		}
 	}
 
-	private readonly record struct StagedFile(string Path, string TempPath, string BackupPath);
+	private readonly struct StagedFile
+	{
+		public string Path { get; }
+		public string TempPath { get; }
+		public string BackupPath { get; }
+
+		public StagedFile(string path, string tempPath, string backupPath)
+		{
+			Path = path;
+			TempPath = tempPath;
+			BackupPath = backupPath;
+		}
+	}
 }

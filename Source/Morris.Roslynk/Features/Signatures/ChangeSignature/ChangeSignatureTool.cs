@@ -203,5 +203,15 @@ public sealed class ChangeSignatureTool
 		return callSites;
 	}
 
-	private readonly record struct CallSite(DocumentId DocumentId, InvocationExpressionSyntax Invocation);
+	private readonly struct CallSite
+	{
+		public DocumentId DocumentId { get; }
+		public InvocationExpressionSyntax Invocation { get; }
+
+		public CallSite(DocumentId documentId, InvocationExpressionSyntax invocation)
+		{
+			DocumentId = documentId;
+			Invocation = invocation;
+		}
+	}
 }

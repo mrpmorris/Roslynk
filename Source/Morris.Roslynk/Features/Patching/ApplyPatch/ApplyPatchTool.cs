@@ -93,20 +93,20 @@ public sealed class ApplyPatchTool
 
 			foreach (PatchTarget target in targets)
 			{
-				string diskText = await File.ReadAllTextAsync(target.Path, cancellationToken);
+				string diskText = await File.ReadAllTextAsync(target.FilePath, cancellationToken);
 				string currentVersion = FileHash.Of(diskText);
 
 				if (TryGetExpected(expectedVersions, target, out string? expected) && !string.Equals(expected, currentVersion, StringComparison.Ordinal))
 				{
-					stale.Add(new ApplyPatchStaleFile(target.Path, currentVersion, diskText));
+					stale.Add(new ApplyPatchStaleFile(target.FilePath, currentVersion, diskText));
 					continue;
 				}
 
 				PatchApplyResult result = PatchApplier.Apply(diskText, target.FilePatch);
 				if (!result.Success)
-					return Failure(Error.Conflict($"{target.Path}: {result.FailureReason}"));
+					return Failure(Error.Conflict($"{target.FilePath}: {result.FailureReason}"));
 
-				pending.Add(new PendingPatch(target.DocumentId, target.Path, result.NewText!));
+				pending.Add(new PendingPatch(target.DocumentId, target.FilePath, result.NewText!));
 			}
 
 			if (stale.Count > 0)
@@ -122,14 +122,14 @@ public sealed class ApplyPatchTool
 					rejectedFiles: null);
 
 			IReadOnlyList<ApplyPatchChange> changes = pending
-				.Select(item => new ApplyPatchChange(item.Path, FileHash.Of(item.NewText)))
+				.Select(item => new ApplyPatchChange(item.FilePath, FileHash.Of(item.NewText)))
 				.ToArray();
 
 			if (checkOnly)
 				return new ApplyPatchResult(model.SnapshotId, model.Status, error: null, applied: false, changedFiles: changes, staleFiles: null, rejectedFiles: null);
 
 			await AtomicFileWriter.WriteAllAsync(
-				pending.Select(item => new PendingWrite(item.Path, item.NewText)).ToArray(),
+				pending.Select(item => new PendingWrite(item.FilePath, item.NewText)).ToArray(),
 				cancellationToken);
 
 			Solution updated = instance.CurrentSolution;
@@ -174,12 +174,12 @@ public sealed class ApplyPatchTool
 
 	private static IEnumerable<string> CandidateKeys(PatchTarget target)
 	{
-		yield return NormalizeSeparators(target.Path);
+		yield return NormalizeSeparators(target.FilePath);
 		if (target.FilePatch.NewPath is not null)
 			yield return NormalizeSeparators(target.FilePatch.NewPath);
 		if (target.FilePatch.OldPath is not null)
 			yield return NormalizeSeparators(target.FilePatch.OldPath);
-		yield return NormalizeSeparators(System.IO.Path.GetFileName(target.Path));
+		yield return NormalizeSeparators(System.IO.Path.GetFileName(target.FilePath));
 	}
 
 	private static Document? ResolveDocument(Solution solution, string? patchPath)
@@ -244,7 +244,31 @@ public sealed class ApplyPatchTool
 	private static bool IsCSharp(string path) =>
 		string.Equals(System.IO.Path.GetExtension(path), ".cs", StringComparison.OrdinalIgnoreCase);
 
-	private readonly record struct PatchTarget(FilePatch FilePatch, DocumentId DocumentId, string Path);
+	private readonly struct PatchTarget
+	{
+		public FilePatch FilePatch { get; }
+		public DocumentId DocumentId { get; }
+		public string FilePath { get; }
 
-	private readonly record struct PendingPatch(DocumentId DocumentId, string Path, string NewText);
+		public PatchTarget(FilePatch filePatch, DocumentId documentId, string filePath)
+		{
+			FilePatch = filePatch;
+			DocumentId = documentId;
+			FilePath = filePath;
+		}
+	}
+
+	private readonly struct PendingPatch
+	{
+		public DocumentId DocumentId { get; }
+		public string FilePath { get; }
+		public string NewText { get; }
+
+		public PendingPatch(DocumentId documentId, string filePath, string newText)
+		{
+			DocumentId = documentId;
+			FilePath = filePath;
+			NewText = newText;
+		}
+	}
 }
