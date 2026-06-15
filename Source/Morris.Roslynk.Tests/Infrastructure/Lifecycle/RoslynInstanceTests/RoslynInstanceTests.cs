@@ -13,10 +13,10 @@ public class RoslynInstanceTests
 		using var subject = new RoslynInstance(SolutionKey.For(TestSolutions.Simple));
 
 		subject.BeginInitialLoad(
-			loader: async () =>
+			loader: async progress =>
 			{
 				await gate.Task;
-				return await SolutionWorkspace.LoadAsync(TestSolutions.Simple);
+				return await SolutionWorkspace.LoadAsync(TestSolutions.Simple, progress);
 			},
 			onReady: _ => { });
 
@@ -50,10 +50,10 @@ public class RoslynInstanceTests
 		var gate = new TaskCompletionSource();
 
 		subject.BeginRebuild(
-			loader: async () =>
+			loader: async progress =>
 			{
 				await gate.Task;
-				return await SolutionWorkspace.LoadAsync(TestSolutions.Simple);
+				return await SolutionWorkspace.LoadAsync(TestSolutions.Simple, progress);
 			},
 			onReady: _ => { });
 
@@ -70,7 +70,7 @@ public class RoslynInstanceTests
 	private static async Task<RoslynInstance> LoadReadyAsync()
 	{
 		var instance = new RoslynInstance(SolutionKey.For(TestSolutions.Simple));
-		instance.BeginInitialLoad(() => SolutionWorkspace.LoadAsync(TestSolutions.Simple), _ => { });
+		instance.BeginInitialLoad(progress => SolutionWorkspace.LoadAsync(TestSolutions.Simple, progress), _ => { });
 		await instance.WaitUntilReadyAsync();
 		return instance;
 	}

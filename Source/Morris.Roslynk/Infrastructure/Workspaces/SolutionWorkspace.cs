@@ -25,7 +25,10 @@ public sealed class SolutionWorkspace : IDisposable
 		LoadDiagnostics = loadDiagnostics;
 	}
 
-	public static async Task<SolutionWorkspace> LoadAsync(string solutionPath, CancellationToken cancellationToken = default)
+	public static async Task<SolutionWorkspace> LoadAsync(
+		string solutionPath,
+		IProgress<ProjectLoadProgress>? progress = null,
+		CancellationToken cancellationToken = default)
 	{
 		if (solutionPath is null)
 			throw new ArgumentNullException(nameof(solutionPath));
@@ -37,7 +40,7 @@ public sealed class SolutionWorkspace : IDisposable
 
 		using (workspace.RegisterWorkspaceFailedHandler(e => loadDiagnostics.Add(e.Diagnostic.Message)))
 		{
-			Solution solution = await workspace.OpenSolutionAsync(solutionPath, cancellationToken: cancellationToken);
+			Solution solution = await workspace.OpenSolutionAsync(solutionPath, progress, cancellationToken);
 			return new SolutionWorkspace(workspace, solution, loadDiagnostics.ToArray());
 		}
 	}

@@ -23,14 +23,23 @@ public sealed class GetSolutionStatusTool
 		Idempotent = true,
 		Destructive = false,
 		OpenWorld = false)]
-	[Description("Lists the solutions currently loaded by the server, with their project counts.")]
+	[Description(
+		"""
+		Lists the solutions currently loaded by the server, each with its load status and project progress:
+		LoadedProjects is how many projects have loaded so far (a live count while still Building) and
+		TotalProjects is the total once known (null until the first load finishes).
+		""")]
 	public GetSolutionStatusResponse GetSolutionStatus()
 	{
 		LoadedSolutionStatus[] solutions = InstanceRegistry.LoadedInstances()
 			.Select(instance =>
 			{
 				SolutionModel model = instance.CurrentModel;
-				return new LoadedSolutionStatus(instance.Key.FilePath, model.Status, model.SnapshotId, model.Solution?.Projects.Count() ?? 0);
+				int? totalProjects = model.Solution?.Projects.Count();
+				int loadedProjects = model.Status == SolutionStatus.Ready && totalProjects is int total
+					? total
+					: instance.LoadedProjects;
+				return new LoadedSolutionStatus(instance.Key.FilePath, model.Status, model.SnapshotId, loadedProjects, totalProjects);
 			})
 			.ToArray();
 

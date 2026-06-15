@@ -80,7 +80,7 @@ public sealed class InstanceRegistry : IDisposable
 	{
 		var instance = new RoslynInstance(key);
 		instance.BeginInitialLoad(
-			loader: () => SolutionWorkspace.LoadAsync(key.FilePath),
+			loader: progress => SolutionWorkspace.LoadAsync(key.FilePath, progress),
 			onReady: AttachWatcher);
 		return instance;
 	}
@@ -136,7 +136,7 @@ public sealed class InstanceRegistry : IDisposable
 		RoslynInstance instance = GetOrCreate(key);
 
 		if (instance.CurrentModel.Solution is not null)
-			instance.BeginRebuild(() => SolutionWorkspace.LoadAsync(key.FilePath), AttachWatcher);
+			instance.BeginRebuild(progress => SolutionWorkspace.LoadAsync(key.FilePath, progress), AttachWatcher);
 
 		instance.Touch();
 		return instance;

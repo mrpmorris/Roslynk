@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.MSBuild;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.Lifecycle;
@@ -16,6 +17,7 @@ public sealed class RoslynInstance : IDisposable
 {
 	private SolutionModel CurrentModelField;
 	private SolutionWorkspace? WorkspaceField;
+	private ProjectLoadTracker LoadTrackerField = new();
 	private volatile bool DirtyField;
 	private long LastAccessedTicks;
 	private long SnapshotCounter;
@@ -39,6 +41,12 @@ public sealed class RoslynInstance : IDisposable
 
 	/// <summary>The workspace the current snapshot was loaded from, or null before the first load completes.</summary>
 	public SolutionWorkspace? Workspace => Volatile.Read(ref WorkspaceField);
+
+	/// <summary>
+	/// The number of projects loaded so far in the current (or most recent) load — a live count that climbs
+	/// while the model is <see cref="SolutionStatus.Building"/>, letting the status tool report progress.
+	/// </summary>
+	public int LoadedProjects => Volatile.Read(ref LoadTrackerField).Count;
 
 	/// <summary>
 	/// The live solution snapshot. Throws if read before the first load completes; tools should read
@@ -78,18 +86,21 @@ public sealed class RoslynInstance : IDisposable
 	/// flips it to <see cref="SolutionStatus.Faulted"/>. <paramref name="onReady"/> runs once the snapshot
 	/// is available (for example, to attach the file watcher). Call once per instance.
 	/// </summary>
-	public void BeginInitialLoad(Func<Task<SolutionWorkspace>> loader, Action<RoslynInstance> onReady)
+	public void BeginInitialLoad(Func<IProgress<ProjectLoadProgress>, Task<SolutionWorkspace>> loader, Action<RoslynInstance> onReady)
 	{
 		if (loader is null)
 			throw new ArgumentNullException(nameof(loader));
 		if (onReady is null)
 			throw new ArgumentNullException(nameof(onReady));
 
+		var tracker = new ProjectLoadTracker();
+		Volatile.Write(ref LoadTrackerField, tracker);
+
 		_ = Task.Run(async () =>
 		{
 			try
 			{
-				SolutionWorkspace workspace = await loader();
+				SolutionWorkspace workspace = await loader(tracker);
 				Volatile.Write(ref WorkspaceField, workspace);
 				Swap(SolutionModel.Ready(NextSnapshotId(), workspace.Solution));
 				onReady(this);
@@ -111,7 +122,7 @@ public sealed class RoslynInstance : IDisposable
 	/// fresh workspace loads it is swapped in as <see cref="SolutionStatus.Ready"/> and the old one is
 	/// disposed. A failed rebuild flips the model to <see cref="SolutionStatus.Faulted"/>.
 	/// </summary>
-	public void BeginRebuild(Func<Task<SolutionWorkspace>> loader, Action<RoslynInstance> onReady)
+	public void BeginRebuild(Func<IProgress<ProjectLoadProgress>, Task<SolutionWorkspace>> loader, Action<RoslynInstance> onReady)
 	{
 		if (loader is null)
 			throw new ArgumentNullException(nameof(loader));
@@ -119,13 +130,15 @@ public sealed class RoslynInstance : IDisposable
 			throw new ArgumentNullException(nameof(onReady));
 
 		DirtyField = false;
+		var tracker = new ProjectLoadTracker();
+		Volatile.Write(ref LoadTrackerField, tracker);
 		Swap(SolutionModel.Loading(NextSnapshotId(), CurrentModel.Solution));
 
 		_ = Task.Run(async () =>
 		{
 			try
 			{
-				SolutionWorkspace workspace = await loader();
+				SolutionWorkspace workspace = await loader(tracker);
 				SolutionWorkspace? previous = Volatile.Read(ref WorkspaceField);
 				Volatile.Write(ref WorkspaceField, workspace);
 				Swap(SolutionModel.Ready(NextSnapshotId(), workspace.Solution));
