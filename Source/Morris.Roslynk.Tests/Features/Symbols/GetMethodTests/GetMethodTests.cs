@@ -82,4 +82,76 @@ public class GetMethodTests
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
+
+	[Fact]
+	public async Task WhenIncludeBodyIsNotRequested_ThenTheBodyIsNull()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMethodTool(registry, new SymbolResolver());
+
+		GetMethodResult result = await subject.GetMethod(TestSolutions.Simple, "SimpleLibrary.Widget.Compute");
+
+		Assert.True(result.IsSuccess);
+		MethodDto method = Assert.Single(result.Methods!);
+		Assert.Null(method.Body);
+	}
+
+	[Fact]
+	public async Task WhenIncludeBodyIsTrueForAnExpressionBodiedMethod_ThenTheExpressionBodyIsReturned()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMethodTool(registry, new SymbolResolver());
+
+		GetMethodResult result = await subject.GetMethod(TestSolutions.Simple, "SimpleLibrary.Widget.Compute", includeBody: true);
+
+		Assert.True(result.IsSuccess);
+		MethodDto method = Assert.Single(result.Methods!);
+		Assert.Equal("=> value * 2", method.Body);
+	}
+
+	[Fact]
+	public async Task WhenIncludeBodyIsTrueForABlockBodiedMethod_ThenTheBlockBodyIsReturned()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMethodTool(registry, new SymbolResolver());
+
+		GetMethodResult result = await subject.GetMethod(TestSolutions.Simple, "SimpleLibrary.Calculator.Add", includeBody: true);
+
+		Assert.True(result.IsSuccess);
+		MethodDto method = Assert.Single(result.Methods!);
+		Assert.StartsWith("{", method.Body);
+		Assert.EndsWith("}", method.Body);
+		Assert.Contains("return a + b;", method.Body);
+	}
+
+	[Fact]
+	public async Task WhenIncludeBodyIsTrueForAMethodWithoutABody_ThenTheBodyIsNull()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMethodTool(registry, new SymbolResolver());
+
+		GetMethodResult result = await subject.GetMethod(TestSolutions.Simple, "SimpleLibrary.IGreeter.Greet", includeBody: true);
+
+		Assert.True(result.IsSuccess);
+		MethodDto method = Assert.Single(result.Methods!);
+		Assert.Null(method.Body);
+	}
+
+	[Fact]
+	public async Task WhenIncludeBodyIsTrueForAMetadataMethod_ThenTheBodyIsNull()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMethodTool(registry, new SymbolResolver());
+
+		GetMethodResult result = await subject.GetMethod(TestSolutions.Simple, "System.String.Substring", includeBody: true);
+
+		Assert.True(result.IsSuccess);
+		Assert.NotEmpty(result.Methods!);
+		Assert.All(result.Methods!, method => Assert.Null(method.Body));
+	}
 }

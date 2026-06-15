@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -35,10 +36,12 @@ public sealed class GetMethodTool
 		optionality, default, ref kind, params), type parameters, location, and normalized documentation —
 		resolved by fully-qualified name. Overloads share a name, so every match is returned as its own
 		entry. If the name resolves only to non-methods, their fully-qualified names are returned instead.
+		Pass includeBody to also get each method's source body.
 		""")]
 	public async Task<GetMethodResult> GetMethod(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Fully-qualified name of the method, e.g. 'MyNamespace.MyType.MyMethod'.")] string methodId)
+		[Description("Fully-qualified name of the method, e.g. 'MyNamespace.MyType.MyMethod'.")] string methodId,
+		[Description("When true, also return each method's source body (block or expression body). Defaults to false; null for methods that have no body, such as abstract, interface, or metadata methods.")] bool includeBody = false)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
@@ -52,7 +55,7 @@ public sealed class GetMethodTool
 
 		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(model.Solution, methodId);
 
-		MethodDto[] methods = matches.OfType<IMethodSymbol>().Select(Map).ToArray();
+		MethodDto[] methods = matches.OfType<IMethodSymbol>().Select(method => Map(method, includeBody)).ToArray();
 		if (methods.Length > 0)
 			return Success(methods);
 
@@ -64,7 +67,7 @@ public sealed class GetMethodTool
 		return Failure(Error.NotFound($"No method matched '{methodId}'.", candidates.Count > 0 ? candidates : null));
 	}
 
-	private static MethodDto Map(IMethodSymbol method)
+	private static MethodDto Map(IMethodSymbol method, bool includeBody)
 	{
 		Location? location = method.Locations.FirstOrDefault(candidate => candidate.IsInSource);
 		FileLinePositionSpan? span = location?.GetLineSpan();
@@ -83,7 +86,25 @@ public sealed class GetMethodTool
 			startColumn: span is { } startColumn ? startColumn.StartLinePosition.Character + 1 : null,
 			endLine: span is { } end ? end.EndLinePosition.Line + 1 : null,
 			endColumn: span is { } endColumn ? endColumn.EndLinePosition.Character + 1 : null,
+			body: includeBody ? ReadBody(method) : null,
 			documentation: DocumentationReader.Read(method));
+	}
+
+	private static string? ReadBody(IMethodSymbol method)
+	{
+		foreach (SyntaxReference reference in method.DeclaringSyntaxReferences)
+		{
+			if (reference.GetSyntax() is not BaseMethodDeclarationSyntax declaration)
+				continue;
+
+			if (declaration.Body is { } block)
+				return block.ToString();
+
+			if (declaration.ExpressionBody is { } expressionBody)
+				return expressionBody.ToString();
+		}
+
+		return null;
 	}
 
 	private static ParameterDto MapParameter(IParameterSymbol parameter) =>

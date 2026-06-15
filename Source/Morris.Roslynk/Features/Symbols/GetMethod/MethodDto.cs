@@ -4,8 +4,9 @@ namespace Morris.Roslynk.Features.Symbols.GetMethod;
 
 /// <summary>
 /// One method's full detail: signature, return type, accessibility and modifiers, ordered parameters and
-/// type parameters, source location (1-based, null for metadata), and normalized documentation. Overloads
-/// are returned as separate entries since they share a fully-qualified name.
+/// type parameters, source location (1-based, null for metadata), the source body when requested, and
+/// normalized documentation. Overloads are returned as separate entries since they share a fully-qualified
+/// name.
 /// </summary>
 public sealed class MethodDto
 {
@@ -22,6 +23,7 @@ public sealed class MethodDto
 	public int? StartColumn { get; }
 	public int? EndLine { get; }
 	public int? EndColumn { get; }
+	public string? Body { get; }
 	public SymbolDocumentation Documentation { get; }
 
 	public MethodDto(
@@ -38,6 +40,7 @@ public sealed class MethodDto
 		int? startColumn,
 		int? endLine,
 		int? endColumn,
+		string? body,
 		SymbolDocumentation documentation)
 	{
 		Name = name;
@@ -53,6 +56,7 @@ public sealed class MethodDto
 		StartColumn = startColumn;
 		EndLine = endLine;
 		EndColumn = endColumn;
+		Body = body;
 		Documentation = documentation;
 	}
 }
