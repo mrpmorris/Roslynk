@@ -7,8 +7,6 @@ namespace Morris.Roslynk.Tests.Features.Diagnostics.AnalyzerDiagnosticsTests;
 
 public class AnalyzerDiagnosticsTests
 {
-	private static readonly string[] AllSeverities = ["error", "warning", "info", "hidden"];
-
 	[Fact]
 	public async Task WhenAnalyzersAreIncluded_ThenNonCompilerDiagnosticsAppear()
 	{
@@ -16,7 +14,8 @@ public class AnalyzerDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.Simple, AllSeverities, targetFramework: null, includeAnalyzers: true);
+		GetDiagnosticsResult result = await subject.GetDiagnostics(
+			TestSolutions.Simple, includeWarnings: true, includeInfo: true, includeHidden: true, includeAnalyzers: true);
 
 		Assert.True(result.IsSuccess);
 		Assert.Contains(result.Diagnostics!, diagnostic => !diagnostic.Id.StartsWith("CS", StringComparison.Ordinal));
@@ -29,7 +28,8 @@ public class AnalyzerDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.Simple, AllSeverities);
+		GetDiagnosticsResult result = await subject.GetDiagnostics(
+			TestSolutions.Simple, includeWarnings: true, includeInfo: true, includeHidden: true, includeAnalyzers: false);
 
 		Assert.True(result.IsSuccess);
 		Assert.All(result.Diagnostics!, diagnostic => Assert.StartsWith("CS", diagnostic.Id));
@@ -41,7 +41,7 @@ public class AnalyzerDiagnosticsTests
 		using var registry = new InstanceRegistry();
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.Simple, AllSeverities);
+		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.Simple);
 
 		Assert.False(result.IsSuccess);
 		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);

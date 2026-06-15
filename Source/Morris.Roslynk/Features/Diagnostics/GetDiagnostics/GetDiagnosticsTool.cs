@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
@@ -12,9 +11,6 @@ namespace Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 public sealed class GetDiagnosticsTool
 {
 	public const string GetDiagnosticsName = "get_diagnostics";
-
-	private static readonly ImmutableArray<DiagnosticSeverity> DefaultSeverities =
-		[DiagnosticSeverity.Error, DiagnosticSeverity.Warning];
 
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly DiagnosticsService DiagnosticsService;
@@ -34,15 +30,19 @@ public sealed class GetDiagnosticsTool
 		OpenWorld = false)]
 	[Description(
 		"""
-		Returns compiler diagnostics for an opened solution. Defaults to errors and warnings; pass
-		'severities' (error, warning, info, hidden) to widen or narrow. Per-severity counts are always
-		included so filtering is never silent, and errors are listed before warnings.
+		Returns diagnostics for an opened solution. Errors are always included; set includeWarnings,
+		includeInfo, or includeHidden to widen the result (all default false, so by default only errors are
+		returned). Per-severity counts are always included so filtering is never silent, and errors are
+		listed first. Analyzers (NetAnalyzers / IDE rules) run by default for a richer result; set
+		includeAnalyzers false to skip them for a faster compiler-only pass.
 		""")]
 	public async Task<GetDiagnosticsResult> GetDiagnostics(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Optional severities to include: error, warning, info, hidden. Defaults to error and warning.")] string[]? severities = null,
+		[Description("Include warning-severity diagnostics. Default false.")] bool includeWarnings = false,
+		[Description("Include info-severity diagnostics. Default false.")] bool includeInfo = false,
+		[Description("Include hidden-severity diagnostics. Default false.")] bool includeHidden = false,
 		[Description("Optional target framework (e.g. net8.0) to limit a multi-targeted project to one compilation.")] string? targetFramework = null,
-		[Description("Also run the project's analyzers (NetAnalyzers etc.) — richer (CA/IDE diagnostics) but slower. Default false.")] bool includeAnalyzers = false)
+		[Description("Run the project's analyzers (NetAnalyzers / IDE rules) for a richer result. Default true; set false for a faster compiler-only pass.")] bool includeAnalyzers = true)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
@@ -64,7 +64,13 @@ public sealed class GetDiagnosticsTool
 			infos: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Info),
 			hidden: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Hidden));
 
-		ImmutableArray<DiagnosticSeverity> wanted = ParseSeverities(severities);
+		var wanted = new HashSet<DiagnosticSeverity> { DiagnosticSeverity.Error };
+		if (includeWarnings)
+			wanted.Add(DiagnosticSeverity.Warning);
+		if (includeInfo)
+			wanted.Add(DiagnosticSeverity.Info);
+		if (includeHidden)
+			wanted.Add(DiagnosticSeverity.Hidden);
 
 		DiagnosticDto[] items = all
 			.Where(diagnostic => wanted.Contains(diagnostic.Severity))
@@ -88,20 +94,5 @@ public sealed class GetDiagnosticsTool
 			startColumn: span.StartLinePosition.Character + 1,
 			endLine: span.EndLinePosition.Line + 1,
 			endColumn: span.EndLinePosition.Character + 1);
-	}
-
-	private static ImmutableArray<DiagnosticSeverity> ParseSeverities(string[]? severities)
-	{
-		if (severities is null || severities.Length == 0)
-			return DefaultSeverities;
-
-		ImmutableArray<DiagnosticSeverity>.Builder parsed = ImmutableArray.CreateBuilder<DiagnosticSeverity>();
-		foreach (string severity in severities)
-		{
-			if (Enum.TryParse(severity, ignoreCase: true, out DiagnosticSeverity value))
-				parsed.Add(value);
-		}
-
-		return parsed.Count == 0 ? DefaultSeverities : parsed.ToImmutable();
 	}
 }

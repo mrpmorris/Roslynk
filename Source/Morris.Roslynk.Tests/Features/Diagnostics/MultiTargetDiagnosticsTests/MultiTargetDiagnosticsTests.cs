@@ -14,7 +14,7 @@ public class MultiTargetDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.MultiTarget, severities: ["error"], targetFramework: "net8.0");
+		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.MultiTarget, targetFramework: "net8.0");
 
 		Assert.True(result.IsSuccess);
 		Assert.Contains(result.Diagnostics!, diagnostic => diagnostic.Id == "CS0029");
@@ -27,7 +27,7 @@ public class MultiTargetDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.MultiTarget, severities: ["error"], targetFramework: "net10.0");
+		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.MultiTarget, targetFramework: "net10.0");
 
 		Assert.True(result.IsSuccess);
 		Assert.DoesNotContain(result.Diagnostics!, diagnostic => diagnostic.Id == "CS0029");
@@ -39,7 +39,7 @@ public class MultiTargetDiagnosticsTests
 		using var registry = new InstanceRegistry();
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.MultiTarget, severities: ["error"], targetFramework: "net8.0");
+		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.MultiTarget, targetFramework: "net8.0");
 
 		Assert.False(result.IsSuccess);
 		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
