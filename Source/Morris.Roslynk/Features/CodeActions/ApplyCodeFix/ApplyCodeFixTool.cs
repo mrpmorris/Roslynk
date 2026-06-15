@@ -42,7 +42,7 @@ public sealed class ApplyCodeFixTool
 		""")]
 	public async Task<ApplyCodeActionResult> ApplyCodeFix(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Path of the .cs file.")] string documentPath,
+		[Description("Path of the .cs file; absolute, or relative to the solution folder.")] string documentPath,
 		[Description("The compiler diagnostic id to fix, e.g. CS0219.")] string diagnosticId,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
 		CancellationToken cancellationToken = default)

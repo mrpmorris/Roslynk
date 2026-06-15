@@ -5,6 +5,7 @@ using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Features.Symbols.GetSymbol;
 
@@ -31,7 +32,7 @@ public sealed class GetSymbolTool
 		OpenWorld = false)]
 	[Description(
 		"""
-		Returns a symbol's headline details; kind, accessibility, signature, and source location —
+		Returns a symbol's headline details; kind, accessibility, signature, and source location,
 		resolved by fully-qualified name. If the name is ambiguous the candidate fully-qualified names
 		are returned instead. Prefer this over reading the file to identify a symbol; it resolves through
 		the compiler, including metadata symbols that have no source to read.
@@ -52,6 +53,8 @@ public sealed class GetSymbolTool
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
 
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
+
 		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(model.Solution, symbolName);
 
 		if (matches.Count == 0)
@@ -66,10 +69,10 @@ public sealed class GetSymbolTool
 			return Failure(Error.Ambiguous($"'{symbolName}' matched multiple symbols.", candidates));
 		}
 
-		return Success(Map(matches[0]));
+		return Success(Map(matches[0], solutionDirectory));
 	}
 
-	private static SymbolDto Map(ISymbol symbol)
+	private static SymbolDto Map(ISymbol symbol, string? solutionDirectory)
 	{
 		SymbolDocumentation documentation = DocumentationReader.Read(symbol);
 		Location? location = symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
@@ -100,7 +103,7 @@ public sealed class GetSymbolTool
 			signature: symbol.ToDisplayString(),
 			sourceType: "source",
 			assembly: null,
-			sourcePath: span.Path,
+			sourcePath: SolutionRelativePath.Of(solutionDirectory, span.Path),
 			startLine: span.StartLinePosition.Line + 1,
 			startColumn: span.StartLinePosition.Character + 1,
 			endLine: span.EndLinePosition.Line + 1,

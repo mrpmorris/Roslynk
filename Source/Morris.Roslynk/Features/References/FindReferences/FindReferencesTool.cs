@@ -5,6 +5,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Features.References.FindReferences;
 
@@ -54,6 +55,8 @@ public sealed class FindReferencesTool
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
 
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
+
 		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(model.Solution, symbolName);
 
 		if (matches.Count == 0)
@@ -75,7 +78,7 @@ public sealed class FindReferencesTool
 			foreach (ReferenceLocation reference in referenced.Locations)
 			{
 				if (reference.Location.IsInSource)
-					references.Add(Map(reference.Location));
+					references.Add(Map(reference.Location, solutionDirectory));
 			}
 		}
 
@@ -83,11 +86,11 @@ public sealed class FindReferencesTool
 		return Success(symbol.ToDisplayString(), page, truncated: references.Count > page.Length);
 	}
 
-	private static ReferenceDto Map(Location location)
+	private static ReferenceDto Map(Location location, string? solutionDirectory)
 	{
 		FileLinePositionSpan span = location.GetLineSpan();
 		return new ReferenceDto(
-			sourcePath: span.Path,
+			sourcePath: SolutionRelativePath.Of(solutionDirectory, span.Path)!,
 			startLine: span.StartLinePosition.Line + 1,
 			startColumn: span.StartLinePosition.Character + 1,
 			endLine: span.EndLinePosition.Line + 1,

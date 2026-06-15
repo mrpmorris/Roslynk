@@ -4,6 +4,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 
@@ -58,6 +59,8 @@ public sealed class GetDiagnosticsTool
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
 
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
+
 		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetAllDiagnosticsAsync(model.Solution, targetFramework, includeAnalyzers);
 
 		var counts = new DiagnosticCounts(
@@ -78,20 +81,20 @@ public sealed class GetDiagnosticsTool
 			.Where(diagnostic => wanted.Contains(diagnostic.Severity))
 			.OrderByDescending(diagnostic => diagnostic.Severity)
 			.ThenBy(diagnostic => diagnostic.Location.SourceTree?.FilePath, StringComparer.OrdinalIgnoreCase)
-			.Select(Map)
+			.Select(diagnostic => Map(diagnostic, solutionDirectory))
 			.ToArray();
 
 		return Success(items, counts);
 	}
 
-	private static DiagnosticDto Map(Diagnostic diagnostic)
+	private static DiagnosticDto Map(Diagnostic diagnostic, string? solutionDirectory)
 	{
 		FileLinePositionSpan span = diagnostic.Location.GetLineSpan();
 		return new DiagnosticDto(
 			id: diagnostic.Id,
 			severity: diagnostic.Severity.ToString(),
 			message: diagnostic.GetMessage(),
-			sourcePath: diagnostic.Location.IsInSource ? span.Path : null,
+			sourcePath: diagnostic.Location.IsInSource ? SolutionRelativePath.Of(solutionDirectory, span.Path) : null,
 			startLine: span.StartLinePosition.Line + 1,
 			startColumn: span.StartLinePosition.Character + 1,
 			endLine: span.EndLinePosition.Line + 1,

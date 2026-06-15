@@ -152,6 +152,8 @@ public class GetMembersTests
 		Assert.True(result.IsSuccess);
 		MemberDto member = Assert.Single(result.Members!, candidate => candidate.Name == "Greet");
 		Assert.False(string.IsNullOrEmpty(member.SourcePath));
+		Assert.False(Path.IsPathRooted(member.SourcePath), $"expected a solution-relative path, got '{member.SourcePath}'");
+		Assert.EndsWith("Greeter.cs", member.SourcePath!);
 		Assert.NotNull(member.StartLine);
 		Assert.NotNull(member.EndLine);
 		Assert.True(member.EndLine >= member.StartLine);

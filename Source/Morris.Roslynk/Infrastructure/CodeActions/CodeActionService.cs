@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CodeRefactorings;
 using Microsoft.CodeAnalysis.Text;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.CodeActions;
 
@@ -123,7 +124,7 @@ public sealed class CodeActionService
 	public static Document? FindDocument(Solution solution, string path)
 	{
 		string normalized = path.Replace('/', System.IO.Path.DirectorySeparatorChar).Replace('\\', System.IO.Path.DirectorySeparatorChar);
-		string? full = System.IO.Path.IsPathRooted(normalized) ? System.IO.Path.GetFullPath(normalized) : null;
+		string full = SolutionRelativePath.ToAbsolute(SolutionRelativePath.DirectoryOf(solution), normalized);
 
 		Document? suffixMatch = null;
 		int suffixMatches = 0;
@@ -131,7 +132,7 @@ public sealed class CodeActionService
 		{
 			if (document.FilePath is null)
 				continue;
-			if (full is not null && string.Equals(document.FilePath, full, StringComparison.OrdinalIgnoreCase))
+			if (string.Equals(document.FilePath, full, StringComparison.OrdinalIgnoreCase))
 				return document;
 			if (document.FilePath.EndsWith(System.IO.Path.DirectorySeparatorChar + normalized, StringComparison.OrdinalIgnoreCase))
 			{

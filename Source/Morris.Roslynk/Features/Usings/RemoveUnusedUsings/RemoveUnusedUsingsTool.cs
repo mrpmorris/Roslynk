@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Features.Usings.RemoveUnusedUsings;
@@ -39,7 +40,7 @@ public sealed class RemoveUnusedUsingsTool
 		""")]
 	public async Task<RemoveUnusedUsingsResult> RemoveUnusedUsings(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Optional path of a single .cs file to clean. Omit to clean the whole solution.")] string? documentPath = null,
+		[Description("Optional path of a single .cs file to clean (absolute or relative to the solution folder). Omit to clean the whole solution.")] string? documentPath = null,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
@@ -133,7 +134,7 @@ public sealed class RemoveUnusedUsingsTool
 	private static Document? ResolveDocument(Solution solution, string path)
 	{
 		string normalized = path.Replace('/', System.IO.Path.DirectorySeparatorChar).Replace('\\', System.IO.Path.DirectorySeparatorChar);
-		string? full = System.IO.Path.IsPathRooted(normalized) ? System.IO.Path.GetFullPath(normalized) : null;
+		string full = SolutionRelativePath.ToAbsolute(SolutionRelativePath.DirectoryOf(solution), normalized);
 
 		Document? suffixMatch = null;
 		int suffixMatches = 0;
@@ -141,7 +142,7 @@ public sealed class RemoveUnusedUsingsTool
 		{
 			if (document.FilePath is null)
 				continue;
-			if (full is not null && string.Equals(document.FilePath, full, StringComparison.OrdinalIgnoreCase))
+			if (string.Equals(document.FilePath, full, StringComparison.OrdinalIgnoreCase))
 				return document;
 			if (document.FilePath.EndsWith(System.IO.Path.DirectorySeparatorChar + normalized, StringComparison.OrdinalIgnoreCase))
 			{

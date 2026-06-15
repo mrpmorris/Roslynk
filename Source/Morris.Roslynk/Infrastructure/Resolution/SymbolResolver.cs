@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Observability;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.Resolution;
 
@@ -182,7 +183,7 @@ public sealed class SymbolResolver
 
 	private static Document? FindDocument(Solution solution, string filePath)
 	{
-		string fullPath = Path.GetFullPath(filePath);
+		string fullPath = SolutionRelativePath.ToAbsolute(SolutionRelativePath.DirectoryOf(solution), filePath);
 		foreach (Project project in solution.Projects)
 		{
 			foreach (Document document in project.Documents)

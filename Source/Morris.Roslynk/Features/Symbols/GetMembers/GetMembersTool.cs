@@ -4,6 +4,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Features.Symbols.GetMembers;
 
@@ -34,9 +35,10 @@ public sealed class GetMembersTool
 		signature, resolved by fully-qualified name. Private members and inherited members are excluded
 		unless requested. Narrow a large type with nameFilter (a trailing '*' matches by prefix, otherwise
 		a case-insensitive substring) and the include* kind toggles; these compose with includePrivate and
-		includeInherited. Each member carries its source location (sourcePath with 1-based startLine and
-		endLine); to read a member's source code, open sourcePath and read startLine through endLine with the
-		file tool. Ambiguous names return candidate fully-qualified names instead. Prefer this over reading
+		includeInherited. Each member carries its source location (sourcePath, relative to the solution
+		folder, with 1-based startLine and endLine); to read a member's source code, resolve sourcePath
+		against the solution folder and read startLine through endLine with the file tool. Ambiguous names
+		return candidate fully-qualified names instead. Prefer this over reading
 		the .cs file to see what a type contains; it is the compiler's view, correct across partial classes
 		and (with includeInherited) base types.
 		""")]
@@ -63,6 +65,8 @@ public sealed class GetMembersTool
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
+
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		List<INamedTypeSymbol> types = (await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(model.Solution, typeName))
 			.OfType<INamedTypeSymbol>()
@@ -104,13 +108,13 @@ public sealed class GetMembersTool
 			.Where(member => includePrivate || member.DeclaredAccessibility != Accessibility.Private)
 			.Where(KindIncluded)
 			.Where(member => NameMatches(member.Name))
-			.Select(Map)
+			.Select(member => Map(member, solutionDirectory))
 			.ToArray();
 
 		return Success(SymbolResolver.FullyQualifiedName(type), members);
 	}
 
-	private static MemberDto Map(ISymbol member)
+	private static MemberDto Map(ISymbol member, string? solutionDirectory)
 	{
 		SyntaxReference? reference = member.DeclaringSyntaxReferences.FirstOrDefault();
 		FileLinePositionSpan? span = reference is null
@@ -122,7 +126,7 @@ public sealed class GetMembersTool
 			kind: member.Kind.ToString(),
 			accessibility: member.DeclaredAccessibility.ToString(),
 			signature: member.ToDisplayString(),
-			sourcePath: span?.Path,
+			sourcePath: SolutionRelativePath.Of(solutionDirectory, span?.Path),
 			startLine: span is { } start ? start.StartLinePosition.Line + 1 : null,
 			endLine: span is { } end ? end.EndLinePosition.Line + 1 : null);
 	}

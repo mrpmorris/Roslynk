@@ -5,6 +5,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Features.DeadCode.FindDeadCode;
 
@@ -158,7 +159,7 @@ public sealed class FindDeadCodeTool
 		return new DeadCodeCandidate(
 			SymbolResolver.FullyQualifiedName(symbol),
 			DescribeKind(symbol),
-			symbol.Locations.FirstOrDefault(location => location.IsInSource)?.SourceTree?.FilePath,
+			SolutionRelativePath.Of(SolutionRelativePath.DirectoryOf(solution), symbol.Locations.FirstOrDefault(location => location.IsInSource)?.SourceTree?.FilePath),
 			reason,
 			confidence);
 	}

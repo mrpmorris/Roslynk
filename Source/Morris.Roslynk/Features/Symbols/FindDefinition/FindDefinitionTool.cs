@@ -4,6 +4,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Features.Symbols.FindDefinition;
 
@@ -37,7 +38,7 @@ public sealed class FindDefinitionTool
 		""")]
 	public async Task<FindDefinitionResult> FindDefinition(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Absolute path to the .cs file containing the usage.")] string filePath,
+		[Description("Path to the .cs file containing the usage; absolute, or relative to the solution folder.")] string filePath,
 		[Description("1-based line of the usage.")] int line,
 		[Description("1-based column of the usage.")] int column)
 	{
@@ -49,6 +50,8 @@ public sealed class FindDefinitionTool
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
+
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		ISymbol? symbol = await SymbolResolver.ResolveAtPositionAsync(model.Solution, filePath, line, column);
 
@@ -79,7 +82,7 @@ public sealed class FindDefinitionTool
 			error: null,
 			fullName: fullName,
 			kind: kind,
-			sourcePath: span.Path,
+			sourcePath: SolutionRelativePath.Of(solutionDirectory, span.Path),
 			startLine: span.StartLinePosition.Line + 1,
 			startColumn: span.StartLinePosition.Character + 1,
 			endLine: span.EndLinePosition.Line + 1,

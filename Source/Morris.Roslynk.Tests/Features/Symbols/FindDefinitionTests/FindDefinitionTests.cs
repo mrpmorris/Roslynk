@@ -27,6 +27,25 @@ public class FindDefinitionTests
 	}
 
 	[Fact]
+	public async Task WhenGivenASolutionRelativeUsagePath_ThenTheDeclarationIsReturned()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new FindDefinitionTool(registry, new SymbolResolver());
+
+		string solutionDir = Path.GetDirectoryName(TestSolutions.Simple)!;
+		string callerPath = Path.Combine(solutionDir, "SimpleLibrary", "Caller.cs");
+		string relativePath = Path.GetRelativePath(solutionDir, callerPath);
+		string text = await File.ReadAllTextAsync(callerPath);
+		(int line, int column) = ToLineColumn(text, text.IndexOf("Greeter", StringComparison.Ordinal));
+
+		FindDefinitionResult result = await subject.FindDefinition(TestSolutions.Simple, relativePath, line, column);
+
+		Assert.True(result.IsSuccess);
+		Assert.Contains("Greeter", result.FullName!);
+	}
+
+	[Fact]
 	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
 	{
 		using var registry = new InstanceRegistry();
