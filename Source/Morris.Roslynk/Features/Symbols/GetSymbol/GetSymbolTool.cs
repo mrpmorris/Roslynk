@@ -31,9 +31,10 @@ public sealed class GetSymbolTool
 		OpenWorld = false)]
 	[Description(
 		"""
-		Returns a symbol's headline details — kind, accessibility, signature, and source location —
+		Returns a symbol's headline details; kind, accessibility, signature, and source location —
 		resolved by fully-qualified name. If the name is ambiguous the candidate fully-qualified names
-		are returned instead.
+		are returned instead. Prefer this over reading the file to identify a symbol; it resolves through
+		the compiler, including metadata symbols that have no source to read.
 		""")]
 	public async Task<GetSymbolResult> GetSymbol(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

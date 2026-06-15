@@ -4,7 +4,7 @@ namespace Morris.Roslynk.Infrastructure.Watching;
 /// The OS-facing half of the watcher: owns the <see cref="FileSystemWatcher"/>s over the directories that
 /// back the loaded documents and build files, debounces their noisy event bursts (editors save in 2-3
 /// events), and hands each changed path to <see cref="SolutionFileSync"/>. Deliberately thin and
-/// best-effort — a dropped, late, or duplicated event only costs freshness, never safety, because the
+/// best-effort; a dropped, late, or duplicated event only costs freshness, never safety, because the
 /// apply pipeline's stale-write guard is what protects the user.
 /// </summary>
 public sealed class SolutionFileWatcher : IDisposable

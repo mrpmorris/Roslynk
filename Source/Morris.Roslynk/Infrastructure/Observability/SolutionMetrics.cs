@@ -4,7 +4,7 @@ using Morris.Roslynk.Infrastructure.Lifecycle;
 namespace Morris.Roslynk.Infrastructure.Observability;
 
 /// <summary>
-/// Publishes the <c>roslynk.solutions.open</c> metric — one measurement of <c>1</c> per solution currently
+/// Publishes the <c>roslynk.solutions.open</c> metric; one measurement of <c>1</c> per solution currently
 /// open in the <see cref="InstanceRegistry"/>, tagged with <c>solution.path</c>. Summed it is the number of
 /// open solutions; grouped by the tag it shows which solutions are open. It is observed at collection time,
 /// so the many open, close, evict and reload paths never have to keep a running total in sync.

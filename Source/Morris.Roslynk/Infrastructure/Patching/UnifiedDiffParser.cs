@@ -102,7 +102,7 @@ public static partial class UnifiedDiffParser
 			string line = lines[i];
 
 			// A blank line in the file is encoded as " " (a lone space), so a truly-empty line is not a
-			// hunk body line — it is the artifact of the patch's final newline, ending the hunk.
+			// hunk body line; it is the artifact of the patch's final newline, ending the hunk.
 			if (line.Length == 0)
 				break;
 
@@ -130,7 +130,7 @@ public static partial class UnifiedDiffParser
 					oldSeen++;
 					break;
 				case '\\':
-					// "\ No newline at end of file" — trailing-newline state is preserved from the target
+					// "\ No newline at end of file"; trailing-newline state is preserved from the target
 					// file itself, so this marker is informational only.
 					break;
 				default:

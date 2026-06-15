@@ -33,7 +33,8 @@ public sealed class GetCodeActionsTool
 		"""
 		Lists Roslyn's code fixes and refactorings available at a position (or selection) in a .cs file —
 		each with a stable actionId to pass to apply_code_action. Fixes are driven by the compiler
-		diagnostics at that span; refactorings by the span itself. Line and column are 1-based.
+		diagnostics at that span; refactorings by the span itself. Line and column are 1-based. Prefer
+		discovering a fix here over editing by hand; apply the chosen one with apply_code_action.
 		""")]
 	public async Task<GetCodeActionsResult> GetCodeActions(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

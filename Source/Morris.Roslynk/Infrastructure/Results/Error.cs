@@ -12,7 +12,7 @@ public sealed class Error
 	public IReadOnlyList<string>? Candidates { get; init; }
 	public IReadOnlyList<string>? StaleFiles { get; init; }
 
-	public static Error Indexing(string message = "The solution is still loading; retry shortly.") =>
+	public static Error Indexing(string message = "The solution is still loading; retry this same call shortly. Do not fall back to reading or editing the .cs files directly; loading finishes within seconds to a minute, after which this tool returns the compiler-backed result.") =>
 		new() { Code = ErrorCode.Indexing, Message = message };
 
 	public static Error Faulted(string message) =>

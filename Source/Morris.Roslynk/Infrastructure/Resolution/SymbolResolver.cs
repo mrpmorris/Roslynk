@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Morris.Roslynk.Infrastructure.Resolution;
 
 /// <summary>
-/// Resolves a caller-supplied symbol reference to Roslyn symbols — by fully-qualified (or simple) name,
+/// Resolves a caller-supplied symbol reference to Roslyn symbols; by fully-qualified (or simple) name,
 /// or by a source position. Fuzzy scoring is layered on in a later pass.
 /// </summary>
 public sealed class SymbolResolver
@@ -49,7 +49,7 @@ public sealed class SymbolResolver
 
 	/// <summary>
 	/// Like <see cref="FindByFullyQualifiedNameAsync"/>, but if nothing matches in source it falls back to
-	/// referenced-assembly metadata (BCL / NuGet) via <c>GetTypeByMetadataName</c> — so read tools can
+	/// referenced-assembly metadata (BCL / NuGet) via <c>GetTypeByMetadataName</c>; so read tools can
 	/// resolve, e.g., <c>System.String</c> or <c>System.String.Substring</c>. Generic arity is not
 	/// inferred, so closed generic metadata types are out of scope for v1.
 	/// </summary>
@@ -92,7 +92,7 @@ public sealed class SymbolResolver
 	}
 
 	/// <summary>
-	/// Ranked fully-qualified-name suggestions for a name that did not resolve exactly — source symbols
+	/// Ranked fully-qualified-name suggestions for a name that did not resolve exactly; source symbols
 	/// whose simple name matches case-insensitively or by substring, best first. Used to turn a near-miss
 	/// into actionable candidates rather than an empty result.
 	/// </summary>

@@ -13,7 +13,7 @@ public class RazorGenerationProbeTests
 	/// the per-<c>AdditionalFiles</c> <c>TargetPath</c> metadata the generator needs. So <c>@code</c>
 	/// members and their markup bindings never enter the compilation, which is why Razor read-context
 	/// (semantic find-references into <c>.razor</c>) is not implemented. If a future Roslyn/Razor version
-	/// starts emitting these documents, this test flips — revisit Razor read-context then.
+	/// starts emitting these documents, this test flips; revisit Razor read-context then.
 	/// </summary>
 	[Fact]
 	public async Task RazorSourceGenerationProducesNoDocumentsUnderMSBuildWorkspace()

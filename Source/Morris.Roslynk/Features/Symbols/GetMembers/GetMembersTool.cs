@@ -32,7 +32,9 @@ public sealed class GetMembersTool
 		"""
 		Lists a type's members (methods, properties, fields, events) with kind, accessibility, and
 		signature, resolved by fully-qualified name. Private members and inherited members are excluded
-		unless requested. Ambiguous names return candidate fully-qualified names instead.
+		unless requested. Ambiguous names return candidate fully-qualified names instead. Prefer this over
+		reading the .cs file to see what a type contains; it is the compiler's view, correct across partial
+		classes and (with includeInherited) base types.
 		""")]
 	public async Task<GetMembersResult> GetMembers(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

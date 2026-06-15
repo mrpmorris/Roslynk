@@ -16,7 +16,7 @@ public sealed class FindDeadCodeTool
 	private const string Caveat =
 		"Conservative heuristic: interface implementations, virtual/override chains, tests, generated, and " +
 		"DI/reflection-activated members are excluded, but markup-wired (.razor/.xaml) handlers are not yet " +
-		"resolved — verify a candidate is truly unused before deleting.";
+		"resolved; verify a candidate is truly unused before deleting.";
 
 	private static readonly HashSet<string> TestMethodAttributes = new(StringComparer.Ordinal)
 	{
@@ -59,7 +59,7 @@ public sealed class FindDeadCodeTool
 		"""
 		Finds symbols (types, methods, properties, fields, events) with no references, conservatively filtered
 		to avoid false positives: it excludes interface implementations, virtual/override chains, test members,
-		generated code, and DI/reflection-activated members, and — unless includePublic is true — the public
+		generated code, and DI/reflection-activated members, and; unless includePublic is true; the public
 		API surface. Each candidate carries a confidence and the reason it is suspected; the host decides
 		whether to remove it. Scan is per-symbol, so narrow large solutions with scope.
 		""")]
@@ -152,7 +152,7 @@ public sealed class FindDeadCodeTool
 		(string reason, string confidence) = testReferences > 0
 			? ("Only referenced by test code", "Medium")
 			: IsExternallyVisible(symbol)
-				? ("No references found (public API — may be used externally)", "Medium")
+				? ("No references found (public API; may be used externally)", "Medium")
 				: ("No references found", "High");
 
 		return new DeadCodeCandidate(

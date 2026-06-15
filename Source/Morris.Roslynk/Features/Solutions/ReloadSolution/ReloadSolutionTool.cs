@@ -26,7 +26,7 @@ public sealed class ReloadSolutionTool
 		OpenWorld = false)]
 	[Description(
 		"""
-		Reloads a solution from disk in the background — the cleanup after a project or build-file change the
+		Reloads a solution from disk in the background; the cleanup after a project or build-file change the
 		incremental model cannot absorb. Returns immediately; the previous snapshot keeps serving reads
 		(status Building) until the fresh one is ready. No effect on files.
 		""")]

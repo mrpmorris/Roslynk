@@ -32,7 +32,9 @@ public sealed class GetTypeHierarchyTool
 	[Description(
 		"""
 		Returns a type's base-type chain, implemented interfaces, and known derived types, resolved by
-		fully-qualified name. Ambiguous names return candidate fully-qualified names instead.
+		fully-qualified name. Ambiguous names return candidate fully-qualified names instead. Prefer this
+		over reading files to reconstruct a hierarchy; the chain comes from the compiler, including base
+		types defined in referenced assemblies.
 		""")]
 	public async Task<GetTypeHierarchyResult> GetTypeHierarchy(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

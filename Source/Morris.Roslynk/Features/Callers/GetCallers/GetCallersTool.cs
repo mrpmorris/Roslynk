@@ -32,7 +32,8 @@ public sealed class GetCallersTool
 	[Description(
 		"""
 		Finds the methods that call the resolved method (by fully-qualified name). Ambiguous names return
-		candidate fully-qualified names instead.
+		candidate fully-qualified names instead. Prefer this over grepping for call sites; it resolves the
+		actual method through the compiler, so overloads and same-named methods are not confused.
 		""")]
 	public async Task<GetCallersResult> GetCallers(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

@@ -33,7 +33,9 @@ public sealed class FindReferencesTool
 		"""
 		Finds all references to a symbol across the solution, resolved by fully-qualified name (e.g.
 		'Namespace.Type' or 'Namespace.Type.Member'). If the name resolves to more than one symbol the
-		candidate fully-qualified names are returned instead, so you can disambiguate.
+		candidate fully-qualified names are returned instead, so you can disambiguate. Prefer this over
+		grepping for a name; it matches the compiler's symbol, not text, so it skips comments, strings, and
+		unrelated same-named members and still finds usages in code-behind and partial classes.
 		""")]
 	public async Task<FindReferencesResult> FindReferences(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

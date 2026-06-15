@@ -6,8 +6,8 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Infrastructure.Diagnostics;
 
 /// <summary>
-/// Computes diagnostics for a solution — the compiler pass by default, or the compiler plus the project's
-/// configured analyzers (NetAnalyzers etc.) when requested — optionally limited to one target framework of
+/// Computes diagnostics for a solution; the compiler pass by default, or the compiler plus the project's
+/// configured analyzers (NetAnalyzers etc.) when requested; optionally limited to one target framework of
 /// a multi-targeted project. Running analyzers is slower, so it is opt-in.
 /// </summary>
 public sealed class DiagnosticsService

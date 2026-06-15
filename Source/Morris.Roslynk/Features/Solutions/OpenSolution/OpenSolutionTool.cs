@@ -28,8 +28,8 @@ public sealed class OpenSolutionTool
 		"""
 		Loads a C# solution (.sln or .slnx) into Roslynk so its projects and code can be queried. Returns
 		immediately: the solution loads in the background, so the result's status is Building until it is
-		Ready — poll get_solution_status, or call open_solution again, for the projects. Idempotent: opening
-		the same solution again returns the same instance.
+		Ready; poll get_solution_status every 1 second, or call open_solution again, for the projects.
+		Idempotent: opening the same solution again returns the same instance.
 		""")]
 	public OpenSolutionResult OpenSolution(
 		[Description("Absolute path to the .sln or .slnx file to open.")] string solutionPath)

@@ -36,6 +36,8 @@ public sealed class ApplyCodeActionTool
 		Applies a code action discovered by get_code_actions, identified by its actionId. The action is
 		re-resolved at the same position (nothing is held between calls), then written atomically through the
 		same safe write path as the other tools. Pass checkOnly to preview the changed files without writing.
+		Prefer applying Roslyn's action over re-implementing the change by hand so the in-memory model stays
+		in sync.
 		""")]
 	public async Task<ApplyCodeActionResult> ApplyCodeAction(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
@@ -66,7 +68,7 @@ public sealed class ApplyCodeActionTool
 
 		Solution? changed = await CodeActionService.ComputeChangedSolutionAsync(document, actionRef, cancellationToken);
 		if (changed is null)
-			return Failure(Error.Conflict("The action is no longer available — the code may have changed. Re-run get_code_actions."), actionRef.Key);
+			return Failure(Error.Conflict("The action is no longer available; the code may have changed. Re-run get_code_actions."), actionRef.Key);
 
 		if (checkOnly)
 			return Success(applied: false, ApplyPipeline.GetChangedFilePaths(solution, changed), actionRef.Key);

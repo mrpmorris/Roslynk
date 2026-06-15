@@ -33,7 +33,7 @@ public sealed class ApplyPatchTool
 		Applies a git unified diff to solution-compiled .cs files, located by content (not line numbers) and
 		written atomically. Prefer this over the host's raw file edit for .cs so the in-memory model stays in
 		sync. Hunk headers may omit line numbers (a bare '@@'); a content-anchored hunk must match exactly one
-		place, so include enough surrounding context that it is unambiguous. Edits existing files only — file
+		place, so include enough surrounding context that it is unambiguous. Edits existing files only; file
 		creation/deletion and non-.cs targets are rejected. Pass baseVersions (the documentVersion each file
 		was read at) to be told if a file moved since; pass checkOnly to preview the changed files without
 		writing.

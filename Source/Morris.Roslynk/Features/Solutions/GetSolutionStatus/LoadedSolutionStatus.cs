@@ -4,7 +4,7 @@ namespace Morris.Roslynk.Features.Solutions.GetSolutionStatus;
 
 /// <summary>
 /// A currently-loaded solution: its handle, load status, current snapshot id, and load progress.
-/// <see cref="LoadedProjects"/> is how many projects have loaded so far — a live count while the solution
+/// <see cref="LoadedProjects"/> is how many projects have loaded so far; a live count while the solution
 /// is <see cref="SolutionStatus.Building"/>; <see cref="TotalProjects"/> is the total once known, and is
 /// null until the first load finishes (during the initial load the total is not yet known).
 /// </summary>

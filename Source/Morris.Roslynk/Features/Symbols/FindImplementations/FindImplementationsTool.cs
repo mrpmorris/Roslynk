@@ -33,6 +33,7 @@ public sealed class FindImplementationsTool
 		"""
 		Finds the implementations or overrides of an interface, interface member, or abstract member,
 		resolved by fully-qualified name. Ambiguous names return candidate fully-qualified names instead.
+		Prefer this over reading files to find implementors; it walks the compiler's type graph, not text.
 		""")]
 	public async Task<FindImplementationsResult> FindImplementations(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

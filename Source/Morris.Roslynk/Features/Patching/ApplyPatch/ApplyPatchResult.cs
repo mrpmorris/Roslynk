@@ -35,8 +35,8 @@ public sealed class ApplyPatchStaleFile
 }
 
 /// <summary>
-/// The outcome of <c>apply_patch</c>. On success <see cref="Applied"/> is true — or false for a checkOnly
-/// preview — and <see cref="ChangedFiles"/> lists the affected files with their new versions. Failures are
+/// The outcome of <c>apply_patch</c>. On success <see cref="Applied"/> is true; or false for a checkOnly
+/// preview; and <see cref="ChangedFiles"/> lists the affected files with their new versions. Failures are
 /// carried on <see cref="ResultBase.Error"/>: Stale (the self-healing rebase data also in
 /// <see cref="StaleFiles"/>), NotSupported (offending targets in <see cref="RejectedFiles"/>), Conflict
 /// when a hunk no longer matches, and Invalid when the patch cannot be parsed.

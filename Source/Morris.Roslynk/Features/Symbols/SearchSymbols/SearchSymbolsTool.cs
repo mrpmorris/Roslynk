@@ -30,7 +30,9 @@ public sealed class SearchSymbolsTool
 	[Description(
 		"""
 		Searches source-declared symbols whose name contains the query (case-insensitive), across the
-		solution. Returns up to maxResults matches with a 'truncated' flag when there are more.
+		solution. Returns up to maxResults matches with a 'truncated' flag when there are more. Prefer this
+		over grepping to locate where something is declared; it searches the compiler's declared symbols
+		and returns fully-qualified names you can pass straight to the other tools.
 		""")]
 	public async Task<SearchSymbolsResult> SearchSymbols(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

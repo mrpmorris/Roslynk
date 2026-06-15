@@ -38,7 +38,7 @@ public sealed class ChangeSignatureTool
 	[Description(
 		"""
 		Adds a new optional parameter to a method and, if a call-site value is given, threads it through every
-		invocation as a named argument — collapsing the repeated add-a-parameter cascades that are otherwise
+		invocation as a named argument; collapsing the repeated add-a-parameter cascades that are otherwise
 		redone by hand across files. The parameter must have a default so the change stays backward-compatible.
 		v1 targets a single ordinary method only: it refuses virtual/override/abstract methods, interface
 		members and their implementations, partial methods, params methods, and constructors (returns Not

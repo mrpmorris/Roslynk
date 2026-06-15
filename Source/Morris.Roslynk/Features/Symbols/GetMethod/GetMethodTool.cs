@@ -32,11 +32,12 @@ public sealed class GetMethodTool
 		OpenWorld = false)]
 	[Description(
 		"""
-		Returns a method's full detail — return type, accessibility and modifiers, each parameter (type,
+		Returns a method's full detail; return type, accessibility and modifiers, each parameter (type,
 		optionality, default, ref kind, params), type parameters, location, and normalized documentation —
 		resolved by fully-qualified name. Overloads share a name, so every match is returned as its own
 		entry. If the name resolves only to non-methods, their fully-qualified names are returned instead.
-		Pass includeBody to also get each method's source body.
+		Pass includeBody to also get each method's source body. Prefer this over reading the .cs file to
+		inspect a method; it is the compiler's view and stays correct across partial classes and overloads.
 		""")]
 	public async Task<GetMethodResult> GetMethod(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

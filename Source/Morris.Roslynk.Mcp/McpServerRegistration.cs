@@ -13,7 +13,7 @@ internal static class McpServerRegistration
 		options.ServerInfo = new Implementation
 		{
 			Name = "Roslynk",
-			Title = "Roslynk — C# semantic intelligence",
+			Title = "Roslynk; C# semantic intelligence",
 			Version = "1.0.0"
 		};
 

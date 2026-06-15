@@ -20,7 +20,7 @@ public sealed class InstanceRegistry : IDisposable
 	/// <summary>
 	/// Returns the instance for <paramref name="solutionPath"/>, creating it (and starting its background
 	/// load) if needed, and awaits its first load so the caller sees a ready snapshot. A dirty instance —
-	/// one a build-file edit invalidated — is reloaded here on its next use.
+	/// one a build-file edit invalidated; is reloaded here on its next use.
 	/// </summary>
 	public async Task<RoslynInstance> GetOrAddAsync(string solutionPath)
 	{
@@ -41,7 +41,7 @@ public sealed class InstanceRegistry : IDisposable
 
 	/// <summary>
 	/// Returns the instance for <paramref name="solutionPath"/>, creating it and starting its background
-	/// load if needed, but without awaiting the load — the caller reads <see cref="RoslynInstance.CurrentModel"/>
+	/// load if needed, but without awaiting the load; the caller reads <see cref="RoslynInstance.CurrentModel"/>
 	/// and gets <see cref="SolutionStatus.Building"/> until the first snapshot is ready.
 	/// </summary>
 	public RoslynInstance GetOrBegin(string solutionPath)

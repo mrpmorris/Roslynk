@@ -38,7 +38,8 @@ public sealed class RenameSymbolTool
 		Renames a symbol and all its references across the solution using Roslyn (correct across partial
 		classes and code-behind; string literals and comments are left untouched). Refuses an invalid
 		identifier and reports candidates when the name is ambiguous. Pass checkOnly to preview the
-		files that would change without writing.
+		files that would change without writing. Prefer this over a textual find/replace rename; it renames
+		the symbol itself, so it never touches unrelated same-named text.
 		""")]
 	public async Task<RenameSymbolResult> RenameSymbol(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

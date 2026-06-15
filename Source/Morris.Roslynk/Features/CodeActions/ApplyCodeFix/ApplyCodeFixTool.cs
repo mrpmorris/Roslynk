@@ -35,9 +35,10 @@ public sealed class ApplyCodeFixTool
 		OpenWorld = false)]
 	[Description(
 		"""
-		Applies the code fix for the first occurrence of a diagnostic id (e.g. CS0219) in a .cs file — the
+		Applies the code fix for the first occurrence of a diagnostic id (e.g. CS0219) in a .cs file; the
 		quick path when you already know which diagnostic to clear, without first listing actions. Written
-		atomically through the same safe write path. Pass checkOnly to preview without writing.
+		atomically through the same safe write path. Pass checkOnly to preview without writing. Prefer this
+		over hand-editing the file to clear a diagnostic so the in-memory model stays in sync.
 		""")]
 	public async Task<ApplyCodeActionResult> ApplyCodeFix(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

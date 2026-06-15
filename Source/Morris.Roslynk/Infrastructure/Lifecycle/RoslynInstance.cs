@@ -8,8 +8,8 @@ namespace Morris.Roslynk.Infrastructure.Lifecycle;
 /// <summary>
 /// One loaded solution shared by everyone using it. The current (solution, status) pair lives in an
 /// atomically-swapped <see cref="SolutionModel"/>: the initial load and any rebuild run in the
-/// background, flipping the model to <see cref="SolutionStatus.Building"/> while in flight — still
-/// serving the previous snapshot during a rebuild — and back to <see cref="SolutionStatus.Ready"/> when
+/// background, flipping the model to <see cref="SolutionStatus.Building"/> while in flight; still
+/// serving the previous snapshot during a rebuild; and back to <see cref="SolutionStatus.Ready"/> when
 /// done, so reads never block and never see a torn state. The single-writer lock serializes applied
 /// edits; the last-access stamp lets the registry idle-evict.
 /// </summary>
@@ -43,7 +43,7 @@ public sealed class RoslynInstance : IDisposable
 	public SolutionWorkspace? Workspace => Volatile.Read(ref WorkspaceField);
 
 	/// <summary>
-	/// The number of projects loaded so far in the current (or most recent) load — a live count that climbs
+	/// The number of projects loaded so far in the current (or most recent) load; a live count that climbs
 	/// while the model is <see cref="SolutionStatus.Building"/>, letting the status tool report progress.
 	/// </summary>
 	public int LoadedProjects => Volatile.Read(ref LoadTrackerField).Count;

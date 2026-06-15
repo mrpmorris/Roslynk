@@ -24,7 +24,7 @@ public enum ErrorCode
 	/// <summary>A file changed on disk since it was read; <see cref="Error.StaleFiles"/> lists them. Re-read and retry.</summary>
 	Stale,
 
-	/// <summary>The request itself was malformed — a bad identifier, an unparseable patch, an invalid span.</summary>
+	/// <summary>The request itself was malformed; a bad identifier, an unparseable patch, an invalid span.</summary>
 	Invalid,
 
 	/// <summary>The change could not be applied because it conflicts with the current state.</summary>

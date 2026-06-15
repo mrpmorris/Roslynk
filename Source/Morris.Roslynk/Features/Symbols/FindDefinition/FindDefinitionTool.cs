@@ -31,8 +31,9 @@ public sealed class FindDefinitionTool
 	[Description(
 		"""
 		Resolves the symbol used at a source position (file, 1-based line and column) and returns where it
-		is declared — the 'go to definition' jump, by position. Useful when you have a usage site but not
-		the symbol's name.
+		is declared; the 'go to definition' jump, by position. Useful when you have a usage site but not
+		the symbol's name. Prefer this over grepping or reading files to chase a definition; it follows the
+		compiler's binding, so it lands on the right symbol even when names are overloaded or shadowed.
 		""")]
 	public async Task<FindDefinitionResult> FindDefinition(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

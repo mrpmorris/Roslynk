@@ -34,7 +34,7 @@ public sealed class RemoveUnusedUsingsTool
 	[Description(
 		"""
 		Removes unnecessary using directives (the compiler's CS8019) across the solution, or in one file when
-		documentPath is given — the recurring cleanup after moves and renames. Written atomically through the
+		documentPath is given; the recurring cleanup after moves and renames. Written atomically through the
 		same safe write path as the other tools. Pass checkOnly to preview the changed files without writing.
 		""")]
 	public async Task<RemoveUnusedUsingsResult> RemoveUnusedUsings(
@@ -112,7 +112,7 @@ public sealed class RemoveUnusedUsingsTool
 
 	private static readonly string[] GeneratedSuffixes = [".g.cs", ".g.i.cs", ".designer.cs", ".generated.cs"];
 
-	/// <summary>An on-disk source file we may rewrite — never a generated or obj/bin document.</summary>
+	/// <summary>An on-disk source file we may rewrite; never a generated or obj/bin document.</summary>
 	private static bool IsEditableSource(Document document)
 	{
 		string? path = document.FilePath;

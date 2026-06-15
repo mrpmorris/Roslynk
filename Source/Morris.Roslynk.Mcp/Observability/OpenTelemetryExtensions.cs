@@ -13,7 +13,7 @@ namespace Morris.Roslynk.Mcp.Observability;
 /// <c>OTEL_EXPORTER_OTLP_*</c> configuration; Roslynk writes no transport code.
 /// <para>
 /// OpenTelemetry is only wired when an endpoint is configured (<c>OTEL_EXPORTER_OTLP_ENDPOINT</c>).
-/// With no endpoint there is nothing to export to, so nothing is wired and nothing is emitted — the
+/// With no endpoint there is nothing to export to, so nothing is wired and nothing is emitted; the
 /// server runs exactly as before.
 /// </para>
 /// </summary>

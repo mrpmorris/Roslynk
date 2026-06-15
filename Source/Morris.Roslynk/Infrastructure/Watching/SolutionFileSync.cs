@@ -12,7 +12,7 @@ namespace Morris.Roslynk.Infrastructure.Watching;
 /// noise (our own write, an editor touch, anything under <c>obj</c>/<c>bin</c>) and otherwise route it.
 /// A <c>.cs</c> edit is folded into the snapshot incrementally via <see cref="Solution.WithDocumentText"/>;
 /// a project / props / sln edit marks the instance dirty so the registry reloads it on next use. This is a
-/// freshness optimization, not a correctness mechanism — the apply pipeline's stale-write guard is what
+/// freshness optimization, not a correctness mechanism; the apply pipeline's stale-write guard is what
 /// actually protects the user, so a missed event only costs a stale read until the next one.
 /// </summary>
 public sealed class SolutionFileSync
@@ -106,7 +106,7 @@ public sealed class SolutionFileSync
 	{
 		if (Instance.CurrentSolution.GetDocumentIdsWithFilePath(path).IsEmpty)
 		{
-			// A .cs file that is not (yet) a known document — a new file under a glob, for example. That
+			// A .cs file that is not (yet) a known document; a new file under a glob, for example. That
 			// changes the compilation structurally, so let the next read reload rather than guess.
 			Instance.MarkDirty();
 			return;
@@ -174,7 +174,7 @@ public sealed class SolutionFileSync
 			return; // Could not read it; let a later event decide.
 
 		if (BuildFileBaseline.TryGetValue(path, out string? baseline) && string.Equals(hash, baseline, StringComparison.Ordinal))
-			return; // Unchanged content — a touch or a duplicate event.
+			return; // Unchanged content; a touch or a duplicate event.
 
 		BuildFileBaseline[path] = hash;
 		Instance.MarkDirty();

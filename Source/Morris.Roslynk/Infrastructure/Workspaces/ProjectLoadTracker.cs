@@ -6,8 +6,8 @@ namespace Morris.Roslynk.Infrastructure.Workspaces;
 /// <summary>
 /// Counts the distinct projects an <see cref="MSBuildWorkspace"/> reports while opening a solution, so a
 /// load in flight can surface a live "projects loaded so far" count. A project is counted once per
-/// (file, target framework) — matching how a multi-targeted project becomes one Roslyn project per
-/// framework — and reporting the same project for several load operations (evaluate, resolve, build)
+/// (file, target framework); matching how a multi-targeted project becomes one Roslyn project per
+/// framework; and reporting the same project for several load operations (evaluate, resolve, build)
 /// does not double-count.
 /// </summary>
 public sealed class ProjectLoadTracker : IProgress<ProjectLoadProgress>

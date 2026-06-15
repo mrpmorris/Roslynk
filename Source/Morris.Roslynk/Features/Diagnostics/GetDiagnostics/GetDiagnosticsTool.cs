@@ -34,7 +34,8 @@ public sealed class GetDiagnosticsTool
 		includeInfo, or includeHidden to widen the result (all default false, so by default only errors are
 		returned). Per-severity counts are always included so filtering is never silent, and errors are
 		listed first. Analyzers (NetAnalyzers / IDE rules) run by default for a richer result; set
-		includeAnalyzers false to skip them for a faster compiler-only pass.
+		includeAnalyzers false to skip them for a faster compiler-only pass. Prefer this over reading files
+		to hunt for problems; it returns the compiler's and analyzers' own diagnostics with exact locations.
 		""")]
 	public async Task<GetDiagnosticsResult> GetDiagnostics(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
