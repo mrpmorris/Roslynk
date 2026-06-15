@@ -5,8 +5,8 @@ namespace Morris.Roslynk.Infrastructure.Workspaces;
 /// <summary>
 /// Expresses an absolute source path relative to the solution's directory, so results carry short,
 /// portable paths instead of machine-specific absolute ones. A file outside the solution folder (a linked
-/// document) walks out with '..'. The path is returned unchanged when it is null/empty or there is no
-/// solution directory to anchor against.
+/// document) walks out with '..'. Emitted paths always use '/' as the separator regardless of OS; a
+/// null/empty path is returned as-is. <see cref="ToAbsolute"/> is the inverse for caller-supplied paths.
 /// </summary>
 public static class SolutionRelativePath
 {
@@ -15,10 +15,14 @@ public static class SolutionRelativePath
 
 	public static string? Of(string? solutionDirectory, string? absolutePath)
 	{
-		if (string.IsNullOrEmpty(absolutePath) || string.IsNullOrEmpty(solutionDirectory))
+		if (string.IsNullOrEmpty(absolutePath))
 			return absolutePath;
 
-		return Path.GetRelativePath(solutionDirectory, absolutePath);
+		string relative = string.IsNullOrEmpty(solutionDirectory)
+			? absolutePath
+			: Path.GetRelativePath(solutionDirectory, absolutePath);
+
+		return relative.Replace('\\', '/');
 	}
 
 	/// <summary>

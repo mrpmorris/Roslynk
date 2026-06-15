@@ -5,11 +5,11 @@ namespace Morris.Roslynk.Tests.Infrastructure.Workspaces;
 public class SolutionRelativePathTests
 {
 	[Fact]
-	public void WhenThePathIsUnderTheSolutionDirectory_ThenItIsMadeRelative()
+	public void WhenThePathIsUnderTheSolutionDirectory_ThenItIsMadeRelativeWithForwardSlashes()
 	{
 		string? result = SolutionRelativePath.Of(@"C:\sln", @"C:\sln\src\App.cs");
 
-		Assert.Equal(Path.Combine("src", "App.cs"), result);
+		Assert.Equal("src/App.cs", result);
 	}
 
 	[Fact]
@@ -17,15 +17,15 @@ public class SolutionRelativePathTests
 	{
 		string? result = SolutionRelativePath.Of(@"C:\sln\app", @"C:\sln\shared\Linked.cs");
 
-		Assert.Equal(Path.Combine("..", "shared", "Linked.cs"), result);
+		Assert.Equal("../shared/Linked.cs", result);
 	}
 
 	[Fact]
-	public void WhenTheSolutionDirectoryIsUnknown_ThenThePathIsReturnedUnchanged()
+	public void WhenTheSolutionDirectoryIsUnknown_ThenTheAbsolutePathIsReturnedWithForwardSlashes()
 	{
 		string? result = SolutionRelativePath.Of((string?)null, @"C:\sln\src\App.cs");
 
-		Assert.Equal(@"C:\sln\src\App.cs", result);
+		Assert.Equal("C:/sln/src/App.cs", result);
 	}
 
 	[Fact]
@@ -58,5 +58,13 @@ public class SolutionRelativePathTests
 		string result = SolutionRelativePath.ToAbsolute(@"C:\sln\app", Path.Combine("..", "shared", "B.cs"));
 
 		Assert.Equal(@"C:\sln\shared\B.cs", result);
+	}
+
+	[Fact]
+	public void WhenToAbsoluteIsGivenForwardSlashes_ThenTheyAreConvertedToTheOsDelimiter()
+	{
+		string result = SolutionRelativePath.ToAbsolute(@"C:\sln", "src/nested/App.cs");
+
+		Assert.Equal(Path.Combine(@"C:\sln", "src", "nested", "App.cs"), result);
 	}
 }

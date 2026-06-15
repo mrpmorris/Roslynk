@@ -35,7 +35,7 @@ public class FindDefinitionTests
 
 		string solutionDir = Path.GetDirectoryName(TestSolutions.Simple)!;
 		string callerPath = Path.Combine(solutionDir, "SimpleLibrary", "Caller.cs");
-		string relativePath = Path.GetRelativePath(solutionDir, callerPath);
+		string relativePath = Path.GetRelativePath(solutionDir, callerPath).Replace('\\', '/');
 		string text = await File.ReadAllTextAsync(callerPath);
 		(int line, int column) = ToLineColumn(text, text.IndexOf("Greeter", StringComparison.Ordinal));
 
