@@ -126,6 +126,45 @@ public class ApplyPatchTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
 
+	[Fact]
+	public async Task WhenTheHunkHeaderHasNoLineNumbers_ThenTheFileIsStillUpdated()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		string original = await File.ReadAllTextAsync(greeter);
+		string patch = BuildBareFullReplacePatch(GreeterRelativePath, original, original + "// patched\n");
+
+		ApplyPatchResult result = await subject.ApplyPatch(solutionPath, patch);
+
+		Assert.True(result.IsSuccess);
+		Assert.True(result.Applied);
+		Assert.Contains("// patched", await File.ReadAllTextAsync(greeter));
+	}
+
+	[Fact]
+	public async Task WhenAFilePatchHasNoHunks_ThenItIsRejected()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		string original = await File.ReadAllTextAsync(greeter);
+		string patch = $"--- a/{GreeterRelativePath}\n+++ b/{GreeterRelativePath}\n";
+
+		ApplyPatchResult result = await subject.ApplyPatch(solutionPath, patch);
+
+		Assert.False(result.IsSuccess);
+		Assert.Equal(ErrorCode.Invalid, result.Error!.Code);
+		Assert.False(result.Applied);
+		Assert.Equal(original, await File.ReadAllTextAsync(greeter));
+	}
+
 	private static async Task<string> ReadSnapshotTextAsync(RoslynInstance instance, string path)
 	{
 		Microsoft.CodeAnalysis.Solution solution = instance.CurrentSolution;
@@ -142,6 +181,23 @@ public class ApplyPatchTests
 		builder.Append($"--- a/{relativePath}\n");
 		builder.Append($"+++ b/{relativePath}\n");
 		builder.Append($"@@ -1,{oldLines.Count} +1,{newLines.Count} @@\n");
+		foreach (string line in oldLines)
+			builder.Append('-').Append(line).Append('\n');
+		foreach (string line in newLines)
+			builder.Append('+').Append(line).Append('\n');
+
+		return builder.ToString();
+	}
+
+	private static string BuildBareFullReplacePatch(string relativePath, string originalText, string newText)
+	{
+		List<string> oldLines = SplitWithoutEol(originalText);
+		List<string> newLines = SplitWithoutEol(newText);
+
+		var builder = new StringBuilder();
+		builder.Append($"--- a/{relativePath}\n");
+		builder.Append($"+++ b/{relativePath}\n");
+		builder.Append("@@\n");
 		foreach (string line in oldLines)
 			builder.Append('-').Append(line).Append('\n');
 		foreach (string line in newLines)

@@ -5,7 +5,9 @@ namespace Morris.Roslynk.Infrastructure.Patching;
 /// <summary>
 /// Parses a git-style unified diff into <see cref="FilePatch"/>es. It is lenient about the surrounding
 /// noise (<c>diff --git</c>, <c>index</c>, mode lines) and reads each hunk body by the line counts in its
-/// <c>@@</c> header, so trailing prose after a patch does not bleed into a hunk.
+/// <c>@@</c> header, so trailing prose after a patch does not bleed into a hunk. A bare <c>@@</c> header
+/// with no <c>-l,s +l,s</c> ranges is also accepted (this tool locates hunks by content): the body is then
+/// read up to the next structural delimiter and the lengths are derived from it.
 /// </summary>
 public static partial class UnifiedDiffParser
 {
@@ -57,19 +59,22 @@ public static partial class UnifiedDiffParser
 			if (line.StartsWith("@@", StringComparison.Ordinal) && hunks is not null)
 			{
 				Match header = HunkHeaderRegex().Match(line);
-				if (!header.Success)
-				{
-					i++;
-					continue;
-				}
 
-				int oldStart = int.Parse(header.Groups[1].Value);
-				int oldLength = header.Groups[2].Success ? int.Parse(header.Groups[2].Value) : 1;
-				int newStart = int.Parse(header.Groups[3].Value);
-				int newLength = header.Groups[4].Success ? int.Parse(header.Groups[4].Value) : 1;
+				// A bare "@@" (no line numbers) is accepted as a content-anchored hunk: read its body up to
+				// the next delimiter and derive the lengths from it. A ranged header is parsed as before.
+				int oldStart = header.Success ? int.Parse(header.Groups[1].Value) : 1;
+				int newStart = header.Success ? int.Parse(header.Groups[3].Value) : 1;
+				int? oldLength = header.Success ? (header.Groups[2].Success ? int.Parse(header.Groups[2].Value) : 1) : null;
+				int? newLength = header.Success ? (header.Groups[4].Success ? int.Parse(header.Groups[4].Value) : 1) : null;
 
 				(IReadOnlyList<HunkLine> body, int consumed) = ReadHunkBody(lines, i + 1, oldLength, newLength);
-				hunks.Add(new Hunk(oldStart, oldLength, newStart, newLength, body));
+				if (body.Count > 0)
+				{
+					int resolvedOld = oldLength ?? body.Count(hunkLine => hunkLine.Kind != HunkLineKind.Added);
+					int resolvedNew = newLength ?? body.Count(hunkLine => hunkLine.Kind != HunkLineKind.Removed);
+					hunks.Add(new Hunk(oldStart, resolvedOld, newStart, resolvedNew, header.Success, body));
+				}
+
 				i += 1 + consumed;
 				continue;
 			}
@@ -81,20 +86,29 @@ public static partial class UnifiedDiffParser
 		return files;
 	}
 
-	private static (IReadOnlyList<HunkLine> Lines, int Consumed) ReadHunkBody(string[] lines, int start, int oldLength, int newLength)
+	private static (IReadOnlyList<HunkLine> Lines, int Consumed) ReadHunkBody(string[] lines, int start, int? oldLength, int? newLength)
 	{
 		var body = new List<HunkLine>();
 		int oldSeen = 0;
 		int newSeen = 0;
 		int i = start;
 
-		while (i < lines.Length && (oldSeen < oldLength || newSeen < newLength))
+		while (i < lines.Length)
 		{
+			// When the header declared line counts, stop once both are satisfied.
+			if (oldLength is int ol && newLength is int nl && oldSeen >= ol && newSeen >= nl)
+				break;
+
 			string line = lines[i];
 
 			// A blank line in the file is encoded as " " (a lone space), so a truly-empty line is not a
 			// hunk body line — it is the artifact of the patch's final newline, ending the hunk.
 			if (line.Length == 0)
+				break;
+
+			// With no declared counts the body runs to the next structural delimiter, so a following file
+			// or hunk header is not mistaken for a removed/added body line.
+			if ((oldLength is null || newLength is null) && IsStructuralDelimiter(lines, i))
 				break;
 
 			char marker = line[0];
@@ -127,6 +141,16 @@ public static partial class UnifiedDiffParser
 		}
 
 		return (body, i - start);
+	}
+
+	private static bool IsStructuralDelimiter(string[] lines, int i)
+	{
+		string line = lines[i];
+		return line.StartsWith("@@", StringComparison.Ordinal)
+			|| line.StartsWith("diff --git ", StringComparison.Ordinal)
+			|| (line.StartsWith("--- ", StringComparison.Ordinal)
+				&& i + 1 < lines.Length
+				&& lines[i + 1].StartsWith("+++ ", StringComparison.Ordinal));
 	}
 
 	private static (string? Path, bool DevNull) ParsePath(string raw)

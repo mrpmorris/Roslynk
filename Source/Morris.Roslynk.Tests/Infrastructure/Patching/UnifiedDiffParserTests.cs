@@ -84,4 +84,55 @@ public class UnifiedDiffParserTests
 		Assert.Equal("A.cs", result[0].NewPath);
 		Assert.Equal("B.cs", result[1].NewPath);
 	}
+
+	[Fact]
+	public void WhenTheHunkHeaderHasNoLineNumbers_ThenTheHunkIsStillParsed()
+	{
+		const string patch =
+			"--- a/x.cs\n" +
+			"+++ b/x.cs\n" +
+			"@@\n" +
+			" context\n" +
+			"-old\n" +
+			"+new1\n" +
+			"+new2\n";
+
+		FilePatch file = Assert.Single(UnifiedDiffParser.Parse(patch));
+
+		Hunk hunk = Assert.Single(file.Hunks);
+		Assert.False(hunk.HasExplicitPosition);
+		Assert.Equal(4, hunk.Lines.Count);
+		Assert.Equal(HunkLineKind.Context, hunk.Lines[0].Kind);
+		Assert.Equal(HunkLineKind.Removed, hunk.Lines[1].Kind);
+		Assert.Equal(HunkLineKind.Added, hunk.Lines[2].Kind);
+		Assert.Equal(HunkLineKind.Added, hunk.Lines[3].Kind);
+
+		// Lengths are derived from the body: old = context + removed, new = context + added.
+		Assert.Equal(2, hunk.OldLength);
+		Assert.Equal(3, hunk.NewLength);
+	}
+
+	[Fact]
+	public void WhenABareHunkHeaderIsFollowedByAnotherFile_ThenTheBodyStopsAtTheNextHeader()
+	{
+		const string patch =
+			"--- a/A.cs\n" +
+			"+++ b/A.cs\n" +
+			"@@\n" +
+			"-a\n" +
+			"+A\n" +
+			"--- a/B.cs\n" +
+			"+++ b/B.cs\n" +
+			"@@\n" +
+			"-b\n" +
+			"+B\n";
+
+		IReadOnlyList<FilePatch> result = UnifiedDiffParser.Parse(patch);
+
+		Assert.Equal(2, result.Count);
+		Hunk first = Assert.Single(result[0].Hunks);
+		Assert.Equal(2, first.Lines.Count); // -a / +A only; the next file's "--- " header is not consumed.
+		Assert.Equal("B.cs", result[1].NewPath);
+		Assert.Single(result[1].Hunks);
+	}
 }

@@ -100,6 +100,74 @@ public class PatchApplierTests
 		Assert.Equal("a\nB", result.NewText);
 	}
 
+	[Fact]
+	public void WhenAContentAnchoredHunkMatchesUniquely_ThenItApplies()
+	{
+		string original = "a\nb\nc\n";
+		FilePatch patch = ParseSingle(
+			"@@\n" +
+			" a\n" +
+			"-b\n" +
+			"+B\n" +
+			" c\n");
+
+		PatchApplyResult result = PatchApplier.Apply(original, patch);
+
+		Assert.True(result.Success);
+		Assert.Equal("a\nB\nc\n", result.NewText);
+	}
+
+	[Fact]
+	public void WhenAContentAnchoredHunkMatchesMoreThanOnce_ThenItIsAmbiguousAndFails()
+	{
+		string original = "dup\ndup\n";
+		FilePatch patch = ParseSingle(
+			"@@\n" +
+			"-dup\n" +
+			"+changed\n");
+
+		PatchApplyResult result = PatchApplier.Apply(original, patch);
+
+		Assert.False(result.Success);
+		Assert.Contains("matched 2", result.FailureReason!);
+	}
+
+	[Fact]
+	public void WhenALineNumberedHunkTargetsOneOfTwoIdenticalBlocks_ThenItUsesItsLineNumber()
+	{
+		string original = "dup\nmid\ndup\n";
+		FilePatch patch = ParseSingle(
+			"@@ -3,1 +3,1 @@\n" +
+			"-dup\n" +
+			"+changed\n");
+
+		PatchApplyResult result = PatchApplier.Apply(original, patch);
+
+		Assert.True(result.Success);
+		Assert.Equal("dup\nmid\nchanged\n", result.NewText);
+	}
+
+	[Fact]
+	public void WhenAFileHasMultipleHunks_ThenAnEarlyInsertionDoesNotOffsetLaterHunks()
+	{
+		string original = "top\nmid\nbottom\n";
+		FilePatch patch = UnifiedDiffParser.Parse(
+			"--- a/x.cs\n" +
+			"+++ b/x.cs\n" +
+			"@@ -1,1 +1,3 @@\n" +
+			" top\n" +
+			"+inserted1\n" +
+			"+inserted2\n" +
+			"@@ -3,1 +3,1 @@\n" +
+			"-bottom\n" +
+			"+BOTTOM\n").Single();
+
+		PatchApplyResult result = PatchApplier.Apply(original, patch);
+
+		Assert.True(result.Success);
+		Assert.Equal("top\ninserted1\ninserted2\nmid\nBOTTOM\n", result.NewText);
+	}
+
 	private static FilePatch ParseSingle(string hunk) =>
 		UnifiedDiffParser.Parse("--- a/x.cs\n+++ b/x.cs\n" + hunk).Single();
 }

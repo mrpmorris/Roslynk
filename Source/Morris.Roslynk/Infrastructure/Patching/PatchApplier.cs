@@ -2,10 +2,12 @@ namespace Morris.Roslynk.Infrastructure.Patching;
 
 /// <summary>
 /// Applies a <see cref="FilePatch"/> to a file's text by content, not by trusting line numbers: each
-/// hunk's old side (context + removed lines) is located in the current text — at the header's line first,
-/// then searching outward — and replaced with its new side. Matching is exact on content, so a hunk whose
-/// surroundings have genuinely changed fails rather than corrupting the file. The file's own newline style
-/// and trailing-newline state are preserved regardless of the patch's line endings.
+/// hunk's old side (context + removed lines) is located in the current text and replaced with its new side.
+/// A hunk whose header carried line numbers is anchored at that line first, then searched outward; a bare
+/// (content-anchored) hunk must match exactly one place, otherwise it is rejected as ambiguous rather than
+/// guessed. Matching is exact on content, so a hunk whose surroundings have genuinely changed fails rather
+/// than corrupting the file. The file's own newline style and trailing-newline state are preserved
+/// regardless of the patch's line endings.
 /// </summary>
 public static class PatchApplier
 {
@@ -33,11 +35,30 @@ public static class PatchApplier
 					newBlock.Add(hunkLine.Text);
 			}
 
-			int hint = hunk.OldStart - 1 + offset;
-			int at = FindBlock(lines, oldBlock, hint);
-			if (at < 0)
-				return PatchApplyResult.Fail(
-					$"Hunk @@ -{hunk.OldStart},{hunk.OldLength} +{hunk.NewStart},{hunk.NewLength} @@ did not match the current file content.");
+			int at;
+			if (hunk.HasExplicitPosition)
+			{
+				int hint = hunk.OldStart - 1 + offset;
+				at = FindBlock(lines, oldBlock, hint);
+				if (at < 0)
+					return PatchApplyResult.Fail(
+						$"Hunk @@ -{hunk.OldStart},{hunk.OldLength} +{hunk.NewStart},{hunk.NewLength} @@ did not match the current file content.");
+			}
+			else
+			{
+				if (oldBlock.Count == 0)
+					return PatchApplyResult.Fail(
+						"A content-anchored hunk with no context or removed lines cannot be located; add context lines or include @@ line numbers.");
+
+				(int index, int matchCount) = FindUniqueBlock(lines, oldBlock);
+				if (matchCount == 0)
+					return PatchApplyResult.Fail("A content-anchored hunk did not match the current file content.");
+				if (matchCount > 1)
+					return PatchApplyResult.Fail(
+						$"A content-anchored hunk matched {matchCount} locations; add more context lines or include @@ line numbers to disambiguate.");
+
+				at = index;
+			}
 
 			lines.RemoveRange(at, oldBlock.Count);
 			lines.InsertRange(at, newBlock);
@@ -90,6 +111,27 @@ public static class PatchApplier
 		}
 
 		return -1;
+	}
+
+	private static (int Index, int MatchCount) FindUniqueBlock(List<string> lines, List<string> block)
+	{
+		int maxStart = lines.Count - block.Count;
+		if (maxStart < 0)
+			return (-1, 0);
+
+		int first = -1;
+		int count = 0;
+		for (int start = 0; start <= maxStart; start++)
+		{
+			if (!MatchesAt(lines, block, start))
+				continue;
+
+			if (first < 0)
+				first = start;
+			count++;
+		}
+
+		return (first, count);
 	}
 
 	private static bool MatchesAt(List<string> lines, List<string> block, int start)
