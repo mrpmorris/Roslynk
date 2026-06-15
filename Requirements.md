@@ -185,7 +185,7 @@ App|M:Sales.CustomerService.GetAsync(System.String)
 * [ ] `search_symbols(query, kind, project, namespace, maxResults)`
 * [ ] `get_symbol(symbolId)`
 * [ ] `get_type(typeId)`
-* [ ] `get_method(methodId)`
+* [ ] `get_method(methodId, includeBody)`
 * [ ] `get_members(typeId, includePrivate, includeInherited)`
 * [ ] `get_source_span(symbolId)`
 * [ ] `find_definition(...)` — resolve a usage to its declaration; accepts a `(filePath, line, column)` position as readily as a symbol reference (the host frequently has a location, not an ID). Named to match the `find_references` / `find_implementations` family.
@@ -193,6 +193,7 @@ App|M:Sales.CustomerService.GetAsync(System.String)
 * [ ] `get_type_hierarchy(typeId)` — base-type chain, implemented interfaces, and known derived types in one view.
 * [ ] Every symbol-taking tool here accepts **any** of the three identifier forms from *Symbol resolution* (doc-comment ID | fuzzy FQN | position) via the shared `resolve_symbol` helper — the model rarely has an exact ID.
 * [ ] Make `get_symbol`/`get_method` "fat" — fold source span + signature + accessibility + containing type into the one call, so a single round-trip is enough to act.
+* [x] **`get_method` can return the source body.** `get_method` returns *metadata* (signature, return type, params, modifiers, location, docs); pass `includeBody: true` to also get the method's source body — the block or expression body — in `MethodDto.Body`, or `null` for methods with no body in source (abstract, interface, metadata). Shipped as a single tool with an optional parameter rather than splitting into `get_method_signature` / `get_method_source`, which keeps the common metadata path cheap and avoids an extra tool to choose between. Apply the same `includeBody` option to `get_symbol` / `get_type` if they have the same gap.
 * [ ] Keep list-style tools (`search_symbols`, `get_members`) lean; defer documentation enrichment to Tier 2.
 
 ### 1.3 References + rename (the highest-value refactor — and the one that caused real bugs by hand)
