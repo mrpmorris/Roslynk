@@ -6,7 +6,7 @@ namespace Morris.Roslynk.Mcp.Hosting;
 /// </summary>
 public static class LoopbackOnlyExtensions
 {
-	public const int DefaultPort = 5099;
+	public const int DefaultPort = 6502;
 
 	public static WebApplicationBuilder AddLoopbackOnlyKestrel(this WebApplicationBuilder builder)
 	{

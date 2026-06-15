@@ -1,8 +1,9 @@
 var builder = DistributedApplication.CreateBuilder(args);
 
-// The MCP host binds Kestrel to loopback http://localhost:5099 itself (see LoopbackOnlyExtensions) and
-// ignores any injected URLs, so bypass its launch profile and declare that exact unproxied endpoint.
-builder.AddProject<Projects.Morris_Roslynk_Mcp>("roslynk-mcp", launchProfileName: null)
-	.WithHttpEndpoint(port: 5099, isProxied: false);
+// Use an explicit project launch profile so Visual Studio launches the MCP project itself instead of
+// falling back to a broken executable-style launch. The MCP host still binds Kestrel to loopback
+// http://localhost:6502 itself (see LoopbackOnlyExtensions), so declare that exact unproxied endpoint.
+builder.AddProject<Projects.Morris_Roslynk_Mcp>("roslynk-mcp", launchProfileName: "Aspire")
+	.WithHttpEndpoint(port: 6502, isProxied: false);
 
 builder.Build().Run();
