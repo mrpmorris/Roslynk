@@ -1,0 +1,18 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.4.4">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+		<UserSecretsId>7a5a8fb5-0c4e-4730-a410-4bb0a099f444</UserSecretsId>
+		<!--
+			Dev-only orchestration host. Audit our own (direct) packages but not Aspire's transitive
+			graph, which currently pulls MessagePack 2.5.192 (GHSA-hv8m-jj95-wg3x); there is no patched
+			2.5.x to pin to and this project never ships, so failing the build on it adds no safety.
+		-->
+		<NuGetAuditMode>direct</NuGetAuditMode>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Morris.Roslynk.Mcp\Morris.Roslynk.Mcp.csproj" />
+	</ItemGroup>
+
+</Project>

@@ -1,6 +1,7 @@
 <Solution>
 	<Project Path="Morris.Roslynk/Morris.Roslynk.csproj" />
 	<Project Path="Morris.Roslynk.Mcp/Morris.Roslynk.Mcp.csproj" />
+	<Project Path="Morris.Roslynk.AppHost/Morris.Roslynk.AppHost.csproj" />
 	<Project Path="Morris.Roslynk.Tests/Morris.Roslynk.Tests.csproj" />
 	<Project Path="Morris.Roslynk.McpTests/Morris.Roslynk.McpTests.csproj" />
 </Solution>
