@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Observability;
 
 namespace Morris.Roslynk.Infrastructure.Writing;
 
@@ -18,17 +20,21 @@ public sealed class ApplyPipeline
 		if (updated is null)
 			throw new ArgumentNullException(nameof(updated));
 
-		await instance.WriteLock.WaitAsync(cancellationToken);
-		try
+		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("apply_changes"))
 		{
-			IReadOnlyList<PendingWrite> writes = await BuildWritesAsync(instance.CurrentSolution, updated, cancellationToken);
-			await AtomicFileWriter.WriteAllAsync(writes, cancellationToken);
-			instance.AdvanceTo(updated);
-			return writes.Select(write => write.FilePath).ToArray();
-		}
-		finally
-		{
-			instance.WriteLock.Release();
+			await instance.WriteLock.WaitAsync(cancellationToken);
+			try
+			{
+				IReadOnlyList<PendingWrite> writes = await BuildWritesAsync(instance.CurrentSolution, updated, cancellationToken);
+				await AtomicFileWriter.WriteAllAsync(writes, cancellationToken);
+				instance.AdvanceTo(updated);
+				activity?.SetTag("roslynk.changed.count", writes.Count);
+				return writes.Select(write => write.FilePath).ToArray();
+			}
+			finally
+			{
+				instance.WriteLock.Release();
+			}
 		}
 	}
 

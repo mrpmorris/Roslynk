@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
+using Morris.Roslynk.Infrastructure.Observability;
 
 namespace Morris.Roslynk.Infrastructure.Workspaces;
 
@@ -38,10 +40,16 @@ public sealed class SolutionWorkspace : IDisposable
 		var loadDiagnostics = new ConcurrentBag<string>();
 		MSBuildWorkspace workspace = MSBuildWorkspace.Create();
 
-		using (workspace.RegisterWorkspaceFailedHandler(e => loadDiagnostics.Add(e.Diagnostic.Message)))
+		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("load_solution"))
 		{
-			Solution solution = await workspace.OpenSolutionAsync(solutionPath, progress, cancellationToken);
-			return new SolutionWorkspace(workspace, solution, loadDiagnostics.ToArray());
+			activity?.SetTag("roslynk.solution.path", ActivityTags.Truncate(solutionPath));
+
+			using (workspace.RegisterWorkspaceFailedHandler(e => loadDiagnostics.Add(e.Diagnostic.Message)))
+			{
+				Solution solution = await workspace.OpenSolutionAsync(solutionPath, progress, cancellationToken);
+				activity?.SetTag("roslynk.project.count", solution.Projects.Count());
+				return new SolutionWorkspace(workspace, solution, loadDiagnostics.ToArray());
+			}
 		}
 	}
 

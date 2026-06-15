@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.Text;
+using Morris.Roslynk.Infrastructure.Observability;
 
 namespace Morris.Roslynk.Infrastructure.Resolution;
 
@@ -25,26 +27,32 @@ public sealed class SymbolResolver
 		if (string.IsNullOrWhiteSpace(name))
 			return [];
 
-		bool qualified = name.Contains('.');
-		string simpleName = qualified ? name[(name.LastIndexOf('.') + 1)..] : name;
-
-		var seen = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
-		var matches = new List<ISymbol>();
-
-		foreach (Project project in solution.Projects)
+		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("resolve_symbol"))
 		{
-			foreach (ISymbol symbol in await SymbolFinder.FindDeclarationsAsync(project, simpleName, ignoreCase: false, cancellationToken))
+			activity?.SetTag("roslynk.symbol.name", ActivityTags.Truncate(name));
+
+			bool qualified = name.Contains('.');
+			string simpleName = qualified ? name[(name.LastIndexOf('.') + 1)..] : name;
+
+			var seen = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
+			var matches = new List<ISymbol>();
+
+			foreach (Project project in solution.Projects)
 			{
-				bool isMatch = qualified
-					? string.Equals(FullyQualifiedName(symbol), name, StringComparison.Ordinal)
-					: string.Equals(symbol.Name, name, StringComparison.Ordinal);
+				foreach (ISymbol symbol in await SymbolFinder.FindDeclarationsAsync(project, simpleName, ignoreCase: false, cancellationToken))
+				{
+					bool isMatch = qualified
+						? string.Equals(FullyQualifiedName(symbol), name, StringComparison.Ordinal)
+						: string.Equals(symbol.Name, name, StringComparison.Ordinal);
 
-				if (isMatch && seen.Add(symbol))
-					matches.Add(symbol);
+					if (isMatch && seen.Add(symbol))
+						matches.Add(symbol);
+				}
 			}
-		}
 
-		return matches;
+			activity?.SetTag("roslynk.match.count", matches.Count);
+			return matches;
+		}
 	}
 
 	/// <summary>
@@ -147,22 +155,29 @@ public sealed class SymbolResolver
 	/// </summary>
 	public async Task<ISymbol?> ResolveAtPositionAsync(Solution solution, string filePath, int line, int column, CancellationToken cancellationToken = default)
 	{
-		Document? document = FindDocument(solution, filePath);
-		if (document is null)
-			return null;
+		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("resolve_position"))
+		{
+			activity?.SetTag("roslynk.file.path", ActivityTags.Truncate(filePath));
+			activity?.SetTag("roslynk.line", line);
+			activity?.SetTag("roslynk.column", column);
 
-		SourceText text = await document.GetTextAsync(cancellationToken);
-		if (line < 1 || line > text.Lines.Count)
-			return null;
+			Document? document = FindDocument(solution, filePath);
+			if (document is null)
+				return null;
 
-		TextLine textLine = text.Lines[line - 1];
-		int position = Math.Min(textLine.Start + Math.Max(0, column - 1), textLine.End);
+			SourceText text = await document.GetTextAsync(cancellationToken);
+			if (line < 1 || line > text.Lines.Count)
+				return null;
 
-		SemanticModel? semanticModel = await document.GetSemanticModelAsync(cancellationToken);
-		if (semanticModel is null)
-			return null;
+			TextLine textLine = text.Lines[line - 1];
+			int position = Math.Min(textLine.Start + Math.Max(0, column - 1), textLine.End);
 
-		return await SymbolFinder.FindSymbolAtPositionAsync(semanticModel, position, solution.Workspace, cancellationToken);
+			SemanticModel? semanticModel = await document.GetSemanticModelAsync(cancellationToken);
+			if (semanticModel is null)
+				return null;
+
+			return await SymbolFinder.FindSymbolAtPositionAsync(semanticModel, position, solution.Workspace, cancellationToken);
+		}
 	}
 
 	private static Document? FindDocument(Solution solution, string filePath)

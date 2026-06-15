@@ -1,6 +1,8 @@
 using System.Collections.Immutable;
+using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
+using Morris.Roslynk.Infrastructure.Observability;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.Diagnostics;
@@ -17,28 +19,36 @@ public sealed class DiagnosticsService
 		if (solution is null)
 			throw new ArgumentNullException(nameof(solution));
 
-		var results = new List<Diagnostic>();
-		foreach (Project project in solution.Projects)
+		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("compute_diagnostics"))
 		{
-			if (!ProjectFramework.Matches(project, targetFramework))
-				continue;
+			activity?.SetTag("roslynk.analyzers", includeAnalyzers);
+			if (targetFramework is not null)
+				activity?.SetTag("roslynk.target.framework", ActivityTags.Truncate(targetFramework));
 
-			Compilation? compilation = await project.GetCompilationAsync(cancellationToken);
-			if (compilation is null)
-				continue;
+			var results = new List<Diagnostic>();
+			foreach (Project project in solution.Projects)
+			{
+				if (!ProjectFramework.Matches(project, targetFramework))
+					continue;
 
-			if (includeAnalyzers && TryGetAnalyzers(project, out ImmutableArray<DiagnosticAnalyzer> analyzers))
-			{
-				CompilationWithAnalyzers withAnalyzers = compilation.WithAnalyzers(analyzers, project.AnalyzerOptions);
-				results.AddRange(await withAnalyzers.GetAllDiagnosticsAsync(cancellationToken));
+				Compilation? compilation = await project.GetCompilationAsync(cancellationToken);
+				if (compilation is null)
+					continue;
+
+				if (includeAnalyzers && TryGetAnalyzers(project, out ImmutableArray<DiagnosticAnalyzer> analyzers))
+				{
+					CompilationWithAnalyzers withAnalyzers = compilation.WithAnalyzers(analyzers, project.AnalyzerOptions);
+					results.AddRange(await withAnalyzers.GetAllDiagnosticsAsync(cancellationToken));
+				}
+				else
+				{
+					results.AddRange(compilation.GetDiagnostics(cancellationToken));
+				}
 			}
-			else
-			{
-				results.AddRange(compilation.GetDiagnostics(cancellationToken));
-			}
+
+			activity?.SetTag("roslynk.diagnostic.count", results.Count);
+			return results;
 		}
-
-		return results;
 	}
 
 	private static bool TryGetAnalyzers(Project project, out ImmutableArray<DiagnosticAnalyzer> analyzers)

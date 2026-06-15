@@ -39,7 +39,8 @@ public static class OpenTelemetryExtensions
 			.WithTracing(tracing => tracing
 				.AddSource(RoslynkActivitySource.Name)
 				.AddSource(McpToolTraceNaming.McpActivitySourceName)
-				.AddAspNetCoreInstrumentation()
+				.AddAspNetCoreInstrumentation(instrumentation =>
+					instrumentation.EnrichWithHttpRequest = McpToolTraceNaming.RecordSessionId)
 				.AddProcessor(new McpToolSpanNameProcessor()))
 			.WithMetrics(metrics => metrics
 				.AddMeter(RoslynkMeter.Name)

@@ -49,4 +49,94 @@ public class GetMembersTests
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
+
+	[Fact]
+	public async Task WhenANameFilterEndsWithAStar_ThenOnlyPrefixMatchesAreReturned()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMembersTool(registry, new SymbolResolver());
+
+		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String", nameFilter: "Sub*");
+
+		Assert.True(result.IsSuccess);
+		Assert.Contains(result.Members!, member => member.Name == "Substring");
+		Assert.All(result.Members!, member => Assert.StartsWith("Sub", member.Name, StringComparison.OrdinalIgnoreCase));
+	}
+
+	[Fact]
+	public async Task WhenANameFilterHasNoStar_ThenItMatchesAsACaseInsensitiveSubstring()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMembersTool(registry, new SymbolResolver());
+
+		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String", nameFilter: "ubSTR");
+
+		Assert.True(result.IsSuccess);
+		Assert.Contains(result.Members!, member => member.Name == "Substring");
+		Assert.All(result.Members!, member => Assert.Contains("ubstr", member.Name, StringComparison.OrdinalIgnoreCase));
+	}
+
+	[Fact]
+	public async Task WhenMethodsAreExcluded_ThenNoMethodsAreReturnedButOtherKindsRemain()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMembersTool(registry, new SymbolResolver());
+
+		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String", includeMethods: false);
+
+		Assert.True(result.IsSuccess);
+		Assert.DoesNotContain(result.Members!, member => member.Kind == "Method");
+		Assert.Contains(result.Members!, member => member.Name == "Length");
+	}
+
+	[Fact]
+	public async Task WhenOnlyFieldsAreRequested_ThenOtherKindsAreExcluded()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMembersTool(registry, new SymbolResolver());
+
+		GetMembersResult result = await subject.GetMembers(
+			TestSolutions.Simple,
+			"System.String",
+			includeMethods: false,
+			includeProperties: false,
+			includeEvents: false,
+			includeNestedTypes: false);
+
+		Assert.True(result.IsSuccess);
+		Assert.NotEmpty(result.Members!);
+		Assert.All(result.Members!, member => Assert.Equal("Field", member.Kind));
+		Assert.Contains(result.Members!, member => member.Name == "Empty");
+	}
+
+	[Fact]
+	public async Task WhenANameFilterMatchesButItsKindIsExcluded_ThenItIsNotReturned()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMembersTool(registry, new SymbolResolver());
+
+		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String", nameFilter: "Length", includeProperties: false);
+
+		Assert.True(result.IsSuccess);
+		Assert.DoesNotContain(result.Members!, member => member.Name == "Length");
+	}
+
+	[Fact]
+	public async Task WhenNoFiltersAreGiven_ThenMethodsAndPropertiesAreBothReturned()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetMembersTool(registry, new SymbolResolver());
+
+		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String");
+
+		Assert.True(result.IsSuccess);
+		Assert.Contains(result.Members!, member => member.Kind == "Method");
+		Assert.Contains(result.Members!, member => member.Kind == "Property");
+	}
 }

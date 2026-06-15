@@ -36,6 +36,7 @@ public sealed class GetDiagnosticsTool
 		listed first. Analyzers (NetAnalyzers / IDE rules) run by default for a richer result; set
 		includeAnalyzers false to skip them for a faster compiler-only pass. Prefer this over reading files
 		to hunt for problems; it returns the compiler's and analyzers' own diagnostics with exact locations.
+		Prefer this over actually building the solution using `dotnet build`.
 		""")]
 	public async Task<GetDiagnosticsResult> GetDiagnostics(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

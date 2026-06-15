@@ -32,7 +32,9 @@ public sealed class GetMembersTool
 		"""
 		Lists a type's members (methods, properties, fields, events) with kind, accessibility, and
 		signature, resolved by fully-qualified name. Private members and inherited members are excluded
-		unless requested. Ambiguous names return candidate fully-qualified names instead. Prefer this over
+		unless requested. Narrow a large type with nameFilter (a trailing '*' matches by prefix, otherwise
+		a case-insensitive substring) and the include* kind toggles; these compose with includePrivate and
+		includeInherited. Ambiguous names return candidate fully-qualified names instead. Prefer this over
 		reading the .cs file to see what a type contains; it is the compiler's view, correct across partial
 		classes and (with includeInherited) base types.
 		""")]
@@ -40,7 +42,13 @@ public sealed class GetMembersTool
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the type, e.g. 'MyNamespace.MyType'.")] string typeName,
 		[Description("Include private members. Default false.")] bool includePrivate = false,
-		[Description("Include members inherited from base types. Default false.")] bool includeInherited = false)
+		[Description("Include members inherited from base types. Default false.")] bool includeInherited = false,
+		[Description("Optional case-insensitive filter on member name: a trailing '*' matches by prefix (e.g. 'Search*'), otherwise it is a substring match. Default null (no name filtering).")] string? nameFilter = null,
+		[Description("Include method members. Default true.")] bool includeMethods = true,
+		[Description("Include field members. Default true.")] bool includeFields = true,
+		[Description("Include property members. Default true.")] bool includeProperties = true,
+		[Description("Include event members. Default true.")] bool includeEvents = true,
+		[Description("Include nested type members. Default true.")] bool includeNestedTypes = true)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
@@ -68,9 +76,32 @@ public sealed class GetMembersTool
 
 		INamedTypeSymbol type = types[0];
 
+		bool NameMatches(string name)
+		{
+			if (string.IsNullOrEmpty(nameFilter))
+				return true;
+			if (nameFilter.EndsWith('*'))
+				return name.StartsWith(nameFilter[..^1], StringComparison.OrdinalIgnoreCase);
+
+			return name.Contains(nameFilter, StringComparison.OrdinalIgnoreCase);
+		}
+
+		bool KindIncluded(ISymbol member) =>
+			member.Kind switch
+			{
+				SymbolKind.Method => includeMethods,
+				SymbolKind.Field => includeFields,
+				SymbolKind.Property => includeProperties,
+				SymbolKind.Event => includeEvents,
+				SymbolKind.NamedType => includeNestedTypes,
+				_ => true,
+			};
+
 		MemberDto[] members = Collect(type, includeInherited)
 			.Where(member => !member.IsImplicitlyDeclared)
 			.Where(member => includePrivate || member.DeclaredAccessibility != Accessibility.Private)
+			.Where(KindIncluded)
+			.Where(member => NameMatches(member.Name))
 			.Select(member => new MemberDto(member.Name, member.Kind.ToString(), member.DeclaredAccessibility.ToString(), member.ToDisplayString()))
 			.ToArray();
 
