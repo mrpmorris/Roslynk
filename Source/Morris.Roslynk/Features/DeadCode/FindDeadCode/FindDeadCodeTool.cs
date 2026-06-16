@@ -61,14 +61,15 @@ public sealed class FindDeadCodeTool
 		generated code, and DI/reflection-activated members, and (unless includePublic is true) the public API
 		surface. {OutlineDescriptions.TextNotJson} Candidates nest file -> namespace -> type -> member:
 
-		  <relative/forward-slash/path.cs>
-		  \t<namespace>
-		  \t\t<typeKind>,<typeName>
-		  \t\t\t<memberKind>,<memberName>,<loc>,<confidence> <reason>
+		  <name.ext>
+		  \t<relative/forward-slash/path.cs>
+		  \t\t<namespace>
+		  \t\t\t<typeKind>,<typeName>
+		  \t\t\t\t<memberKind>,<memberName>,<loc>,<confidence> <reason>
 		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; confidence is High or
 		Medium, and the free-text reason is last; a dead type is itself a leaf carrying its own loc. The loc is
 		the full declaration span, ready to pass to apply_patch to remove the member. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
-		solutions with scope. {OutlineDescriptions.TruncationFlag} {OutlineDescriptions.ErrorBlock}
+		solutions with scope. {OutlineDescriptions.TruncationFlag} {OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock}
 		""")]
 	public async Task<string> FindDeadCode(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
@@ -139,7 +140,8 @@ public sealed class FindDeadCodeTool
 		var root = new SymbolNode();
 		foreach (Candidate candidate in results)
 		{
-			SymbolNode node = root.Child(candidate.File).Child(candidate.Namespace);
+			SymbolNode start = candidate.Project is string project ? root.Child(project) : root;
+			SymbolNode node = start.Child(candidate.File).Child(candidate.Namespace);
 			foreach (string type in candidate.ContainingTypes)
 				node = node.Child(type);
 
@@ -180,6 +182,7 @@ public sealed class FindDeadCodeTool
 		string file = span is { } located
 			? SolutionRelativePath.Of(solutionDirectory, located.Path)!
 			: NoLocationBucket;
+		string? project = reference is null ? null : ProjectName.Of(solution, reference.SyntaxTree);
 		string @namespace = NamespaceOf(symbol);
 		IReadOnlyList<string> containingTypes = ContainingTypesOf(symbol);
 
@@ -188,7 +191,7 @@ public sealed class FindDeadCodeTool
 			? $"{head},{FormatRange(range)},{confidence} {reason}"
 			: $"{head},{confidence} {reason}";
 
-		return new Candidate(file, @namespace, containingTypes, leaf);
+		return new Candidate(project, file, @namespace, containingTypes, leaf);
 	}
 
 	private static string NamespaceOf(ISymbol symbol)
@@ -211,13 +214,15 @@ public sealed class FindDeadCodeTool
 
 	private sealed class Candidate
 	{
+		public string? Project { get; }
 		public string File { get; }
 		public string Namespace { get; }
 		public IReadOnlyList<string> ContainingTypes { get; }
 		public string Leaf { get; }
 
-		public Candidate(string file, string @namespace, IReadOnlyList<string> containingTypes, string leaf)
+		public Candidate(string? project, string file, string @namespace, IReadOnlyList<string> containingTypes, string leaf)
 		{
+			Project = project;
 			File = file;
 			Namespace = @namespace;
 			ContainingTypes = containingTypes;

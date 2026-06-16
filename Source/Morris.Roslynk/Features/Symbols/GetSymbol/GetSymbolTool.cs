@@ -45,7 +45,7 @@ public sealed class GetSymbolTool
 
 		  private Task Search(CancellationToken cancellationToken)
 		A metadata symbol (no source) instead returns '#source=metadata', '#kind', '#signature', '#assembly'.
-		An ambiguous name returns a 'file -> namespace -> containing type(s) -> kind,name,loc' locator tree to
+		An ambiguous name returns a 'project -> file -> namespace -> containing type(s) -> kind,name,loc' locator tree to
 		disambiguate. {OutlineDescriptions.Project}. {OutlineDescriptions.ErrorBlock} Prefer this over reading the file to identify a symbol.
 		""")]
 	public async Task<string> GetSymbol(
@@ -113,7 +113,7 @@ public sealed class GetSymbolTool
 	{
 		var root = new SymbolNode();
 		foreach (ISymbol symbol in matches)
-			SymbolPlacement.Place(root, symbol, solutionDirectory);
+			SymbolPlacement.Place(root, symbol, model.Solution!, solutionDirectory);
 
 		var builder = new OutlineBuilder();
 		builder.Status(model.Status);

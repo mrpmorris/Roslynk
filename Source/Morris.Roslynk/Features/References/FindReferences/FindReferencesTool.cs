@@ -38,12 +38,13 @@ public sealed class FindReferencesTool
 		reference under file -> namespace -> type(s) -> member, so a shared declaration is printed once:
 		  #resolvedSymbol=<fully-qualified name>
 
-		  <relative/forward-slash/path.cs>
-		  \t<namespace, or "<global>">
-		  \t\t<typeKind>,<typeName>,<loc|loc|...>   (locations present only when the type declaration itself references the symbol)
-		  \t\t\t<memberKind>,<memberName>,<loc|loc|...>
+		  <name.ext>
+		  \t<relative/forward-slash/path.cs>
+		  \t\t<namespace, or "<global>">
+		  \t\t\t<typeKind>,<typeName>,<loc|loc|...>   (locations present only when the type declaration itself references the symbol)
+		  \t\t\t\t<memberKind>,<memberName>,<loc|loc|...>
 		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.Loc}; {OutlineDescriptions.LocList}; {OutlineDescriptions.ListFieldQuoting}.
-		{OutlineDescriptions.Truncation} {OutlineDescriptions.ErrorBlock} Prefer this over grepping: it matches the compiler's symbol, not text,
+		{OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock} Prefer this over grepping: it matches the compiler's symbol, not text,
 		so it skips comments, strings and unrelated same-named members, and still finds usages in code-behind
 		and partial classes.
 		""")]
@@ -99,7 +100,10 @@ public sealed class FindReferencesTool
 			EnclosingPath enclosing = await EnclosingDeclaration.ResolveAsync(solution, location, cancellationToken);
 			FileLinePositionSpan span = location.GetLineSpan();
 
-			SymbolNode node = root
+			SymbolNode fileParent = location.SourceTree is SyntaxTree tree && ProjectName.Of(solution, tree) is string project
+				? root.Child(project)
+				: root;
+			SymbolNode node = fileParent
 				.Child(SolutionRelativePath.Of(solutionDirectory, span.Path)!)
 				.Child(enclosing.Namespace);
 			foreach (EnclosingSegment segment in enclosing.Segments)

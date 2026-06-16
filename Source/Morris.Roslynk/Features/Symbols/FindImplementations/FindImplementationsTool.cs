@@ -38,10 +38,11 @@ public sealed class FindImplementationsTool
 		each as '<typeKind>,<typeName>,<loc>' where {OutlineDescriptions.Loc}:
 		  #resolvedSymbol=<fully-qualified name>
 
-		  <relative/forward-slash/path.cs>
-		  \t<namespace>
-		  \t\t<typeKind>,<typeName>,<loc>
-		{OutlineDescriptions.ListFieldQuoting} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to find implementors; it walks the
+		  <name.ext>
+		  \t<relative/forward-slash/path.cs>
+		  \t\t<namespace>
+		  \t\t\t<typeKind>,<typeName>,<loc>
+		{OutlineDescriptions.ListFieldQuoting} {OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to find implementors; it walks the
 		compiler's type graph, not text.
 		""")]
 	public async Task<string> FindImplementations(
@@ -74,7 +75,7 @@ public sealed class FindImplementationsTool
 
 		var root = new SymbolNode();
 		foreach (ISymbol implementation in implementations)
-			SymbolPlacement.Place(root, implementation, solutionDirectory);
+			SymbolPlacement.Place(root, implementation, model.Solution, solutionDirectory);
 
 		var builder = new OutlineBuilder();
 		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(symbol));

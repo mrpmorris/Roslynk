@@ -15,14 +15,18 @@ public static class SymbolPlacement
 	public const string MetadataBucket = "<metadata>";
 	public const string GlobalNamespace = "<global>";
 
-	public static void Place(SymbolNode root, ISymbol symbol, string? solutionDirectory)
+	public static void Place(SymbolNode root, ISymbol symbol, Solution solution, string? solutionDirectory)
 	{
 		Location? location = symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
 		string file = location?.SourceTree?.FilePath is string path
 			? SolutionRelativePath.Of(solutionDirectory, path)!
 			: MetadataBucket;
 
-		SymbolNode node = root.Child(file).Child(NamespaceOf(symbol));
+		SymbolNode start = location?.SourceTree is SyntaxTree tree && ProjectName.Of(solution, tree) is string project
+			? root.Child(project)
+			: root;
+
+		SymbolNode node = start.Child(file).Child(NamespaceOf(symbol));
 
 		var parents = new List<INamedTypeSymbol>();
 		for (INamedTypeSymbol? containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)

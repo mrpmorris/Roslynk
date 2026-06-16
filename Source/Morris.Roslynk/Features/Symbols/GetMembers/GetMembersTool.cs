@@ -39,13 +39,14 @@ public sealed class GetMembersTool
 		them (or '<metadata>' for a referenced assembly), each as:
 		  #resolvedType=<fully-qualified type>
 
-		  <relative/forward-slash/path.cs>
-		  \t<memberKind>,<name>,<loc>,<paramType|paramType|...>
+		  <name.ext>
+		  \t<relative/forward-slash/path.cs>
+		  \t\t<memberKind>,<name>,<loc>,<paramType|paramType|...>
 		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; the loc is empty for a metadata member; the trailing signature is a pipe-delimited list of minimally-qualified parameter types, present only for methods that take parameters. To read a member's
 		body, resolve its path against the solution folder and read startLine through endLine. Private and
 		inherited members are excluded unless requested; narrow a large type with nameFilter (a trailing '*'
 		matches by prefix, otherwise a case-insensitive substring) and the include* kind toggles.
-		{OutlineDescriptions.ErrorBlock} Prefer this over reading the .cs file; it is the compiler's view,
+		{OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock} Prefer this over reading the .cs file; it is the compiler's view,
 		correct across partial classes and (with includeInherited) base types.
 		""")]
 	public async Task<string> GetMembers(
@@ -112,32 +113,39 @@ public sealed class GetMembersTool
 			.Where(member => NameMatches(member.Name))
 			.ToList();
 
-		var byFile = new SortedDictionary<string, List<(int Order, string Line)>>(StringComparer.Ordinal);
-		foreach (ISymbol member in members)
-		{
-			(string file, int order, string line) = Render(member, solutionDirectory);
-			if (!byFile.TryGetValue(file, out List<(int, string)>? lines))
-				byFile[file] = lines = [];
-
-			lines.Add((order, line));
-		}
+		var entries = members.Select(member => Render(member, model.Solution, solutionDirectory)).ToList();
 
 		var builder = new OutlineBuilder();
 		builder.Header("resolvedType", SymbolResolver.FullyQualifiedName(type));
 		builder.Status(model.Status);
 		builder.BeginBody();
 
-		foreach (KeyValuePair<string, List<(int Order, string Line)>> file in byFile)
+		var byProject = entries
+			.GroupBy(entry => entry.Project)
+			.OrderBy(group => group.Key is null)
+			.ThenBy(group => group.Key, StringComparer.Ordinal);
+
+		foreach (var project in byProject)
 		{
-			builder.Line(0, file.Key);
-			foreach ((int _, string line) in file.Value.OrderBy(entry => entry.Order).ThenBy(entry => entry.Line, StringComparer.Ordinal))
-				builder.Line(1, line);
+			int fileDepth = 0;
+			if (project.Key is string projectName)
+			{
+				builder.Line(0, projectName);
+				fileDepth = 1;
+			}
+
+			foreach (var file in project.GroupBy(entry => entry.File).OrderBy(group => group.Key, StringComparer.Ordinal))
+			{
+				builder.Line(fileDepth, file.Key);
+				foreach (var entry in file.OrderBy(item => item.Order).ThenBy(item => item.Line, StringComparer.Ordinal))
+					builder.Line(fileDepth + 1, entry.Line);
+			}
 		}
 
 		return builder.ToString();
 	}
 
-	private static (string File, int Order, string Line) Render(ISymbol member, string? solutionDirectory)
+	private static (string? Project, string File, int Order, string Line) Render(ISymbol member, Solution solution, string? solutionDirectory)
 	{
 		SyntaxReference? reference = member.DeclaringSyntaxReferences.FirstOrDefault();
 		FileLinePositionSpan? span = reference?.SyntaxTree.GetLineSpan(reference.Span);
@@ -145,6 +153,7 @@ public sealed class GetMembersTool
 		string file = span is { } located
 			? SolutionRelativePath.Of(solutionDirectory, located.Path)!
 			: MetadataBucket;
+		string? project = reference is null ? null : ProjectName.Of(solution, reference.SyntaxTree);
 		int order = span is { } start ? start.StartLinePosition.Line + 1 : 0;
 
 		string location = span is { } range
@@ -156,7 +165,7 @@ public sealed class GetMembersTool
 		if (member is IMethodSymbol { Parameters.Length: > 0 } method)
 			line += "," + Signature(method);
 
-		return (file, order, line);
+		return (project, file, order, line);
 	}
 
 	private static string Signature(IMethodSymbol method) =>

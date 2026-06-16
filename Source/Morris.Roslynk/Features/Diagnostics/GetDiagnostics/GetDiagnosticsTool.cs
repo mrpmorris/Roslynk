@@ -41,13 +41,14 @@ public sealed class GetDiagnosticsTool
 		  #infos=<n>
 		  #hidden=<n>
 
-		  <relative/forward-slash/path.cs>
-		  \t<severity>
-		  \t\t<id>,<line:col> <message>
+		  <name.ext>
+		  \t<relative/forward-slash/path.cs>
+		  \t\t<severity>
+		  \t\t\t<id>,<line:col> <message>
 		where severity is the plural group errors|warnings|infos|hidden and the free-text message is last. Errors are always
 		included; set includeWarnings, includeInfo, or includeHidden to widen (all default false). Analyzers
 		(NetAnalyzers / IDE rules) run by default; set includeAnalyzers false for a faster compiler-only pass.
-		{OutlineDescriptions.ErrorBlock} Prefer this over reading files to hunt for problems, and over running
+		{OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to hunt for problems, and over running
 		`dotnet build`; it returns the compiler's and analyzers' own diagnostics with exact locations.
 		""")]
 	public async Task<string> GetDiagnostics(
@@ -86,33 +87,51 @@ public sealed class GetDiagnosticsTool
 		builder.Status(model.Status);
 		builder.BeginBody();
 
-		IEnumerable<IGrouping<string, Diagnostic>> byFile = items
-			.GroupBy(diagnostic => FileOf(diagnostic, solutionDirectory))
-			.OrderBy(group => group.Key, StringComparer.Ordinal);
+		IEnumerable<IGrouping<string?, Diagnostic>> byProject = items
+			.GroupBy(diagnostic => ProjectOf(diagnostic, model.Solution))
+			.OrderBy(group => group.Key is null)
+			.ThenBy(group => group.Key, StringComparer.Ordinal);
 
-		foreach (IGrouping<string, Diagnostic> file in byFile)
+		foreach (IGrouping<string?, Diagnostic> project in byProject)
 		{
-			builder.Line(0, file.Key);
-
-			IEnumerable<IGrouping<DiagnosticSeverity, Diagnostic>> bySeverity = file
-				.GroupBy(diagnostic => diagnostic.Severity)
-				.OrderByDescending(group => group.Key);
-
-			foreach (IGrouping<DiagnosticSeverity, Diagnostic> severity in bySeverity)
+			int fileDepth = 0;
+			if (project.Key is string projectName)
 			{
-				builder.Line(1, SeverityLabel(severity.Key));
+				builder.Line(0, projectName);
+				fileDepth = 1;
+			}
 
-				IEnumerable<Diagnostic> ordered = severity
-					.OrderBy(diagnostic => diagnostic.Location.GetLineSpan().StartLinePosition.Line)
-					.ThenBy(diagnostic => diagnostic.Location.GetLineSpan().StartLinePosition.Character);
+			IEnumerable<IGrouping<string, Diagnostic>> byFile = project
+				.GroupBy(diagnostic => FileOf(diagnostic, solutionDirectory))
+				.OrderBy(group => group.Key, StringComparer.Ordinal);
 
-				foreach (Diagnostic diagnostic in ordered)
-					builder.Line(2, EntryText(diagnostic));
+			foreach (IGrouping<string, Diagnostic> file in byFile)
+			{
+				builder.Line(fileDepth, file.Key);
+
+				IEnumerable<IGrouping<DiagnosticSeverity, Diagnostic>> bySeverity = file
+					.GroupBy(diagnostic => diagnostic.Severity)
+					.OrderByDescending(group => group.Key);
+
+				foreach (IGrouping<DiagnosticSeverity, Diagnostic> severity in bySeverity)
+				{
+					builder.Line(fileDepth + 1, SeverityLabel(severity.Key));
+
+					IEnumerable<Diagnostic> ordered = severity
+						.OrderBy(diagnostic => diagnostic.Location.GetLineSpan().StartLinePosition.Line)
+						.ThenBy(diagnostic => diagnostic.Location.GetLineSpan().StartLinePosition.Character);
+
+					foreach (Diagnostic diagnostic in ordered)
+						builder.Line(fileDepth + 2, EntryText(diagnostic));
+				}
 			}
 		}
 
 		return builder.ToString();
 	}
+
+	private static string? ProjectOf(Diagnostic diagnostic, Solution solution) =>
+		diagnostic.Location.SourceTree is SyntaxTree tree ? ProjectName.Of(solution, tree) : null;
 
 	private static string FileOf(Diagnostic diagnostic, string? solutionDirectory) =>
 		diagnostic.Location.IsInSource

@@ -17,6 +17,7 @@ public class GetDiagnosticsTests
 
 		Assert.DoesNotContain("#error=", result);
 		Assert.DoesNotContain("#errors=0", result);
+		Assert.Contains(".csproj\n", result);
 		Assert.Contains("\terrors\n", result);
 		Assert.Contains("\t\tCS0029,", result);
 	}

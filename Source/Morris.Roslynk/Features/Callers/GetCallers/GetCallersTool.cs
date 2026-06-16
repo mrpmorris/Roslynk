@@ -38,12 +38,13 @@ public sealed class GetCallersTool
 		caller's declaration location:
 		  #resolvedSymbol=<fully-qualified name>
 
-		  <relative/forward-slash/path.cs>
-		  \t<namespace>
-		  \t\t<typeKind>,<typeName>
-		  \t\t\t<memberKind>,<memberName>,<loc>
+		  <name.ext>
+		  \t<relative/forward-slash/path.cs>
+		  \t\t<namespace>
+		  \t\t\t<typeKind>,<typeName>
+		  \t\t\t\t<memberKind>,<memberName>,<loc>
 		where kind is one of {OutlineDescriptions.KindList} and {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}.
-		{OutlineDescriptions.ErrorBlock} Prefer this over grepping for call sites; it resolves the actual
+		{OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock} Prefer this over grepping for call sites; it resolves the actual
 		method through the compiler, so overloads and same-named methods are not confused.
 		""")]
 	public async Task<string> GetCallers(
@@ -82,7 +83,7 @@ public sealed class GetCallersTool
 
 		var root = new SymbolNode();
 		foreach (ISymbol caller in callers)
-			SymbolPlacement.Place(root, caller, solutionDirectory);
+			SymbolPlacement.Place(root, caller, model.Solution, solutionDirectory);
 
 		var builder = new OutlineBuilder();
 		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(symbol));

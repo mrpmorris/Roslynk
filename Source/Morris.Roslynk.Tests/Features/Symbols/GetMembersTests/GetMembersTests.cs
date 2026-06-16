@@ -105,6 +105,8 @@ public class GetMembersTests
 	{
 		string result = await RunAsync("SimpleLibrary.Greeter", nameFilter: "Greet");
 
+		Assert.Contains("SimpleLibrary.csproj\n", result);
+
 		string fileLine = result.Split('\n').First(line => line.EndsWith("Greeter.cs", StringComparison.Ordinal));
 		Assert.False(Path.IsPathRooted(fileLine), $"expected a solution-relative path, got '{fileLine}'");
 		Assert.DoesNotContain('\\', fileLine);

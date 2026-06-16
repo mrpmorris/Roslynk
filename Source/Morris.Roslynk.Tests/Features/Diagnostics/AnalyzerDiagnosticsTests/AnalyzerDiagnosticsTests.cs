@@ -53,13 +53,17 @@ public class AnalyzerDiagnosticsTests
 		var ids = new List<string>();
 		foreach (string raw in text.Split('\n'))
 		{
-			// Entries sit at depth 2 ('\t\t<id>,<line:col> <message>') under their severity group; the id leads.
-			if (!raw.StartsWith("\t\t", StringComparison.Ordinal))
+			if (!raw.StartsWith('\t'))
 				continue;
 
+			// An entry is '<id>,<line:col> <message>' or '<id> <message>'; structural lines (project, file,
+			// severity label) have no comma or space, so skip them and take the leading id from the rest.
 			string content = raw.TrimStart('\t');
 			int cut = content.IndexOfAny([',', ' ']);
-			ids.Add(cut < 0 ? content : content[..cut]);
+			if (cut < 0)
+				continue;
+
+			ids.Add(content[..cut]);
 		}
 
 		return ids;

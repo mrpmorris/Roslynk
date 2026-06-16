@@ -47,6 +47,7 @@ public class FindDeadCodeTests
 	{
 		string result = await RunAsync();
 
+		Assert.Contains("SimpleLibrary.csproj\n", result);
 		Assert.Contains("\tSimpleLibrary\n", result);
 		Assert.Contains("\t\tclass,Widget\n", result);
 		Assert.Contains("\t\t\tmethod,Unused,", result);
@@ -93,7 +94,7 @@ public class FindDeadCodeTests
 	/// </summary>
 	private static IReadOnlyList<string> DeadLeaves(string text)
 	{
-		var names = new Dictionary<int, string>();
+		var byDepth = new Dictionary<int, (string Name, bool HasComma)>();
 		var leaves = new List<string>();
 
 		foreach (string line in text.Split('\n'))
@@ -105,26 +106,28 @@ public class FindDeadCodeTests
 			while (depth < line.Length && line[depth] == '\t')
 				depth++;
 
-			if (depth == 0)
-			{
-				names.Clear();
-				continue;
-			}
-
 			string content = line[depth..];
 			string[] parts = content.Split(',');
-			names[depth] = parts.Length == 1 ? content : parts[1];
-			foreach (int deeper in names.Keys.Where(key => key > depth).ToList())
-				names.Remove(deeper);
+			bool hasComma = parts.Length > 1;
+			byDepth[depth] = (hasComma ? parts[1] : content, hasComma);
+			foreach (int deeper in byDepth.Keys.Where(key => key > depth).ToList())
+				byDepth.Remove(deeper);
 
 			bool isLeaf = parts.Length >= 4
 				&& (parts[3].StartsWith("High", StringComparison.Ordinal) || parts[3].StartsWith("Medium", StringComparison.Ordinal));
 			if (!isLeaf)
 				continue;
 
+			// Walk up from the member leaf, collecting the type chain (comma nodes) and the namespace (the
+			// first no-comma node); stop there, so the file and project nodes above are excluded.
 			var segments = new List<string>();
-			for (int level = 1; level <= depth; level++)
-				segments.Add(names[level]);
+			for (int level = depth; level >= 0 && byDepth.ContainsKey(level); level--)
+			{
+				(string name, bool comma) = byDepth[level];
+				segments.Insert(0, name);
+				if (!comma)
+					break;
+			}
 
 			leaves.Add(string.Join('.', segments));
 		}
