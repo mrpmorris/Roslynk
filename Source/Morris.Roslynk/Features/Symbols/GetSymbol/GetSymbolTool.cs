@@ -3,7 +3,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -36,7 +35,7 @@ public sealed class GetSymbolTool
 	[Description(
 		$"""
 		Returns a symbol's declaration, resolved by fully-qualified name. {OutlineDescriptions.TextNotJson} A
-		single source match is lean by default: a '#path=<relative/path.cs>' and
+		single source match returns a '#path=<relative/path.cs>' and
 		'#loc=<startLine:startCol-endLine:endCol>' header, a blank line, then the verbatim declaration cut
 		before its body (the opening brace or '=>'). The declaration line itself conveys accessibility, kind,
 		return type, name and parameters, so those are not repeated. Example:
@@ -44,16 +43,13 @@ public sealed class GetSymbolTool
 		  #loc=196:5-214:6
 
 		  private Task Search(CancellationToken cancellationToken)
-		A metadata symbol (no source) instead returns '#kind', '#signature', '#assembly'. An ambiguous name
-		returns a 'file -> namespace -> containing type(s) -> kind,name,loc' locator tree to
-		disambiguate. Pass format=full for the verbose fields (#fullName, #accessibility, #source)
-		and a doc summary when globally-resolvable types or staleness matter.
-		{OutlineDescriptions.ErrorBlock} Prefer this over reading the file to identify a symbol.
+		A metadata symbol (no source) instead returns '#source=metadata', '#kind', '#signature', '#assembly'.
+		An ambiguous name returns a 'file -> namespace -> containing type(s) -> kind,name,loc' locator tree to
+		disambiguate. {OutlineDescriptions.ErrorBlock} Prefer this over reading the file to identify a symbol.
 		""")]
 	public async Task<string> GetSymbol(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'.")] string symbolName,
-		[Description("Output detail: 'lean' (default) is path + loc + the verbatim declaration; 'full' adds the fully-qualified headline fields and doc summary.")] string format = "lean",
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
@@ -77,10 +73,7 @@ public sealed class GetSymbolTool
 		if (matches.Count > 1)
 			return Locator(matches, model, solutionDirectory);
 
-		bool full = string.Equals(format, "full", StringComparison.OrdinalIgnoreCase);
-		return full
-			? DetailFull(matches[0], model, solutionDirectory)
-			: await DetailLeanAsync(matches[0], solutionDirectory, cancellationToken);
+		return await DetailLeanAsync(matches[0], solutionDirectory, cancellationToken);
 	}
 
 	private async Task<string> DetailLeanAsync(ISymbol symbol, string? solutionDirectory, CancellationToken cancellationToken)
@@ -101,9 +94,10 @@ public sealed class GetSymbolTool
 		return builder.ToString();
 	}
 
-	private string MetadataLean(ISymbol symbol)
+	private static string MetadataLean(ISymbol symbol)
 	{
 		var builder = new OutlineBuilder();
+		builder.Header("source", "metadata");
 		builder.Header("kind", SymbolKindText.Of(symbol));
 		builder.Header("signature", symbol.ToDisplayString());
 		if (symbol.ContainingAssembly is { } assembly)
@@ -112,53 +106,7 @@ public sealed class GetSymbolTool
 		return builder.ToString();
 	}
 
-	private string DetailFull(ISymbol symbol, SolutionModel model, string? solutionDirectory)
-	{
-		Location? location = symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
-
-		var builder = new OutlineBuilder();
-		builder.Header("fullName", SymbolResolver.FullyQualifiedName(symbol));
-		builder.Header("kind", SymbolKindText.Of(symbol));
-		builder.Header("accessibility", symbol.DeclaredAccessibility.ToString().ToLowerInvariant());
-		builder.Header("signature", symbol.ToDisplayString());
-		builder.Header("source", location is null ? "metadata" : "source");
-
-		if (location is null)
-		{
-			if (symbol.ContainingAssembly is { } assembly)
-				builder.Header("assembly", assembly.Name);
-		}
-		else
-		{
-			FileLinePositionSpan span = location.GetLineSpan();
-			string path = SolutionRelativePath.Of(solutionDirectory, span.Path)!;
-			builder.Header("location", $"{path}:{span.StartLinePosition.Line + 1}:{span.StartLinePosition.Character + 1}");
-		}
-
-		builder.Status(model.Status);
-
-		SymbolDocumentation documentation = DocumentationReader.Read(symbol);
-		if (documentation.Summary is not null || documentation.InheritedFrom is not null)
-		{
-			builder.BeginBody();
-			if (documentation.Summary is { } summary)
-				builder.Line(0, "summary: " + OutlineBuilder.Sanitize(summary));
-
-			if (documentation.InheritedFrom is { } inherited)
-			{
-				string where = inherited.SourcePath is { } source
-					? " " + SolutionRelativePath.Of(solutionDirectory, source)
-					: inherited.Assembly is { } assembly
-						? " " + assembly
-						: "";
-				builder.Line(0, $"inheritedFrom: {inherited.Symbol}{where}");
-			}
-		}
-
-		return builder.ToString();
-	}
-
-	private string Locator(IReadOnlyList<ISymbol> matches, SolutionModel model, string? solutionDirectory)
+	private static string Locator(IReadOnlyList<ISymbol> matches, SolutionModel model, string? solutionDirectory)
 	{
 		var root = new SymbolNode();
 		foreach (ISymbol symbol in matches)

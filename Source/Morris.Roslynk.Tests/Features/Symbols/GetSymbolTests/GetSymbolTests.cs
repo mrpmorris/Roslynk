@@ -14,8 +14,9 @@ public class GetSymbolTests
 		Assert.Contains("#path=SimpleLibrary/Greeter.cs", result);
 		Assert.Contains("#loc=", result);
 		Assert.Contains("public class Greeter : IGreeter", result);
-		Assert.DoesNotContain("#fullName=", result);
 		Assert.DoesNotContain("#status=", result);
+		// A source symbol omits #source (it is the implied common case).
+		Assert.DoesNotContain("#source=", result);
 	}
 
 	[Fact]
@@ -54,43 +55,15 @@ public class GetSymbolTests
 	}
 
 	[Fact]
-	public async Task WhenAMetadataSymbolIsRequested_ThenKindSignatureAndAssemblyAreReturnedWithoutAPath()
+	public async Task WhenAMetadataSymbolIsRequested_ThenSourceKindSignatureAndAssemblyAreReturnedWithoutAPath()
 	{
 		string result = await RunAsync("System.String");
 
+		Assert.Contains("#source=metadata", result);
 		Assert.Contains("#kind=class", result);
 		Assert.Contains("#signature=", result);
 		Assert.Contains("#assembly=", result);
 		Assert.DoesNotContain("#path=", result);
-	}
-
-	[Fact]
-	public async Task WhenFormatIsFull_ThenTheFullyQualifiedFieldsAreReturned()
-	{
-		string result = await RunAsync("SimpleLibrary.Greeter", format: "full");
-
-		Assert.Contains("#fullName=SimpleLibrary.Greeter", result);
-		Assert.Contains("#accessibility=public", result);
-		Assert.Contains("#source=source", result);
-		Assert.Contains("#location=", result);
-	}
-
-	[Fact]
-	public async Task WhenFormatIsFullAndTheSymbolIsDocumented_ThenTheSummaryIsIncluded()
-	{
-		string result = await RunAsync("SimpleLibrary.Widget.Compute", format: "full");
-
-		Assert.Contains("summary: ", result);
-	}
-
-	[Fact]
-	public async Task WhenComparingLeanToFull_ThenLeanIsShorter()
-	{
-		string lean = await RunAsync("SimpleLibrary.Greeter.Greet");
-		string full = await RunAsync("SimpleLibrary.Greeter.Greet", format: "full");
-
-		// Lean drops the 8 headline fields (and doc) for path + loc + the declarator: ~75% fewer chars here.
-		Assert.True(lean.Length < full.Length, $"lean ({lean.Length}) should be shorter than full ({full.Length})");
 	}
 
 	[Fact]
@@ -124,12 +97,12 @@ public class GetSymbolTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
 
-	private static async Task<string> RunAsync(string symbolName, string format = "lean")
+	private static async Task<string> RunAsync(string symbolName)
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new GetSymbolTool(registry, new SymbolResolver());
 
-		return await subject.GetSymbol(TestSolutions.Simple, symbolName, format);
+		return await subject.GetSymbol(TestSolutions.Simple, symbolName);
 	}
 }
