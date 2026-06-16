@@ -8,12 +8,13 @@ using Morris.Roslynk.Infrastructure.Writing;
 namespace Morris.Roslynk.Infrastructure.Watching;
 
 /// <summary>
-/// The freshness logic for one loaded solution: given a path that changed on disk, decide whether it is
-/// noise (our own write, an editor touch, anything under <c>obj</c>/<c>bin</c>) and otherwise route it.
-/// A <c>.cs</c> edit is folded into the snapshot incrementally via <see cref="Solution.WithDocumentText"/>;
-/// a project / props / sln edit marks the instance dirty so the registry reloads it on next use. This is a
-/// freshness optimization, not a correctness mechanism; the apply pipeline's stale-write guard is what
-/// actually protects the user, so a missed event only costs a stale read until the next one.
+/// The freshness logic for one loaded solution: given a path that changed on disk, decide how to react.
+/// Anything under <c>obj</c>/<c>bin</c> is ignored as build noise. A <c>.cs</c> edit to a known document is
+/// folded into the snapshot incrementally via <see cref="Solution.WithDocumentText"/>; every other change
+/// outside <c>obj</c>/<c>bin</c> (a project / props / sln file, an additional document, or any other watched
+/// file) marks the instance dirty so the registry reloads it on next use. This is a freshness optimization,
+/// not a correctness mechanism; the apply pipeline's stale-write guard is what actually protects the user,
+/// so a missed event only costs a stale read until the next one.
 /// </summary>
 public sealed class SolutionFileSync
 {
@@ -99,7 +100,16 @@ public sealed class SolutionFileSync
 		}
 
 		if (IsSourceFile(path))
+		{
 			await OnSourceFileChangedAsync(path, cancellationToken);
+			return;
+		}
+
+		// Any other file outside obj/bin can still affect the build: an additional document
+		// (.razor/.cshtml/.resx), a source-generator input, or content the project globs. It cannot be
+		// folded incrementally, so mark the instance dirty and let the next read reload. MarkDirty is lazy
+		// and idempotent, so even a burst of unrelated changes costs at most one reload.
+		Instance.MarkDirty();
 	}
 
 	private async Task OnSourceFileChangedAsync(string path, CancellationToken cancellationToken)

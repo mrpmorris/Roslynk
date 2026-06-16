@@ -74,6 +74,41 @@ public class SolutionFileSyncTests
 		Assert.False(reloaded.IsDirty);
 	}
 
+	[Fact]
+	public async Task WhenANonSourceNonBuildFileChangesOutsideBinObj_ThenTheInstanceIsMarkedDirty()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
+		string asset = Path.Combine(projectDir, "appsettings.json");
+		await File.WriteAllTextAsync(asset, "{}");
+
+		await subject.OnFileChangedAsync(asset);
+
+		Assert.True(instance.IsDirty);
+	}
+
+	[Fact]
+	public async Task WhenAFileUnderObjOrBinChanges_ThenItIsIgnored()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+		Solution before = instance.CurrentSolution;
+
+		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
+		string objArtifact = Path.Combine(projectDir, "obj", "Debug", "Generated.cs");
+
+		await subject.OnFileChangedAsync(objArtifact);
+
+		Assert.False(instance.IsDirty);
+		Assert.Same(before, instance.CurrentSolution);
+	}
+
 	private static async Task<string> ReadDocumentTextAsync(Solution solution, string path)
 	{
 		DocumentId id = solution.GetDocumentIdsWithFilePath(path).First();
