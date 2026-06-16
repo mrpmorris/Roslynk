@@ -17,7 +17,8 @@ public class GetDiagnosticsTests
 
 		Assert.DoesNotContain("#error=", result);
 		Assert.DoesNotContain("#errors=0", result);
-		Assert.Contains("error,CS0029,", result);
+		Assert.Contains("\terrors\n", result);
+		Assert.Contains("\t\tCS0029,", result);
 	}
 
 	[Fact]
@@ -29,7 +30,7 @@ public class GetDiagnosticsTests
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken);
 
-		Assert.DoesNotContain("\twarning,", result);
+		Assert.DoesNotContain("\twarnings", result);
 		Assert.DoesNotContain("#warnings=0", result);
 	}
 
@@ -42,8 +43,8 @@ public class GetDiagnosticsTests
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeWarnings: true);
 
-		Assert.Contains("\twarning,", result);
-		Assert.Contains("\terror,", result);
+		Assert.Contains("\twarnings\n", result);
+		Assert.Contains("\terrors\n", result);
 	}
 
 	[Fact]

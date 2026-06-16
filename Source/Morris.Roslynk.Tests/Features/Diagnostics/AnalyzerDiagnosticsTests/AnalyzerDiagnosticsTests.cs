@@ -53,13 +53,13 @@ public class AnalyzerDiagnosticsTests
 		var ids = new List<string>();
 		foreach (string raw in text.Split('\n'))
 		{
-			if (!raw.StartsWith('\t'))
+			// Entries sit at depth 2 ('\t\t<id>,<line:col> <message>') under their severity group; the id leads.
+			if (!raw.StartsWith("\t\t", StringComparison.Ordinal))
 				continue;
 
-			// \t<severity>,<id>,<line:col> <message>: the id is the second comma-field.
-			string[] parts = raw.TrimStart('\t').Split(',');
-			if (parts.Length >= 2)
-				ids.Add(parts[1]);
+			string content = raw.TrimStart('\t');
+			int cut = content.IndexOfAny([',', ' ']);
+			ids.Add(cut < 0 ? content : content[..cut]);
 		}
 
 		return ids;
