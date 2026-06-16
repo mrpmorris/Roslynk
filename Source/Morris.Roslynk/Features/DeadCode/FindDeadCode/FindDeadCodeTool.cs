@@ -17,11 +17,6 @@ public sealed class FindDeadCodeTool
 
 	private const string NoLocationBucket = "<no-location>";
 
-	private const string Caveat =
-		"Conservative heuristic: interface implementations, virtual/override chains, tests, generated, and " +
-		"DI/reflection-activated members are excluded, but markup-wired (.razor/.xaml) handlers are not yet " +
-		"resolved; verify a candidate is truly unused before deleting.";
-
 	private static readonly HashSet<string> TestMethodAttributes = new(StringComparer.Ordinal)
 	{
 		"FactAttribute",
@@ -65,7 +60,6 @@ public sealed class FindDeadCodeTool
 		to avoid false positives: it excludes interface implementations, virtual/override chains, test members,
 		generated code, and DI/reflection-activated members, and (unless includePublic is true) the public API
 		surface. {OutlineDescriptions.TextNotJson} Candidates are grouped by file:
-		  #note=<conservative caveat>
 
 		  <relative/forward-slash/path.cs>
 		  \t<kind>,<fully-qualified name>,<confidence> <reason>
@@ -136,7 +130,6 @@ public sealed class FindDeadCodeTool
 		var builder = new OutlineBuilder();
 		if (truncated)
 			builder.Header("truncated", true);
-		builder.Header("note", Caveat);
 		builder.Status(model.Status);
 		builder.BeginBody();
 
