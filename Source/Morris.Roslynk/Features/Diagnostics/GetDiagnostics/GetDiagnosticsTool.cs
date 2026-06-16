@@ -40,7 +40,6 @@ public sealed class GetDiagnosticsTool
 		  #warnings=<n>
 		  #infos=<n>
 		  #hidden=<n>
-		  #status=Ready
 
 		  <relative/forward-slash/path.cs>
 		  \t<severity>,<id>,<line:col> <message>

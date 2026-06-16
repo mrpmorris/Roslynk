@@ -19,7 +19,7 @@ public class OpenSolutionTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		string ready = subject.OpenSolution(TestSolutions.Simple);
 
-		Assert.Contains("#status=Ready", ready);
+		Assert.DoesNotContain("#status", ready);
 		Assert.Contains("#projects=1", ready);
 		Assert.Contains("SimpleLibrary.csproj,", ready);
 	}

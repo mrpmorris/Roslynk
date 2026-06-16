@@ -20,10 +20,11 @@ internal static class OutlineDescriptions
 	/// <summary>The common output preamble: a text block, not JSON.</summary>
 	public const string TextNotJson =
 		"Returns a compact text outline, not JSON: '#'-prefixed header lines, a blank line, then a "
-		+ "tab-indented body. Newlines are '\\n'.";
+		+ "tab-indented body. Newlines are '\\n'. A #status header is present only when the solution is not "
+		+ "Ready (Building or Faulted); its absence means Ready.";
 
 	/// <summary>The shared failure shape every tool falls back to.</summary>
 	public const string ErrorBlock =
 		"On failure the result is header only: #error=<Indexing|NotFound|Ambiguous|...>, #errorMessage=..., "
-		+ "zero or more #candidate=<fqn>, then #status.";
+		+ "and zero or more #candidate=<fqn>.";
 }

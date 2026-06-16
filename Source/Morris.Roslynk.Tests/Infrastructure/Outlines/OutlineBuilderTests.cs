@@ -16,7 +16,27 @@ public class OutlineBuilderTests
 		subject.Line(0, "first");
 		subject.Line(1, "child");
 
-		Assert.Equal("#count=2\n#status=Ready\n\nfirst\n\tchild\n", subject.ToString());
+		Assert.Equal("#count=2\n\nfirst\n\tchild\n", subject.ToString());
+	}
+
+	[Fact]
+	public void WhenStatusIsReady_ThenNoStatusHeaderIsWritten()
+	{
+		var subject = new OutlineBuilder();
+
+		subject.Status(SolutionStatus.Ready);
+
+		Assert.Equal("", subject.ToString());
+	}
+
+	[Fact]
+	public void WhenStatusIsNotReady_ThenTheStatusHeaderIsWritten()
+	{
+		var subject = new OutlineBuilder();
+
+		subject.Status(SolutionStatus.Building);
+
+		Assert.Equal("#status=Building\n", subject.ToString());
 	}
 
 	[Fact]

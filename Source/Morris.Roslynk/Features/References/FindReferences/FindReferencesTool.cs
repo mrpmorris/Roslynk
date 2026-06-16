@@ -39,7 +39,6 @@ public sealed class FindReferencesTool
 		  #resolvedSymbol=<fully-qualified name>
 		  #count=<locations returned>
 		  #truncated=<true|false>
-		  #status=Ready
 
 		  <relative/forward-slash/path.cs>
 		  \t<namespace, or "<global>">

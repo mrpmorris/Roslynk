@@ -14,7 +14,7 @@ public class OutlineErrorTests
 			SolutionStatus.Ready);
 
 		Assert.Equal(
-			"#error=Ambiguous\n#errorMessage='X' matched several symbols.\n#candidate=N.A\n#candidate=N.B\n#status=Ready\n",
+			"#error=Ambiguous\n#errorMessage='X' matched several symbols.\n#candidate=N.A\n#candidate=N.B\n",
 			result);
 	}
 
@@ -26,7 +26,7 @@ public class OutlineErrorTests
 			SolutionStatus.Ready);
 
 		Assert.Equal(
-			"#error=Stale\n#errorMessage=Files moved on disk.\n#stale=src/A.cs\n#stale=src/B.cs\n#status=Ready\n",
+			"#error=Stale\n#errorMessage=Files moved on disk.\n#stale=src/A.cs\n#stale=src/B.cs\n",
 			result);
 	}
 

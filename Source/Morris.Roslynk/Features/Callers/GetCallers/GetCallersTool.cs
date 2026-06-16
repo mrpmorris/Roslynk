@@ -38,7 +38,6 @@ public sealed class GetCallersTool
 		caller's declaration location:
 		  #resolvedSymbol=<fully-qualified name>
 		  #count=<caller count>
-		  #status=Ready
 
 		  <relative/forward-slash/path.cs>
 		  \t<namespace>

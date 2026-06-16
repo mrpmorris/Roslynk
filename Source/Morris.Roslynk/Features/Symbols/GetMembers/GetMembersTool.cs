@@ -39,7 +39,6 @@ public sealed class GetMembersTool
 		them (or '<metadata>' for a referenced assembly), each as:
 		  #resolvedType=<fully-qualified type>
 		  #count=<member count>
-		  #status=Ready
 
 		  <relative/forward-slash/path.cs>
 		  \t<memberKind>,<name>,<startLine>-<endLine> <signature>

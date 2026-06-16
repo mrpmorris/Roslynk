@@ -38,7 +38,6 @@ public sealed class FindImplementationsTool
 		each as '<typeKind>,<typeName>,<loc>' where {OutlineDescriptions.Loc}:
 		  #resolvedSymbol=<fully-qualified name>
 		  #count=<implementor count>
-		  #status=Ready
 
 		  <relative/forward-slash/path.cs>
 		  \t<namespace>

@@ -68,7 +68,6 @@ public sealed class FindDeadCodeTool
 		  #count=<candidate count>
 		  #truncated=<true|false>
 		  #note=<conservative caveat>
-		  #status=Ready
 
 		  <relative/forward-slash/path.cs>
 		  \t<kind>,<fully-qualified name>,<confidence> <reason>

@@ -36,7 +36,6 @@ public sealed class SearchSymbolsTool
 		matched member nesting under its (parent-only) type:
 		  #count=<results returned>
 		  #truncated=<true|false>
-		  #status=Ready
 
 		  <relative/forward-slash/path.cs>
 		  \t<namespace>

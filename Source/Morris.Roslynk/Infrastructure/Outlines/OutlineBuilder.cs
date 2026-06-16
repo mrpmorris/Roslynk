@@ -35,7 +35,12 @@ public sealed class OutlineBuilder
 		return this;
 	}
 
-	public OutlineBuilder Status(SolutionStatus status) => Header("status", status.ToString());
+	/// <summary>
+	/// Writes the '#status' header only when the solution is not <see cref="SolutionStatus.Ready"/>; a Ready
+	/// solution is the common case, so its status is left implicit (an absent '#status' means Ready).
+	/// </summary>
+	public OutlineBuilder Status(SolutionStatus status) =>
+		status == SolutionStatus.Ready ? this : Header("status", status.ToString());
 
 	/// <summary>Writes the blank line that separates the header from the body. A no-op after the first call.</summary>
 	public OutlineBuilder BeginBody()

@@ -33,7 +33,7 @@ public sealed class GetCodeActionsTool
 	[Description(
 		"""
 		Lists Roslyn's code fixes and refactorings available at a position (or selection) in a .cs file.
-		Returns a text result, not JSON: a '#count', '#status' header, a blank line, then one
+		Returns a text result, not JSON: a '#count' header, a blank line, then one
 		'<actionId>,<kind>,<diagnosticId> <title>' line per action (diagnosticId is '-' for a refactoring; the
 		title is free text and trails last). The actionId is opaque and must be passed back verbatim to
 		apply_code_action. Fixes are driven by the compiler diagnostics at that span; refactorings by the span

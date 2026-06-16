@@ -36,7 +36,6 @@ public sealed class GetTypeHierarchyTool
 		fully-qualified name. {OutlineDescriptions.TextNotJson} The body has three fixed sections, each entry a
 		'<typeKind>,<fully-qualified name>':
 		  #resolvedType=<fully-qualified type>
-		  #status=Ready
 
 		  base
 		  \t<typeKind>,<fully-qualified name>
