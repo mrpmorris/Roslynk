@@ -59,12 +59,15 @@ public sealed class FindDeadCodeTool
 		Finds symbols (types, methods, properties, fields, events) with no references, conservatively filtered
 		to avoid false positives: it excludes interface implementations, virtual/override chains, test members,
 		generated code, and DI/reflection-activated members, and (unless includePublic is true) the public API
-		surface. {OutlineDescriptions.TextNotJson} Candidates are grouped by file:
+		surface. {OutlineDescriptions.TextNotJson} Candidates nest file -> namespace -> type -> member:
 
 		  <relative/forward-slash/path.cs>
-		  \t<kind>,<fully-qualified name>,<confidence> <reason>
-		where kind is one of {OutlineDescriptions.KindList}, confidence is High or Medium, and the free-text
-		reason is last. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
+		  \t<namespace>
+		  \t\t<typeKind>,<typeName>
+		  \t\t\t<memberKind>,<memberName>,<loc>,<confidence> <reason>
+		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}, confidence is High or
+		Medium, and the free-text reason is last; a dead type is itself a leaf carrying its own loc. The loc is
+		the full declaration span, ready to pass to apply_patch to remove the member. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
 		solutions with scope. A #truncated=Y header is present only when more candidates exist beyond maxResults. {OutlineDescriptions.ErrorBlock}
 		""")]
 	public async Task<string> FindDeadCode(
@@ -133,17 +136,17 @@ public sealed class FindDeadCodeTool
 		builder.Status(model.Status);
 		builder.BeginBody();
 
-		IEnumerable<IGrouping<string, Candidate>> byFile = results
-			.GroupBy(candidate => candidate.File)
-			.OrderBy(group => group.Key, StringComparer.Ordinal);
-
-		foreach (IGrouping<string, Candidate> file in byFile)
+		var root = new SymbolNode();
+		foreach (Candidate candidate in results)
 		{
-			builder.Line(0, file.Key);
-			foreach (Candidate candidate in file)
-				builder.Line(1, $"{candidate.Kind},{candidate.Symbol},{candidate.Confidence} {OutlineBuilder.Sanitize(candidate.Reason)}");
+			SymbolNode node = root.Child(candidate.File).Child(candidate.Namespace);
+			foreach (string type in candidate.ContainingTypes)
+				node = node.Child(type);
+
+			node.Child(candidate.Leaf);
 		}
 
+		root.Render(builder);
 		return builder.ToString();
 	}
 
@@ -171,28 +174,54 @@ public sealed class FindDeadCodeTool
 				? ("No references found (public API; may be used externally)", "Medium")
 				: ("No references found", "High");
 
-		string? path = SolutionRelativePath.Of(
-			solutionDirectory,
-			symbol.Locations.FirstOrDefault(location => location.IsInSource)?.SourceTree?.FilePath);
+		SyntaxReference? reference = symbol.DeclaringSyntaxReferences.FirstOrDefault();
+		FileLinePositionSpan? span = reference?.SyntaxTree.GetLineSpan(reference.Span);
 
-		return new Candidate(path ?? NoLocationBucket, SymbolKindText.Of(symbol), SymbolResolver.FullyQualifiedName(symbol), reason, confidence);
+		string file = span is { } located
+			? SolutionRelativePath.Of(solutionDirectory, located.Path)!
+			: NoLocationBucket;
+		string @namespace = NamespaceOf(symbol);
+		IReadOnlyList<string> containingTypes = ContainingTypesOf(symbol);
+
+		string head = $"{SymbolKindText.Of(symbol)},{symbol.Name}";
+		string leaf = span is { } range
+			? $"{head},{FormatRange(range)},{confidence} {reason}"
+			: $"{head},{confidence} {reason}";
+
+		return new Candidate(file, @namespace, containingTypes, leaf);
 	}
+
+	private static string NamespaceOf(ISymbol symbol)
+	{
+		INamespaceSymbol? containing = symbol.ContainingNamespace;
+		return containing is null || containing.IsGlobalNamespace ? SymbolPlacement.GlobalNamespace : containing.ToDisplayString();
+	}
+
+	private static IReadOnlyList<string> ContainingTypesOf(ISymbol symbol)
+	{
+		var types = new List<string>();
+		for (INamedTypeSymbol? type = symbol.ContainingType; type is not null; type = type.ContainingType)
+			types.Insert(0, $"{SymbolKindText.Of(type)},{type.Name}");
+
+		return types;
+	}
+
+	private static string FormatRange(FileLinePositionSpan span) =>
+		$"{span.StartLinePosition.Line + 1}:{span.StartLinePosition.Character + 1}-{span.EndLinePosition.Line + 1}:{span.EndLinePosition.Character + 1}";
 
 	private sealed class Candidate
 	{
 		public string File { get; }
-		public string Kind { get; }
-		public string Symbol { get; }
-		public string Reason { get; }
-		public string Confidence { get; }
+		public string Namespace { get; }
+		public IReadOnlyList<string> ContainingTypes { get; }
+		public string Leaf { get; }
 
-		public Candidate(string file, string kind, string symbol, string reason, string confidence)
+		public Candidate(string file, string @namespace, IReadOnlyList<string> containingTypes, string leaf)
 		{
 			File = file;
-			Kind = kind;
-			Symbol = symbol;
-			Reason = reason;
-			Confidence = confidence;
+			Namespace = @namespace;
+			ContainingTypes = containingTypes;
+			Leaf = leaf;
 		}
 	}
 

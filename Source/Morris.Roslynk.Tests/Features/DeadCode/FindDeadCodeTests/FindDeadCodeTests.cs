@@ -1,6 +1,6 @@
+using System.Text.RegularExpressions;
 using Morris.Roslynk.Features.DeadCode.FindDeadCode;
 using Morris.Roslynk.Infrastructure.Lifecycle;
-using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.DeadCode.FindDeadCodeTests;
 
@@ -12,7 +12,9 @@ public class FindDeadCodeTests
 		string result = await RunAsync();
 
 		Assert.DoesNotContain("#error=", result);
-		Assert.Contains("method,SimpleLibrary.Widget.Unused,High", result);
+		Assert.Contains("SimpleLibrary.Widget.Unused", DeadLeaves(result));
+		// The leaf carries the declaration range then the confidence: 'method,Unused,<loc>,High ...'.
+		Assert.Matches(new Regex(@"method,Unused,\d+:\d+-\d+:\d+,High"), result);
 	}
 
 	[Fact]
@@ -20,8 +22,8 @@ public class FindDeadCodeTests
 	{
 		string result = await RunAsync(includePublic: true);
 
-		Assert.DoesNotContain("SimpleLibrary.Widget.Compute", result);
-		Assert.DoesNotContain("SimpleLibrary.Greeter.Greet", result);
+		Assert.DoesNotContain("SimpleLibrary.Widget.Compute", DeadLeaves(result));
+		Assert.DoesNotContain("SimpleLibrary.Greeter.Greet", DeadLeaves(result));
 	}
 
 	[Fact]
@@ -29,7 +31,7 @@ public class FindDeadCodeTests
 	{
 		string result = await RunAsync(includePublic: false);
 
-		Assert.DoesNotContain("SimpleLibrary.Caller.Run", result);
+		Assert.DoesNotContain("SimpleLibrary.Caller.Run", DeadLeaves(result));
 	}
 
 	[Fact]
@@ -37,7 +39,17 @@ public class FindDeadCodeTests
 	{
 		string result = await RunAsync(includePublic: true);
 
-		Assert.Contains("SimpleLibrary.Caller.Run", result);
+		Assert.Contains("SimpleLibrary.Caller.Run", DeadLeaves(result));
+	}
+
+	[Fact]
+	public async Task WhenTheBodyNestsByFileNamespaceAndType_ThenTheMemberSitsUnderItsContainingType()
+	{
+		string result = await RunAsync();
+
+		Assert.Contains("\tSimpleLibrary\n", result);
+		Assert.Contains("\t\tclass,Widget\n", result);
+		Assert.Contains("\t\t\tmethod,Unused,", result);
 	}
 
 	[Fact]
@@ -45,9 +57,9 @@ public class FindDeadCodeTests
 	{
 		string result = await RunAsync(scope: "SimpleLibrary.Widget");
 
-		IReadOnlyList<string> symbols = Symbols(result);
-		Assert.NotEmpty(symbols);
-		Assert.All(symbols, symbol => Assert.StartsWith("SimpleLibrary.Widget", symbol));
+		IReadOnlyList<string> leaves = DeadLeaves(result);
+		Assert.NotEmpty(leaves);
+		Assert.All(leaves, leaf => Assert.StartsWith("SimpleLibrary.Widget", leaf));
 	}
 
 	[Fact]
@@ -73,20 +85,50 @@ public class FindDeadCodeTests
 		return await subject.FindDeadCode(TestSolutions.Simple, scope, includePublic);
 	}
 
-	private static IReadOnlyList<string> Symbols(string text)
+	/// <summary>
+	/// Reconstructs the fully-qualified name of each reported (leaf) candidate from the nested
+	/// file -> namespace -> type -> member outline. A leaf line is 'kind,name,&lt;loc&gt;,&lt;confidence&gt; reason'
+	/// (four comma fields, the fourth starting with the confidence); a namespace line has no comma and a
+	/// parent type line is just 'kind,name'.
+	/// </summary>
+	private static IReadOnlyList<string> DeadLeaves(string text)
 	{
-		var symbols = new List<string>();
-		foreach (string raw in text.Split('\n'))
+		var names = new Dictionary<int, string>();
+		var leaves = new List<string>();
+
+		foreach (string line in text.Split('\n'))
 		{
-			if (!raw.StartsWith('\t'))
+			if (line.Length == 0 || line[0] == '#')
 				continue;
 
-			// \t<kind>,<fully-qualified name>,<confidence> <reason>: the name is the second comma-field.
-			string[] parts = raw.TrimStart('\t').Split(',');
-			if (parts.Length >= 2)
-				symbols.Add(parts[1]);
+			int depth = 0;
+			while (depth < line.Length && line[depth] == '\t')
+				depth++;
+
+			if (depth == 0)
+			{
+				names.Clear();
+				continue;
+			}
+
+			string content = line[depth..];
+			string[] parts = content.Split(',');
+			names[depth] = parts.Length == 1 ? content : parts[1];
+			foreach (int deeper in names.Keys.Where(key => key > depth).ToList())
+				names.Remove(deeper);
+
+			bool isLeaf = parts.Length >= 4
+				&& (parts[3].StartsWith("High", StringComparison.Ordinal) || parts[3].StartsWith("Medium", StringComparison.Ordinal));
+			if (!isLeaf)
+				continue;
+
+			var segments = new List<string>();
+			for (int level = 1; level <= depth; level++)
+				segments.Add(names[level]);
+
+			leaves.Add(string.Join('.', segments));
 		}
 
-		return symbols;
+		return leaves;
 	}
 }
