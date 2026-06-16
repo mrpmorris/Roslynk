@@ -47,7 +47,7 @@ public class FindDeadCodeTests
 	{
 		string result = await RunAsync();
 
-		Assert.Contains("SimpleLibrary.csproj\n", result);
+		Assert.Contains(result.Split('\n'), line => line == "SimpleLibrary");
 		Assert.Contains("\tSimpleLibrary\n", result);
 		Assert.Contains("\t\tclass,Widget\n", result);
 		Assert.Contains("\t\t\tmethod,Unused,", result);

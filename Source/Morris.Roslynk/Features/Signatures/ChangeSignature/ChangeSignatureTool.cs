@@ -38,12 +38,12 @@ public sealed class ChangeSignatureTool
 		Destructive = true,
 		OpenWorld = false)]
 	[Description(
-		"""
+		$"""
 		Adds a new optional parameter to a method and, if a call-site value is given, threads it through every
 		invocation as a named argument; collapsing the repeated add-a-parameter cascades that are otherwise
 		redone by hand across files. Returns a text result, not JSON: '#applied', '#resolvedMethod',
 		'#updatedCallSites', '#status' header, a blank line, then one solution-relative changed-file
-		path per line, each grouped under its owning project file (name.ext). The parameter must have a default so the change stays backward-compatible. v1 targets a
+		path per line. {OutlineDescriptions.Project} The parameter must have a default so the change stays backward-compatible. v1 targets a
 		single ordinary method only: it refuses virtual/override/abstract methods, interface members and their
 		implementations, partial methods, params methods, and constructors (returns #error=NotSupported). Pass
 		checkOnly to preview the changed files without writing.

@@ -39,7 +39,7 @@ public sealed class GetMembersTool
 		them (or '<metadata>' for a referenced assembly), each as:
 		  #resolvedType=<fully-qualified type>
 
-		  <name.ext>
+		  <project>
 		  \t<relative/forward-slash/path.cs>
 		  \t\t<memberKind>,<name>,<loc>,<paramType|paramType|...>
 		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; the loc is empty for a metadata member; the trailing signature is a pipe-delimited list of minimally-qualified parameter types, present only for methods that take parameters. To read a member's

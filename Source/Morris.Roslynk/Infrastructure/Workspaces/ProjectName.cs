@@ -11,8 +11,16 @@ namespace Morris.Roslynk.Infrastructure.Workspaces;
 /// </summary>
 public static class ProjectName
 {
-	public static string? Of(Project? project) =>
-		project?.FilePath is string path ? System.IO.Path.GetFileName(path) : null;
+	public static string? Of(Project? project)
+	{
+		if (project?.FilePath is not string path)
+			return null;
+
+		// A .csproj is the C# default, so omit the extension for the common case; keep it for others (.vbproj, .fsproj).
+		return path.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase)
+			? System.IO.Path.GetFileNameWithoutExtension(path)
+			: System.IO.Path.GetFileName(path);
+	}
 
 	public static string? Of(Solution solution, SyntaxTree tree) =>
 		Of(solution.GetDocument(tree)?.Project);

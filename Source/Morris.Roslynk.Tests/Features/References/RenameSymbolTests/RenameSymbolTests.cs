@@ -21,7 +21,7 @@ public class RenameSymbolTests
 
 		Assert.Contains("#applied=Y", result);
 		Assert.Contains("#resolvedSymbol=SimpleLibrary.Greeter", result);
-		Assert.Contains("SimpleLibrary.csproj\n", result);
+		Assert.Contains(result.Split('\n'), line => line == "SimpleLibrary");
 		Assert.Contains("SimpleLibrary/Greeter.cs", result);
 
 		string greeter = await File.ReadAllTextAsync(Path.Combine(libraryDir, "Greeter.cs"));

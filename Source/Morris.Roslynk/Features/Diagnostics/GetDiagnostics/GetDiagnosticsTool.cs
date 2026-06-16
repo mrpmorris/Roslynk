@@ -41,7 +41,7 @@ public sealed class GetDiagnosticsTool
 		  #infos=<n>
 		  #hidden=<n>
 
-		  <name.ext>
+		  <project>
 		  \t<relative/forward-slash/path.cs>
 		  \t\t<severity>
 		  \t\t\t<id>,<line:col> <message>

@@ -38,7 +38,7 @@ public sealed class FindImplementationsTool
 		each as '<typeKind>,<typeName>,<loc>' where {OutlineDescriptions.Loc}:
 		  #resolvedSymbol=<fully-qualified name>
 
-		  <name.ext>
+		  <project>
 		  \t<relative/forward-slash/path.cs>
 		  \t\t<namespace>
 		  \t\t\t<typeKind>,<typeName>,<loc>

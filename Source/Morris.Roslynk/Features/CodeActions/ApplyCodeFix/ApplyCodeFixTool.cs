@@ -35,11 +35,11 @@ public sealed class ApplyCodeFixTool
 		Destructive = true,
 		OpenWorld = false)]
 	[Description(
-		"""
+		$"""
 		Applies the code fix for the first occurrence of a diagnostic id (e.g. CS0219) in a .cs file; the
 		quick path when you already know which diagnostic to clear, without first listing actions. Returns a
 		text result, not JSON: '#applied', '#action', '#status' header, a blank line, then one
-		solution-relative changed-file path per line, each grouped under its owning project file (name.ext). Written atomically through the same safe write path. Pass
+		solution-relative changed-file path per line. {OutlineDescriptions.Project} Written atomically through the same safe write path. Pass
 		checkOnly to preview without writing. Prefer this over hand-editing the file to clear a diagnostic so
 		the in-memory model stays in sync.
 		""")]

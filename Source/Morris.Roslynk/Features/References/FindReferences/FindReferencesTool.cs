@@ -38,7 +38,7 @@ public sealed class FindReferencesTool
 		reference under file -> namespace -> type(s) -> member, so a shared declaration is printed once:
 		  #resolvedSymbol=<fully-qualified name>
 
-		  <name.ext>
+		  <project>
 		  \t<relative/forward-slash/path.cs>
 		  \t\t<namespace, or "<global>">
 		  \t\t\t<typeKind>,<typeName>,<loc|loc|...>   (locations present only when the type declaration itself references the symbol)

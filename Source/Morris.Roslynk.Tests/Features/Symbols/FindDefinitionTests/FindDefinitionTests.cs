@@ -21,7 +21,7 @@ public class FindDefinitionTests
 
 		Assert.DoesNotContain("#error=", result);
 		Assert.Contains("#fullName=SimpleLibrary.Greeter", result);
-		Assert.Contains("#project=SimpleLibrary.csproj", result);
+		Assert.Contains("#project=SimpleLibrary\n", result);
 		Assert.Contains("#path=", result);
 		Assert.Contains("Greeter.cs", result);
 		Assert.Contains("#loc=", result);

@@ -35,11 +35,11 @@ public sealed class GetSymbolTool
 	[Description(
 		$"""
 		Returns a symbol's declaration, resolved by fully-qualified name. {OutlineDescriptions.TextNotJson} A
-		single source match returns a '#project=<name.ext>', '#path=<relative/path.cs>' and
+		single source match returns a '#project=<project>', '#path=<relative/path.cs>' and
 		'#loc=<startLine:startCol-endLine:endCol>' header, a blank line, then the verbatim declaration cut
 		before its body (the opening brace or '=>'). The declaration line itself conveys accessibility, kind,
 		return type, name and parameters, so those are not repeated. Example:
-		  #project=VendmanagerWeb.csproj
+		  #project=VendmanagerWeb
 		  #path=VendmanagerWeb/Components/Pages/Ops/TaskManager/TaskManager.razor.cs
 		  #loc=196:5-214:6
 

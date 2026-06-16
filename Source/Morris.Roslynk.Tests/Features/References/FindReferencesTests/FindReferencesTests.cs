@@ -18,7 +18,7 @@ public class FindReferencesTests
 		Assert.Contains("#resolvedSymbol=SimpleLibrary.Greeter", result);
 		Assert.DoesNotContain("#truncated", result);
 		Assert.DoesNotContain("#count", result);
-		Assert.Contains("SimpleLibrary.csproj\n", result);
+		Assert.Contains(result.Split('\n'), line => line == "SimpleLibrary");
 		Assert.Contains("SimpleLibrary/Caller.cs", result);
 		Assert.Contains("\tSimpleLibrary\n", result);
 		Assert.Contains("\t\tclass,Caller\n", result);

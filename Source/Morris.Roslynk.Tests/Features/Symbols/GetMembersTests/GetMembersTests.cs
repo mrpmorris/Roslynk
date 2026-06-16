@@ -105,7 +105,7 @@ public class GetMembersTests
 	{
 		string result = await RunAsync("SimpleLibrary.Greeter", nameFilter: "Greet");
 
-		Assert.Contains("SimpleLibrary.csproj\n", result);
+		Assert.Contains(result.Split('\n'), line => line == "SimpleLibrary");
 
 		string fileLine = result.Split('\n').First(line => line.EndsWith("Greeter.cs", StringComparison.Ordinal));
 		Assert.False(Path.IsPathRooted(fileLine), $"expected a solution-relative path, got '{fileLine}'");

@@ -35,7 +35,7 @@ public sealed class SearchSymbolsTool
 		solution. {OutlineDescriptions.TextNotJson} Matches are grouped file -> namespace -> type -> member, a
 		matched member nesting under its (parent-only) type:
 
-		  <name.ext>
+		  <project>
 		  \t<relative/forward-slash/path.cs>
 		  \t\t<namespace>
 		  \t\t\t<typeKind>,<typeName>,<loc>

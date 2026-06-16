@@ -34,7 +34,7 @@ public sealed class FindDefinitionTool
 		$"""
 		Resolves the symbol used at a source position (file, 1-based line and column) and returns where it is
 		declared; the 'go to definition' jump, by position. {OutlineDescriptions.TextNotJson} The result is a
-		'#fullName', '#kind' header plus '#project=<name.ext>', '#path=<relative/path.cs>' and '#loc=<line:col>' for a source symbol,
+		'#fullName', '#kind' header plus '#project=<project>', '#path=<relative/path.cs>' and '#loc=<line:col>' for a source symbol,
 		or '#assembly=<name>' for a metadata symbol. {OutlineDescriptions.Project}. {OutlineDescriptions.ErrorBlock} Prefer this over grepping
 		to chase a definition; it follows the compiler's binding, so it lands on the right symbol even when
 		names are overloaded or shadowed.
