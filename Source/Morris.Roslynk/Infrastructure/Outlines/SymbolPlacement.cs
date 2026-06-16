@@ -29,9 +29,9 @@ public static class SymbolPlacement
 			parents.Insert(0, containing);
 
 		foreach (INamedTypeSymbol parent in parents)
-			node = node.Child($"{SymbolKindText.Of(parent)},{parent.Name}");
+			node = node.Child($"{SymbolKindText.Of(parent)},{OutlineBuilder.Field(parent.Name)}");
 
-		SymbolNode leaf = node.Child($"{SymbolKindText.Of(symbol)},{symbol.Name}");
+		SymbolNode leaf = node.Child($"{SymbolKindText.Of(symbol)},{OutlineBuilder.Field(symbol.Name)}");
 
 		if (location is not null)
 		{

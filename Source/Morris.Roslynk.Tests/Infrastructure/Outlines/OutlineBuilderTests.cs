@@ -87,4 +87,16 @@ public class OutlineBuilderTests
 	{
 		Assert.Equal("", OutlineBuilder.Sanitize(null));
 	}
+
+	[Fact]
+	public void WhenAFieldContainsAComma_ThenItIsSingleQuoted()
+	{
+		Assert.Equal("'Dictionary<string, int>'", OutlineBuilder.Field("Dictionary<string, int>"));
+	}
+
+	[Fact]
+	public void WhenAFieldHasNoComma_ThenItIsReturnedUnchanged()
+	{
+		Assert.Equal("Greeter", OutlineBuilder.Field("Greeter"));
+	}
 }

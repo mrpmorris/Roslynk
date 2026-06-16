@@ -17,6 +17,11 @@ internal static class OutlineDescriptions
 	/// <summary>How a list of locations is written inside one comma-delimited leaf.</summary>
 	public const string LocList = "multiple locations are pipe-delimited (loc|loc|...) so they sit inside the comma-delimited line";
 
+	/// <summary>How a name that itself contains a comma is encoded inside a comma-delimited leaf.</summary>
+	public const string ListFieldQuoting =
+		"a type or member name that itself contains a comma (a generic type with several type arguments, e.g. "
+		+ "Dictionary<string, int>) is wrapped in single quotes so the comma is not read as a field separator";
+
 	/// <summary>The common output preamble: a text block, not JSON.</summary>
 	public const string TextNotJson =
 		"Returns a compact text outline, not JSON: '#'-prefixed header lines, a blank line, then a "

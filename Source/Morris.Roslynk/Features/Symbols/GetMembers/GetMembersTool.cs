@@ -41,7 +41,7 @@ public sealed class GetMembersTool
 
 		  <relative/forward-slash/path.cs>
 		  \t<memberKind>,<name>,<startLine>-<endLine> <signature>
-		where kind is one of {OutlineDescriptions.KindList}; the line range collapses to a single number when
+		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.ListFieldQuoting}; the line range collapses to a single number when
 		start equals end and is omitted for metadata members; the trailing signature is the minimally-qualified
 		parameter list for methods (e.g. '(CancellationToken)') and absent for other kinds. To read a member's
 		body, resolve its path against the solution folder and read startLine through endLine. Private and
@@ -150,7 +150,7 @@ public sealed class GetMembersTool
 		int startLine = span is { } start ? start.StartLinePosition.Line + 1 : 0;
 		int endLine = span is { } end ? end.EndLinePosition.Line + 1 : 0;
 
-		string line = $"{SymbolKindText.Of(member)},{member.Name}";
+		string line = $"{SymbolKindText.Of(member)},{OutlineBuilder.Field(member.Name)}";
 		if (span is not null)
 			line += "," + (startLine == endLine ? startLine.ToString() : $"{startLine}-{endLine}");
 

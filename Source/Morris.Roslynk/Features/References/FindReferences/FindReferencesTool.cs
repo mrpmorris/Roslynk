@@ -42,7 +42,7 @@ public sealed class FindReferencesTool
 		  \t<namespace, or "<global>">
 		  \t\t<typeKind>,<typeName>,<loc|loc|...>   (locations present only when the type declaration itself references the symbol)
 		  \t\t\t<memberKind>,<memberName>,<loc|loc|...>
-		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.Loc}; {OutlineDescriptions.LocList}.
+		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.Loc}; {OutlineDescriptions.LocList}; {OutlineDescriptions.ListFieldQuoting}.
 		{OutlineDescriptions.Truncation} {OutlineDescriptions.ErrorBlock} Prefer this over grepping: it matches the compiler's symbol, not text,
 		so it skips comments, strings and unrelated same-named members, and still finds usages in code-behind
 		and partial classes.
@@ -103,7 +103,7 @@ public sealed class FindReferencesTool
 				.Child(SolutionRelativePath.Of(solutionDirectory, span.Path)!)
 				.Child(enclosing.Namespace);
 			foreach (EnclosingSegment segment in enclosing.Segments)
-				node = node.Child($"{segment.Kind},{segment.Name}");
+				node = node.Child($"{segment.Kind},{OutlineBuilder.Field(segment.Name)}");
 
 			node.AddLocation(
 				span.StartLinePosition.Line + 1,

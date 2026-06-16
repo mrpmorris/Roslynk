@@ -41,7 +41,7 @@ public sealed class FindImplementationsTool
 		  <relative/forward-slash/path.cs>
 		  \t<namespace>
 		  \t\t<typeKind>,<typeName>,<loc>
-		{OutlineDescriptions.ErrorBlock} Prefer this over reading files to find implementors; it walks the
+		{OutlineDescriptions.ListFieldQuoting} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to find implementors; it walks the
 		compiler's type graph, not text.
 		""")]
 	public async Task<string> FindImplementations(

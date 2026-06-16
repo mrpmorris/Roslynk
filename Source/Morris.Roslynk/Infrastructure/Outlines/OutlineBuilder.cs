@@ -73,6 +73,14 @@ public sealed class OutlineBuilder
 	public override string ToString() => Builder.ToString();
 
 	/// <summary>
+	/// Encodes a name for use as one field of a comma-delimited leaf: a name that itself contains a comma (a
+	/// generic type rendered with several type arguments, e.g. Dictionary&lt;string, int&gt;) is wrapped in
+	/// single quotes so the comma is not read as a field separator; any other name is returned unchanged.
+	/// </summary>
+	public static string Field(string value) =>
+		value.Contains(',') ? $"'{value}'" : value;
+
+	/// <summary>
 	/// Replaces any CR or LF with a space so a free-text value (an error or diagnostic message, a code-action
 	/// title) cannot break the one-record-per-line shape. Null or empty passes through.
 	/// </summary>

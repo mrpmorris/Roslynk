@@ -65,7 +65,7 @@ public sealed class FindDeadCodeTool
 		  \t<namespace>
 		  \t\t<typeKind>,<typeName>
 		  \t\t\t<memberKind>,<memberName>,<loc>,<confidence> <reason>
-		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}, confidence is High or
+		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; confidence is High or
 		Medium, and the free-text reason is last; a dead type is itself a leaf carrying its own loc. The loc is
 		the full declaration span, ready to pass to apply_patch to remove the member. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
 		solutions with scope. {OutlineDescriptions.TruncationFlag} {OutlineDescriptions.ErrorBlock}
@@ -183,7 +183,7 @@ public sealed class FindDeadCodeTool
 		string @namespace = NamespaceOf(symbol);
 		IReadOnlyList<string> containingTypes = ContainingTypesOf(symbol);
 
-		string head = $"{SymbolKindText.Of(symbol)},{symbol.Name}";
+		string head = $"{SymbolKindText.Of(symbol)},{OutlineBuilder.Field(symbol.Name)}";
 		string leaf = span is { } range
 			? $"{head},{FormatRange(range)},{confidence} {reason}"
 			: $"{head},{confidence} {reason}";
@@ -201,7 +201,7 @@ public sealed class FindDeadCodeTool
 	{
 		var types = new List<string>();
 		for (INamedTypeSymbol? type = symbol.ContainingType; type is not null; type = type.ContainingType)
-			types.Insert(0, $"{SymbolKindText.Of(type)},{type.Name}");
+			types.Insert(0, $"{SymbolKindText.Of(type)},{OutlineBuilder.Field(type.Name)}");
 
 		return types;
 	}

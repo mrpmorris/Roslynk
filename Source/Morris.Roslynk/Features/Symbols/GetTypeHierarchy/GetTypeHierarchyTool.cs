@@ -43,7 +43,7 @@ public sealed class GetTypeHierarchyTool
 		  \t<typeKind>,<fully-qualified name>
 		  derived
 		  \t<typeKind>,<fully-qualified name>
-		where typeKind is class|struct|interface|enum|delegate. {OutlineDescriptions.ErrorBlock} Prefer this
+		where typeKind is class|struct|interface|enum|delegate; {OutlineDescriptions.ListFieldQuoting}. {OutlineDescriptions.ErrorBlock} Prefer this
 		over reading files to reconstruct a hierarchy; the chain comes from the compiler, including base types
 		defined in referenced assemblies.
 		""")]
@@ -112,6 +112,6 @@ public sealed class GetTypeHierarchyTool
 
 		builder.Line(0, title);
 		foreach (INamedTypeSymbol type in types)
-			builder.Line(1, $"{SymbolKindText.Of(type)},{SymbolResolver.FullyQualifiedName(type)}");
+			builder.Line(1, $"{SymbolKindText.Of(type)},{OutlineBuilder.Field(SymbolResolver.FullyQualifiedName(type))}");
 	}
 }
