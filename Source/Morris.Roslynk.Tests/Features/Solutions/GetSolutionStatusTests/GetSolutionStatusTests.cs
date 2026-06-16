@@ -14,7 +14,6 @@ public class GetSolutionStatusTests
 
 		string result = subject.GetSolutionStatus();
 
-		Assert.Contains("#count=1", result);
 		// One line "<solutionId>,Ready,1/1".
 		string line = result.Split('\n').First(candidate => candidate.Contains(",Ready,", StringComparison.Ordinal));
 		Assert.EndsWith(",1/1", line);
@@ -42,7 +41,6 @@ public class GetSolutionStatusTests
 
 		string result = subject.GetSolutionStatus();
 
-		Assert.Contains("#count=1", result);
 		Assert.Contains(",Building,", result);
 		Assert.Contains("/?", result);
 

@@ -37,7 +37,6 @@ public sealed class FindImplementationsTool
 		by fully-qualified name. {OutlineDescriptions.TextNotJson} Implementors are grouped file -> namespace,
 		each as '<typeKind>,<typeName>,<loc>' where {OutlineDescriptions.Loc}:
 		  #resolvedSymbol=<fully-qualified name>
-		  #count=<implementor count>
 
 		  <relative/forward-slash/path.cs>
 		  \t<namespace>
@@ -79,7 +78,6 @@ public sealed class FindImplementationsTool
 
 		var builder = new OutlineBuilder();
 		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(symbol));
-		builder.Header("count", implementations.Count);
 		builder.Status(model.Status);
 		builder.BeginBody();
 		root.Render(builder);

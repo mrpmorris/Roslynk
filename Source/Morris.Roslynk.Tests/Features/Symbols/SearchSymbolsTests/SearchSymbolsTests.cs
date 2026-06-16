@@ -28,7 +28,7 @@ public class SearchSymbolsTests
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "NoSuchSymbolNameHere");
 
-		Assert.Contains("#count=0", result);
+		Assert.Equal("", result);
 	}
 
 	[Fact]

@@ -27,7 +27,7 @@ public sealed class GetSolutionStatusTool
 	[Description(
 		"""
 		Lists the solutions currently loaded by the server. Returns a compact text result, not JSON: a
-		'#count' header, a blank line, then one line per solution
+		blank line, then one line per solution
 		'<solutionId>,<status>,<loaded>/<total>' where loaded is how many projects have loaded so
 		far (a live count while still Building) and total is the count once known ('?' until the first load
 		finishes).
@@ -37,7 +37,6 @@ public sealed class GetSolutionStatusTool
 		List<RoslynInstance> instances = InstanceRegistry.LoadedInstances().ToList();
 
 		var builder = new OutlineBuilder();
-		builder.Header("count", instances.Count);
 		builder.BeginBody();
 
 		foreach (RoslynInstance instance in instances)

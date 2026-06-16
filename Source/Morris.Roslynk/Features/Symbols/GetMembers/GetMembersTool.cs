@@ -38,7 +38,6 @@ public sealed class GetMembersTool
 		fully-qualified name. {OutlineDescriptions.TextNotJson} Members are grouped by the file that declares
 		them (or '<metadata>' for a referenced assembly), each as:
 		  #resolvedType=<fully-qualified type>
-		  #count=<member count>
 
 		  <relative/forward-slash/path.cs>
 		  \t<memberKind>,<name>,<startLine>-<endLine> <signature>
@@ -127,7 +126,6 @@ public sealed class GetMembersTool
 
 		var builder = new OutlineBuilder();
 		builder.Header("resolvedType", SymbolResolver.FullyQualifiedName(type));
-		builder.Header("count", members.Count);
 		builder.Status(model.Status);
 		builder.BeginBody();
 

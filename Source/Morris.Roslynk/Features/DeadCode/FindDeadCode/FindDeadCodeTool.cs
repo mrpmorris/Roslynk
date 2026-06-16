@@ -65,15 +65,13 @@ public sealed class FindDeadCodeTool
 		to avoid false positives: it excludes interface implementations, virtual/override chains, test members,
 		generated code, and DI/reflection-activated members, and (unless includePublic is true) the public API
 		surface. {OutlineDescriptions.TextNotJson} Candidates are grouped by file:
-		  #count=<candidate count>
-		  #truncated=<Y|N>
 		  #note=<conservative caveat>
 
 		  <relative/forward-slash/path.cs>
 		  \t<kind>,<fully-qualified name>,<confidence> <reason>
 		where kind is one of {OutlineDescriptions.KindList}, confidence is High or Medium, and the free-text
 		reason is last. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
-		solutions with scope. {OutlineDescriptions.ErrorBlock}
+		solutions with scope. A #truncated=Y header is present only when more candidates exist beyond maxResults. {OutlineDescriptions.ErrorBlock}
 		""")]
 	public async Task<string> FindDeadCode(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
@@ -136,8 +134,8 @@ public sealed class FindDeadCodeTool
 		}
 
 		var builder = new OutlineBuilder();
-		builder.Header("count", results.Count);
-		builder.Header("truncated", truncated);
+		if (truncated)
+			builder.Header("truncated", true);
 		builder.Header("note", Caveat);
 		builder.Status(model.Status);
 		builder.BeginBody();

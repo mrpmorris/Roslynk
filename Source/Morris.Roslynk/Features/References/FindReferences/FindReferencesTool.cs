@@ -37,15 +37,13 @@ public sealed class FindReferencesTool
 		'Namespace.Type' or 'Namespace.Type.Member'). {OutlineDescriptions.TextNotJson} The body groups every
 		reference under file -> namespace -> type(s) -> member, so a shared declaration is printed once:
 		  #resolvedSymbol=<fully-qualified name>
-		  #count=<locations returned>
-		  #truncated=<Y|N>
 
 		  <relative/forward-slash/path.cs>
 		  \t<namespace, or "<global>">
 		  \t\t<typeKind>,<typeName>,<loc|loc|...>   (locations present only when the type declaration itself references the symbol)
 		  \t\t\t<memberKind>,<memberName>,<loc|loc|...>
 		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.Loc}; {OutlineDescriptions.LocList}.
-		{OutlineDescriptions.ErrorBlock} Prefer this over grepping: it matches the compiler's symbol, not text,
+		{OutlineDescriptions.Truncation} {OutlineDescriptions.ErrorBlock} Prefer this over grepping: it matches the compiler's symbol, not text,
 		so it skips comments, strings and unrelated same-named members, and still finds usages in code-behind
 		and partial classes.
 		""")]
@@ -116,8 +114,11 @@ public sealed class FindReferencesTool
 
 		var builder = new OutlineBuilder();
 		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(symbol));
-		builder.Header("count", page.Count);
-		builder.Header("truncated", truncated);
+		if (truncated)
+		{
+			builder.Header("count", locations.Count);
+			builder.Header("truncated", true);
+		}
 		builder.Status(model.Status);
 		builder.BeginBody();
 		root.Render(builder);

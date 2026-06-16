@@ -37,7 +37,6 @@ public sealed class GetCallersTool
 		Callers are grouped file -> namespace -> containing type -> calling member, each leaf showing the
 		caller's declaration location:
 		  #resolvedSymbol=<fully-qualified name>
-		  #count=<caller count>
 
 		  <relative/forward-slash/path.cs>
 		  \t<namespace>
@@ -87,7 +86,6 @@ public sealed class GetCallersTool
 
 		var builder = new OutlineBuilder();
 		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(symbol));
-		builder.Header("count", callers.Count);
 		builder.Status(model.Status);
 		builder.BeginBody();
 		root.Render(builder);

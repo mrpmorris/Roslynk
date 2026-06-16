@@ -42,12 +42,18 @@ public sealed class OutlineBuilder
 	public OutlineBuilder Status(SolutionStatus status) =>
 		status == SolutionStatus.Ready ? this : Header("status", status.ToString());
 
-	/// <summary>Writes the blank line that separates the header from the body. A no-op after the first call.</summary>
+	/// <summary>
+	/// Writes the blank line that separates the header from the body. A no-op after the first call, and a
+	/// no-op when nothing has been written yet, so a header-only-empty result starts straight at the body
+	/// rather than with a stray leading blank line.
+	/// </summary>
 	public OutlineBuilder BeginBody()
 	{
 		if (!BodyStarted)
 		{
-			Builder.Append('\n');
+			if (Builder.Length > 0)
+				Builder.Append('\n');
+
 			BodyStarted = true;
 		}
 

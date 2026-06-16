@@ -23,6 +23,11 @@ internal static class OutlineDescriptions
 		+ "tab-indented body. Newlines are '\\n'; booleans are Y or N. A #status header is present only when the solution is not "
 		+ "Ready (Building or Faulted); its absence means Ready.";
 
+	/// <summary>How a capped (paginated) result announces that it dropped rows.</summary>
+	public const string Truncation =
+		"If the result is capped at maxResults, a #count=<total available> and #truncated=Y header precede the "
+		+ "body; both are absent when nothing was dropped, so the body is then the complete set.";
+
 	/// <summary>The shared failure shape every tool falls back to.</summary>
 	public const string ErrorBlock =
 		"On failure the result is header only: #error=<Indexing|NotFound|Ambiguous|...>, #errorMessage=..., "
