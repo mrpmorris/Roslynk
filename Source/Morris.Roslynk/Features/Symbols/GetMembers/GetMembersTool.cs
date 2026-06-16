@@ -40,10 +40,8 @@ public sealed class GetMembersTool
 		  #resolvedType=<fully-qualified type>
 
 		  <relative/forward-slash/path.cs>
-		  \t<memberKind>,<name>,<startLine>-<endLine> <signature>
-		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.ListFieldQuoting}; the line range collapses to a single number when
-		start equals end and is omitted for metadata members; the trailing signature is the minimally-qualified
-		parameter list for methods (e.g. '(CancellationToken)') and absent for other kinds. To read a member's
+		  \t<memberKind>,<name>,<loc>,<paramType|paramType|...>
+		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; the loc is empty for a metadata member; the trailing signature is a pipe-delimited list of minimally-qualified parameter types, present only for methods that take parameters. To read a member's
 		body, resolve its path against the solution folder and read startLine through endLine. Private and
 		inherited members are excluded unless requested; narrow a large type with nameFilter (a trailing '*'
 		matches by prefix, otherwise a case-insensitive substring) and the include* kind toggles.
@@ -147,21 +145,22 @@ public sealed class GetMembersTool
 		string file = span is { } located
 			? SolutionRelativePath.Of(solutionDirectory, located.Path)!
 			: MetadataBucket;
-		int startLine = span is { } start ? start.StartLinePosition.Line + 1 : 0;
-		int endLine = span is { } end ? end.EndLinePosition.Line + 1 : 0;
+		int order = span is { } start ? start.StartLinePosition.Line + 1 : 0;
 
-		string line = $"{SymbolKindText.Of(member)},{OutlineBuilder.Field(member.Name)}";
-		if (span is not null)
-			line += "," + (startLine == endLine ? startLine.ToString() : $"{startLine}-{endLine}");
+		string location = span is { } range
+			? $"{range.StartLinePosition.Line + 1}:{range.StartLinePosition.Character + 1}-{range.EndLinePosition.Line + 1}:{range.EndLinePosition.Character + 1}"
+			: "";
 
-		if (member is IMethodSymbol method)
-			line += " " + Signature(method);
+		string line = $"{SymbolKindText.Of(member)},{OutlineBuilder.Field(member.Name)},{location}";
 
-		return (file, startLine, line);
+		if (member is IMethodSymbol { Parameters.Length: > 0 } method)
+			line += "," + Signature(method);
+
+		return (file, order, line);
 	}
 
 	private static string Signature(IMethodSymbol method) =>
-		"(" + string.Join(", ", method.Parameters.Select(parameter => parameter.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat))) + ")";
+		string.Join('|', method.Parameters.Select(parameter => OutlineBuilder.Field(parameter.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat))));
 
 	private static IEnumerable<ISymbol> Collect(INamedTypeSymbol type, bool includeInherited)
 	{

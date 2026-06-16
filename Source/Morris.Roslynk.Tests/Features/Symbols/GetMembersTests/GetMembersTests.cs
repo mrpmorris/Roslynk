@@ -101,7 +101,7 @@ public class GetMembersTests
 	}
 
 	[Fact]
-	public async Task WhenAMemberHasSource_ThenItIsGroupedUnderASolutionRelativeFileWithALineRange()
+	public async Task WhenAMemberHasSource_ThenItIsGroupedUnderASolutionRelativeFileWithItsLoc()
 	{
 		string result = await RunAsync("SimpleLibrary.Greeter", nameFilter: "Greet");
 
@@ -110,20 +110,31 @@ public class GetMembersTests
 		Assert.DoesNotContain('\\', fileLine);
 
 		string memberLine = result.Split('\n').First(line => line.TrimStart('\t').StartsWith("method,Greet", StringComparison.Ordinal));
-		// kind,name,<range> <signature>: the third comma-field is the line range.
-		string range = memberLine.TrimStart('\t').Split(',')[2].Split(' ')[0];
-		Assert.Matches(@"^\d+(-\d+)?$", range);
+		// kind,name,<loc>,<signature>: the third comma-field is the start:col-end:col span.
+		string loc = memberLine.TrimStart('\t').Split(',')[2];
+		Assert.Matches(@"^\d+:\d+-\d+:\d+$", loc);
 	}
 
 	[Fact]
-	public async Task WhenAMemberComesFromMetadata_ThenItHasNoFileOrLineRange()
+	public async Task WhenAMemberComesFromMetadata_ThenItsLocFieldIsEmpty()
 	{
 		string result = await RunAsync("System.String", nameFilter: "Substring");
 
 		Assert.Contains("<metadata>", result);
 		Assert.DoesNotContain(".cs", result);
-		// No line range: kind,name is followed directly by the signature, not a third comma-field.
-		Assert.Contains("method,Substring (", result);
+		// Empty loc field: kind,name,,<signature> (the doubled comma is the explicitly empty loc).
+		Assert.Contains("method,Substring,,", result);
+	}
+
+	[Fact]
+	public async Task WhenAMethodHasParameters_ThenTheSignatureIsAPipeDelimitedTypeList()
+	{
+		string result = await RunAsync("SimpleLibrary.Holder", nameFilter: "Combine");
+
+		string memberLine = result.Split('\n').First(line => line.TrimStart('\t').StartsWith("method,Combine", StringComparison.Ordinal));
+		// kind,name,<loc>,<paramType|paramType>
+		string[] fields = memberLine.TrimStart('\t').Split(',');
+		Assert.Equal("string|string", fields[3]);
 	}
 
 	private static async Task<string> RunAsync(
