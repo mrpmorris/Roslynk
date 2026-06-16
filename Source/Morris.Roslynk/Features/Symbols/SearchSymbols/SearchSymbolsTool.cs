@@ -37,7 +37,6 @@ public sealed class SearchSymbolsTool
 		  #count=<results returned>
 		  #truncated=<true|false>
 		  #status=Ready
-		  #snapshot=<id>
 
 		  <relative/forward-slash/path.cs>
 		  \t<namespace>
@@ -56,7 +55,7 @@ public sealed class SearchSymbolsTool
 		SolutionModel model = instance.CurrentModel;
 
 		if (model.Solution is null)
-			return OutlineError.Format(Error.Indexing(), model.Status, model.SnapshotId);
+			return OutlineError.Format(Error.Indexing(), model.Status);
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
@@ -78,7 +77,6 @@ public sealed class SearchSymbolsTool
 		builder.Header("count", results.Count);
 		builder.Header("truncated", all.Count > results.Count);
 		builder.Status(model.Status);
-		builder.Snapshot(model.SnapshotId);
 		builder.BeginBody();
 		root.Render(builder);
 		return builder.ToString();

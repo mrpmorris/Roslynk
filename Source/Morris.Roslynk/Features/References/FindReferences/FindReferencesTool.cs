@@ -40,7 +40,6 @@ public sealed class FindReferencesTool
 		  #count=<locations returned>
 		  #truncated=<true|false>
 		  #status=Ready
-		  #snapshot=<id>
 
 		  <relative/forward-slash/path.cs>
 		  \t<namespace, or "<global>">
@@ -60,7 +59,7 @@ public sealed class FindReferencesTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -121,7 +120,6 @@ public sealed class FindReferencesTool
 		builder.Header("count", page.Count);
 		builder.Header("truncated", truncated);
 		builder.Status(model.Status);
-		builder.Snapshot(model.SnapshotId);
 		builder.BeginBody();
 		root.Render(builder);
 		return builder.ToString();

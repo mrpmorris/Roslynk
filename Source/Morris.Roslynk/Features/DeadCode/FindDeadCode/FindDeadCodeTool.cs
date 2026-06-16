@@ -69,7 +69,6 @@ public sealed class FindDeadCodeTool
 		  #truncated=<true|false>
 		  #note=<conservative caveat>
 		  #status=Ready
-		  #snapshot=<id>
 
 		  <relative/forward-slash/path.cs>
 		  \t<kind>,<fully-qualified name>,<confidence> <reason>
@@ -87,7 +86,7 @@ public sealed class FindDeadCodeTool
 		SolutionModel model = instance.CurrentModel;
 
 		if (model.Solution is null)
-			return OutlineError.Format(Error.Indexing(), model.Status, model.SnapshotId);
+			return OutlineError.Format(Error.Indexing(), model.Status);
 
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
@@ -142,7 +141,6 @@ public sealed class FindDeadCodeTool
 		builder.Header("truncated", truncated);
 		builder.Header("note", Caveat);
 		builder.Status(model.Status);
-		builder.Snapshot(model.SnapshotId);
 		builder.BeginBody();
 
 		IEnumerable<IGrouping<string, Candidate>> byFile = results

@@ -36,7 +36,7 @@ public sealed class ApplyCodeActionTool
 	[Description(
 		"""
 		Applies a code action discovered by get_code_actions, identified by its actionId. Returns a text
-		result, not JSON: '#applied', '#action', '#status', '#snapshot' header, a blank line, then one
+		result, not JSON: '#applied', '#action', '#status' header, a blank line, then one
 		solution-relative changed-file path per line. The action is re-resolved at the same position (nothing is
 		held between calls), then written atomically through the same safe write path as the other tools. Pass
 		checkOnly to preview the changed files without writing. Prefer applying Roslyn's action over
@@ -51,7 +51,7 @@ public sealed class ApplyCodeActionTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -78,7 +78,6 @@ public sealed class ApplyCodeActionTool
 		builder.Header("applied", !checkOnly);
 		builder.Header("action", actionRef.Key);
 		builder.Status(instance.CurrentModel.Status);
-		builder.Snapshot(instance.CurrentModel.SnapshotId);
 		ChangedFilesOutline.Write(builder, files, solutionDirectory);
 		return builder.ToString();
 	}

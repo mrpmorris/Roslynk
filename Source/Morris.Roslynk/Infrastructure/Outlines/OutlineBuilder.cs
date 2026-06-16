@@ -37,8 +37,6 @@ public sealed class OutlineBuilder
 
 	public OutlineBuilder Status(SolutionStatus status) => Header("status", status.ToString());
 
-	public OutlineBuilder Snapshot(string snapshot) => Header("snapshot", snapshot);
-
 	/// <summary>Writes the blank line that separates the header from the body. A no-op after the first call.</summary>
 	public OutlineBuilder BeginBody()
 	{

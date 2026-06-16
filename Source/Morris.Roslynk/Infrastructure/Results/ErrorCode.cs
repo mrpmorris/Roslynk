@@ -1,8 +1,8 @@
 namespace Morris.Roslynk.Infrastructure.Results;
 
 /// <summary>
-/// The category of a failed <see cref="ResultBase"/>, so a caller can branch on the kind of failure
-/// without parsing the message.
+/// The category of a failed tool call, so a caller can branch on the kind of failure without parsing the
+/// message.
 /// </summary>
 public enum ErrorCode
 {

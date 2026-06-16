@@ -38,7 +38,7 @@ public sealed class ApplyCodeFixTool
 		"""
 		Applies the code fix for the first occurrence of a diagnostic id (e.g. CS0219) in a .cs file; the
 		quick path when you already know which diagnostic to clear, without first listing actions. Returns a
-		text result, not JSON: '#applied', '#action', '#status', '#snapshot' header, a blank line, then one
+		text result, not JSON: '#applied', '#action', '#status' header, a blank line, then one
 		solution-relative changed-file path per line. Written atomically through the same safe write path. Pass
 		checkOnly to preview without writing. Prefer this over hand-editing the file to clear a diagnostic so
 		the in-memory model stays in sync.
@@ -53,7 +53,7 @@ public sealed class ApplyCodeFixTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -90,7 +90,6 @@ public sealed class ApplyCodeFixTool
 		builder.Header("applied", !checkOnly);
 		builder.Header("action", fix.Action.Title);
 		builder.Status(instance.CurrentModel.Status);
-		builder.Snapshot(instance.CurrentModel.SnapshotId);
 		ChangedFilesOutline.Write(builder, files, solutionDirectory);
 		return builder.ToString();
 	}

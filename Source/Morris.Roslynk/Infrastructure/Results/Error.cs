@@ -1,9 +1,9 @@
 namespace Morris.Roslynk.Infrastructure.Results;
 
 /// <summary>
-/// A structured failure carried by <see cref="ResultBase.Error"/>. A <see cref="Code"/> and human
-/// <see cref="Message"/> are always present; <see cref="Candidates"/> and <see cref="StaleFiles"/> carry
-/// the only payloads a caller acts on, for the ambiguous/not-found and stale cases respectively.
+/// A structured failure returned by a tool. A <see cref="Code"/> and human <see cref="Message"/> are always
+/// present; <see cref="Candidates"/> and <see cref="StaleFiles"/> carry the only payloads a caller acts on,
+/// for the ambiguous/not-found and stale cases respectively.
 /// </summary>
 public sealed class Error
 {

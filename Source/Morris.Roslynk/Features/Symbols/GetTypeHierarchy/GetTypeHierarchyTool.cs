@@ -37,7 +37,6 @@ public sealed class GetTypeHierarchyTool
 		'<typeKind>,<fully-qualified name>':
 		  #resolvedType=<fully-qualified type>
 		  #status=Ready
-		  #snapshot=<id>
 
 		  base
 		  \t<typeKind>,<fully-qualified name>
@@ -56,7 +55,7 @@ public sealed class GetTypeHierarchyTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -99,7 +98,6 @@ public sealed class GetTypeHierarchyTool
 		var builder = new OutlineBuilder();
 		builder.Header("resolvedType", SymbolResolver.FullyQualifiedName(type));
 		builder.Status(model.Status);
-		builder.Snapshot(model.SnapshotId);
 		builder.BeginBody();
 
 		Section(builder, "base", baseTypes);

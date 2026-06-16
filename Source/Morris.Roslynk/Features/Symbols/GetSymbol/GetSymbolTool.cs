@@ -49,8 +49,8 @@ public sealed class GetSymbolTool
 		  private Task Search(CancellationToken cancellationToken)
 		A metadata symbol (no source) instead returns '#kind', '#signature', '#assembly'. An ambiguous name
 		returns a '#count' header and a 'file -> namespace -> kind,fully-qualified-name,loc' locator tree to
-		disambiguate. Pass format=full for the verbose fields (#fullName, #accessibility, #source, #status,
-		#snapshot and a doc summary) when globally-resolvable types or staleness matter.
+		disambiguate. Pass format=full for the verbose fields (#fullName, #accessibility, #source, #status)
+		and a doc summary when globally-resolvable types or staleness matter.
 		{OutlineDescriptions.ErrorBlock} Prefer this over reading the file to identify a symbol.
 		""")]
 	public async Task<string> GetSymbol(
@@ -62,7 +62,7 @@ public sealed class GetSymbolTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -139,7 +139,6 @@ public sealed class GetSymbolTool
 		}
 
 		builder.Status(model.Status);
-		builder.Snapshot(model.SnapshotId);
 
 		SymbolDocumentation documentation = DocumentationReader.Read(symbol);
 		if (documentation.Summary is not null || documentation.InheritedFrom is not null)
@@ -190,7 +189,6 @@ public sealed class GetSymbolTool
 		var builder = new OutlineBuilder();
 		builder.Header("count", matches.Count);
 		builder.Status(model.Status);
-		builder.Snapshot(model.SnapshotId);
 		builder.BeginBody();
 		root.Render(builder);
 		return builder.ToString();

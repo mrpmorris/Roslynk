@@ -33,7 +33,7 @@ public sealed class GetCodeActionsTool
 	[Description(
 		"""
 		Lists Roslyn's code fixes and refactorings available at a position (or selection) in a .cs file.
-		Returns a text result, not JSON: a '#count', '#status', '#snapshot' header, a blank line, then one
+		Returns a text result, not JSON: a '#count', '#status' header, a blank line, then one
 		'<actionId>,<kind>,<diagnosticId> <title>' line per action (diagnosticId is '-' for a refactoring; the
 		title is free text and trails last). The actionId is opaque and must be passed back verbatim to
 		apply_code_action. Fixes are driven by the compiler diagnostics at that span; refactorings by the span
@@ -52,11 +52,11 @@ public sealed class GetCodeActionsTool
 		SolutionModel model = instance.CurrentModel;
 
 		if (model.Solution is null)
-			return OutlineError.Format(Error.Indexing(), model.Status, model.SnapshotId);
+			return OutlineError.Format(Error.Indexing(), model.Status);
 
 		Document? document = CodeActionService.FindDocument(model.Solution, documentPath);
 		if (document?.FilePath is null)
-			return OutlineError.Format(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs document."), model.Status, model.SnapshotId);
+			return OutlineError.Format(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs document."), model.Status);
 
 		SourceText text = await document.GetTextAsync(cancellationToken);
 		TextSpan span = CodeActionService.SpanFor(text, line, column, endLine, endColumn);
@@ -66,7 +66,6 @@ public sealed class GetCodeActionsTool
 		var builder = new OutlineBuilder();
 		builder.Header("count", actions.Count);
 		builder.Status(model.Status);
-		builder.Snapshot(model.SnapshotId);
 		builder.BeginBody();
 
 		foreach (DiscoveredAction action in actions)

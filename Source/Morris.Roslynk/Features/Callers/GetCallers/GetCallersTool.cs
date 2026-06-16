@@ -39,7 +39,6 @@ public sealed class GetCallersTool
 		  #resolvedSymbol=<fully-qualified name>
 		  #count=<caller count>
 		  #status=Ready
-		  #snapshot=<id>
 
 		  <relative/forward-slash/path.cs>
 		  \t<namespace>
@@ -56,7 +55,7 @@ public sealed class GetCallersTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -91,7 +90,6 @@ public sealed class GetCallersTool
 		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(symbol));
 		builder.Header("count", callers.Count);
 		builder.Status(model.Status);
-		builder.Snapshot(model.SnapshotId);
 		builder.BeginBody();
 		root.Render(builder);
 		return builder.ToString();

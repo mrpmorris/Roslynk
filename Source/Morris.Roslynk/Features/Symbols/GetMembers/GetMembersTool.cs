@@ -40,7 +40,6 @@ public sealed class GetMembersTool
 		  #resolvedType=<fully-qualified type>
 		  #count=<member count>
 		  #status=Ready
-		  #snapshot=<id>
 
 		  <relative/forward-slash/path.cs>
 		  \t<memberKind>,<name>,<startLine>-<endLine> <signature>
@@ -68,7 +67,7 @@ public sealed class GetMembersTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -131,7 +130,6 @@ public sealed class GetMembersTool
 		builder.Header("resolvedType", SymbolResolver.FullyQualifiedName(type));
 		builder.Header("count", members.Count);
 		builder.Status(model.Status);
-		builder.Snapshot(model.SnapshotId);
 		builder.BeginBody();
 
 		foreach (KeyValuePair<string, List<(int Order, string Line)>> file in byFile)

@@ -42,7 +42,7 @@ public sealed class ChangeSignatureTool
 		Adds a new optional parameter to a method and, if a call-site value is given, threads it through every
 		invocation as a named argument; collapsing the repeated add-a-parameter cascades that are otherwise
 		redone by hand across files. Returns a text result, not JSON: '#applied', '#resolvedMethod',
-		'#updatedCallSites', '#status', '#snapshot' header, a blank line, then one solution-relative changed-file
+		'#updatedCallSites', '#status' header, a blank line, then one solution-relative changed-file
 		path per line. The parameter must have a default so the change stays backward-compatible. v1 targets a
 		single ordinary method only: it refuses virtual/override/abstract methods, interface members and their
 		implementations, partial methods, params methods, and constructors (returns #error=NotSupported). Pass
@@ -60,7 +60,7 @@ public sealed class ChangeSignatureTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (!SyntaxFacts.IsValidIdentifier(parameterName))
 			return Failure(Error.Invalid($"'{parameterName}' is not a valid C# identifier."));
@@ -135,7 +135,6 @@ public sealed class ChangeSignatureTool
 		builder.Header("resolvedMethod", resolved);
 		builder.Header("updatedCallSites", callSites.Count);
 		builder.Status(instance.CurrentModel.Status);
-		builder.Snapshot(instance.CurrentModel.SnapshotId);
 		ChangedFilesOutline.Write(builder, changed, solutionDirectory);
 		return builder.ToString();
 	}

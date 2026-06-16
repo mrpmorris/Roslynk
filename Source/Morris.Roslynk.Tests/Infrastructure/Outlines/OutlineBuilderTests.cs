@@ -12,12 +12,11 @@ public class OutlineBuilderTests
 
 		subject.Header("count", 2);
 		subject.Status(SolutionStatus.Ready);
-		subject.Snapshot("7");
 		subject.BeginBody();
 		subject.Line(0, "first");
 		subject.Line(1, "child");
 
-		Assert.Equal("#count=2\n#status=Ready\n#snapshot=7\n\nfirst\n\tchild\n", subject.ToString());
+		Assert.Equal("#count=2\n#status=Ready\n\nfirst\n\tchild\n", subject.ToString());
 	}
 
 	[Fact]

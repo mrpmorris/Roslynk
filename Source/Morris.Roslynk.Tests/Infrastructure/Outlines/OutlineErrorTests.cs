@@ -11,11 +11,10 @@ public class OutlineErrorTests
 	{
 		string result = OutlineError.Format(
 			Error.Ambiguous("'X' matched several symbols.", ["N.A", "N.B"]),
-			SolutionStatus.Ready,
-			"3");
+			SolutionStatus.Ready);
 
 		Assert.Equal(
-			"#error=Ambiguous\n#errorMessage='X' matched several symbols.\n#candidate=N.A\n#candidate=N.B\n#status=Ready\n#snapshot=3\n",
+			"#error=Ambiguous\n#errorMessage='X' matched several symbols.\n#candidate=N.A\n#candidate=N.B\n#status=Ready\n",
 			result);
 	}
 
@@ -24,11 +23,10 @@ public class OutlineErrorTests
 	{
 		string result = OutlineError.Format(
 			Error.Stale("Files moved on disk.", ["src/A.cs", "src/B.cs"]),
-			SolutionStatus.Ready,
-			"4");
+			SolutionStatus.Ready);
 
 		Assert.Equal(
-			"#error=Stale\n#errorMessage=Files moved on disk.\n#stale=src/A.cs\n#stale=src/B.cs\n#status=Ready\n#snapshot=4\n",
+			"#error=Stale\n#errorMessage=Files moved on disk.\n#stale=src/A.cs\n#stale=src/B.cs\n#status=Ready\n",
 			result);
 	}
 
@@ -37,8 +35,7 @@ public class OutlineErrorTests
 	{
 		string result = OutlineError.Format(
 			Error.Invalid("first\r\nsecond"),
-			SolutionStatus.Building,
-			"1");
+			SolutionStatus.Building);
 
 		Assert.DoesNotContain("\r", result);
 		Assert.Contains("#errorMessage=first  second\n", result);

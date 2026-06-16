@@ -30,7 +30,7 @@ public sealed partial class BuildSolutionTool
 	[Description(
 		"""
 		Runs a full 'dotnet build' of the solution out-of-process. Returns a compact text result, not JSON: a
-		'#succeeded', '#errors', '#warnings', '#status', '#snapshot' header, a blank line, then one trimmed
+		'#succeeded', '#errors', '#warnings', '#status' header, a blank line, then one trimmed
 		error line per row. Slower than get_diagnostics (an in-process compile); use it for full verification.
 		""")]
 	public async Task<string> BuildSolution(
@@ -40,7 +40,7 @@ public sealed partial class BuildSolutionTool
 		SolutionModel model = instance.CurrentModel;
 
 		if (model.Solution is null)
-			return OutlineError.Format(Error.Indexing(), model.Status, model.SnapshotId);
+			return OutlineError.Format(Error.Indexing(), model.Status);
 
 		var startInfo = new ProcessStartInfo("dotnet", $"build \"{solutionId}\" --nologo")
 		{
@@ -72,7 +72,6 @@ public sealed partial class BuildSolutionTool
 		builder.Header("errors", errors);
 		builder.Header("warnings", warnings);
 		builder.Status(model.Status);
-		builder.Snapshot(model.SnapshotId);
 		builder.BeginBody();
 
 		foreach (string message in errorMessages)

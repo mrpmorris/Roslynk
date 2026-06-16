@@ -1,4 +1,3 @@
-using System.Globalization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -20,7 +19,6 @@ public sealed class RoslynInstance : IDisposable
 	private ProjectLoadTracker LoadTrackerField = new();
 	private volatile bool DirtyField;
 	private long LastAccessedTicks;
-	private long SnapshotCounter;
 	private IDisposable? Watcher;
 	private readonly TaskCompletionSource ReadySignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -32,7 +30,7 @@ public sealed class RoslynInstance : IDisposable
 	public RoslynInstance(SolutionKey key)
 	{
 		Key = key;
-		CurrentModelField = SolutionModel.Loading(NextSnapshotId(), solution: null);
+		CurrentModelField = SolutionModel.Loading(solution: null);
 		LastAccessedTicks = DateTime.UtcNow.Ticks;
 	}
 
@@ -102,12 +100,12 @@ public sealed class RoslynInstance : IDisposable
 			{
 				SolutionWorkspace workspace = await loader(tracker);
 				Volatile.Write(ref WorkspaceField, workspace);
-				Swap(SolutionModel.Ready(NextSnapshotId(), workspace.Solution));
+				Swap(SolutionModel.Ready(workspace.Solution));
 				onReady(this);
 			}
 			catch (Exception exception)
 			{
-				Swap(SolutionModel.Faulted(NextSnapshotId(), exception.Message));
+				Swap(SolutionModel.Faulted(exception.Message));
 			}
 			finally
 			{
@@ -132,7 +130,7 @@ public sealed class RoslynInstance : IDisposable
 		DirtyField = false;
 		var tracker = new ProjectLoadTracker();
 		Volatile.Write(ref LoadTrackerField, tracker);
-		Swap(SolutionModel.Loading(NextSnapshotId(), CurrentModel.Solution));
+		Swap(SolutionModel.Loading(CurrentModel.Solution));
 
 		_ = Task.Run(async () =>
 		{
@@ -141,33 +139,30 @@ public sealed class RoslynInstance : IDisposable
 				SolutionWorkspace workspace = await loader(tracker);
 				SolutionWorkspace? previous = Volatile.Read(ref WorkspaceField);
 				Volatile.Write(ref WorkspaceField, workspace);
-				Swap(SolutionModel.Ready(NextSnapshotId(), workspace.Solution));
+				Swap(SolutionModel.Ready(workspace.Solution));
 				onReady(this);
 				previous?.Dispose();
 			}
 			catch (Exception exception)
 			{
-				Swap(SolutionModel.Faulted(NextSnapshotId(), exception.Message));
+				Swap(SolutionModel.Faulted(exception.Message));
 			}
 		});
 	}
 
 	/// <summary>
 	/// Publishes an incrementally-edited snapshot (an applied change or a folded-in source edit) as the new
-	/// <see cref="SolutionStatus.Ready"/> model with a fresh <see cref="SolutionModel.SnapshotId"/>.
+	/// <see cref="SolutionStatus.Ready"/> model.
 	/// </summary>
 	public void AdvanceTo(Solution solution)
 	{
 		if (solution is null)
 			throw new ArgumentNullException(nameof(solution));
 
-		Swap(SolutionModel.Ready(NextSnapshotId(), solution));
+		Swap(SolutionModel.Ready(solution));
 	}
 
 	private void Swap(SolutionModel model) => Volatile.Write(ref CurrentModelField, model);
-
-	private string NextSnapshotId() =>
-		Interlocked.Increment(ref SnapshotCounter).ToString(CultureInfo.InvariantCulture);
 
 	public void Dispose()
 	{

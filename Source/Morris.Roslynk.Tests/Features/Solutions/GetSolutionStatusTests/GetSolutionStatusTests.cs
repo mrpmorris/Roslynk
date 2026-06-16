@@ -15,9 +15,9 @@ public class GetSolutionStatusTests
 		string result = subject.GetSolutionStatus();
 
 		Assert.Contains("#count=1", result);
-		// One line "<solutionId>,Ready,1/1,<snapshot>".
+		// One line "<solutionId>,Ready,1/1".
 		string line = result.Split('\n').First(candidate => candidate.Contains(",Ready,", StringComparison.Ordinal));
-		Assert.Contains(",1/1,", line);
+		Assert.EndsWith(",1/1", line);
 	}
 
 	[Fact]
@@ -30,7 +30,7 @@ public class GetSolutionStatusTests
 		string result = subject.GetSolutionStatus();
 
 		string line = result.Split('\n').First(candidate => candidate.Contains(",Ready,", StringComparison.Ordinal));
-		Assert.Contains(",2/2,", line);
+		Assert.EndsWith(",2/2", line);
 	}
 
 	[Fact]
@@ -44,7 +44,7 @@ public class GetSolutionStatusTests
 
 		Assert.Contains("#count=1", result);
 		Assert.Contains(",Building,", result);
-		Assert.Contains("/?,", result);
+		Assert.Contains("/?", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

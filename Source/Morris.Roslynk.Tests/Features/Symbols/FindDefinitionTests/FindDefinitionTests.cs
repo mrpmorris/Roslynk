@@ -1,7 +1,6 @@
 using Morris.Roslynk.Features.Symbols.FindDefinition;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
-using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.FindDefinitionTests;
 
@@ -18,12 +17,13 @@ public class FindDefinitionTests
 		string text = await File.ReadAllTextAsync(callerPath);
 		(int line, int column) = ToLineColumn(text, text.IndexOf("Greeter", StringComparison.Ordinal));
 
-		FindDefinitionResult result = await subject.FindDefinition(TestSolutions.Simple, callerPath, line, column);
+		string result = await subject.FindDefinition(TestSolutions.Simple, callerPath, line, column);
 
-		Assert.True(result.IsSuccess);
-		Assert.NotNull(result.FullName);
-		Assert.Contains("Greeter", result.FullName);
-		Assert.EndsWith("Greeter.cs", result.SourcePath);
+		Assert.DoesNotContain("#error=", result);
+		Assert.Contains("#fullName=SimpleLibrary.Greeter", result);
+		Assert.Contains("#path=", result);
+		Assert.Contains("Greeter.cs", result);
+		Assert.Contains("#loc=", result);
 	}
 
 	[Fact]
@@ -39,10 +39,10 @@ public class FindDefinitionTests
 		string text = await File.ReadAllTextAsync(callerPath);
 		(int line, int column) = ToLineColumn(text, text.IndexOf("Greeter", StringComparison.Ordinal));
 
-		FindDefinitionResult result = await subject.FindDefinition(TestSolutions.Simple, relativePath, line, column);
+		string result = await subject.FindDefinition(TestSolutions.Simple, relativePath, line, column);
 
-		Assert.True(result.IsSuccess);
-		Assert.Contains("Greeter", result.FullName!);
+		Assert.DoesNotContain("#error=", result);
+		Assert.Contains("Greeter", result);
 	}
 
 	[Fact]
@@ -53,11 +53,10 @@ public class FindDefinitionTests
 
 		string callerPath = Path.Combine(Path.GetDirectoryName(TestSolutions.Simple)!, "SimpleLibrary", "Caller.cs");
 
-		FindDefinitionResult result = await subject.FindDefinition(TestSolutions.Simple, callerPath, 1, 1);
+		string result = await subject.FindDefinition(TestSolutions.Simple, callerPath, 1, 1);
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

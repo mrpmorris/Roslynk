@@ -39,7 +39,7 @@ public sealed class RenameSymbolTool
 		"""
 		Renames a symbol and all its references across the solution using Roslyn (correct across partial
 		classes and code-behind; string literals and comments are left untouched). Returns a text result, not
-		JSON: '#applied', '#resolvedSymbol', '#status', '#snapshot' header, a blank line, then one
+		JSON: '#applied', '#resolvedSymbol', '#status' header, a blank line, then one
 		solution-relative changed-file path per line. Refuses an invalid identifier and reports candidates when
 		the name is ambiguous. Pass checkOnly to preview the files that would change without writing. Prefer
 		this over a textual find/replace rename; it renames the symbol itself, so it never touches unrelated
@@ -54,7 +54,7 @@ public sealed class RenameSymbolTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (!SyntaxFacts.IsValidIdentifier(newName))
 			return Failure(Error.Invalid($"'{newName}' is not a valid C# identifier."));
@@ -89,7 +89,6 @@ public sealed class RenameSymbolTool
 		builder.Header("applied", !checkOnly);
 		builder.Header("resolvedSymbol", resolved);
 		builder.Status(instance.CurrentModel.Status);
-		builder.Snapshot(instance.CurrentModel.SnapshotId);
 		ChangedFilesOutline.Write(builder, changed, solutionDirectory);
 		return builder.ToString();
 	}

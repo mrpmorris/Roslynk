@@ -30,7 +30,7 @@ public sealed class OpenSolutionTool
 	[Description(
 		"""
 		Loads a C# solution (.sln or .slnx) into Roslynk so its projects and code can be queried. Returns a
-		compact text result, not JSON: a '#solutionId', '#status', '#snapshot', '#projects', '#loadDiagnostics'
+		compact text result, not JSON: a '#solutionId', '#status', '#projects', '#loadDiagnostics'
 		header, a blank line, then one '<projectPath>,<documentCount>' line per project. Returns immediately:
 		the solution loads in the background, so status is Building (and the body empty) until it is Ready; poll
 		get_solution_status every 1 second and report project-loading progress, or call open_solution again.
@@ -44,7 +44,7 @@ public sealed class OpenSolutionTool
 		SolutionModel model = instance.CurrentModel;
 
 		if (model.Status == SolutionStatus.Faulted)
-			return OutlineError.Format(Error.Faulted(model.FaultMessage ?? "The solution failed to load."), model.Status, model.SnapshotId);
+			return OutlineError.Format(Error.Faulted(model.FaultMessage ?? "The solution failed to load."), model.Status);
 
 		string? solutionDirectory = model.Solution is null
 			? Path.GetDirectoryName(instance.Key.FilePath)
@@ -55,7 +55,6 @@ public sealed class OpenSolutionTool
 		var builder = new OutlineBuilder();
 		builder.Header("solutionId", instance.Key.FilePath);
 		builder.Status(model.Status);
-		builder.Snapshot(model.SnapshotId);
 		builder.Header("projects", projects.Count);
 		builder.Header("loadDiagnostics", loadDiagnostics);
 		builder.BeginBody();

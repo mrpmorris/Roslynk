@@ -41,7 +41,6 @@ public sealed class GetDiagnosticsTool
 		  #infos=<n>
 		  #hidden=<n>
 		  #status=Ready
-		  #snapshot=<id>
 
 		  <relative/forward-slash/path.cs>
 		  \t<severity>,<id>,<line:col> <message>
@@ -63,7 +62,7 @@ public sealed class GetDiagnosticsTool
 		SolutionModel model = instance.CurrentModel;
 
 		if (model.Solution is null)
-			return OutlineError.Format(Error.Indexing(), model.Status, model.SnapshotId);
+			return OutlineError.Format(Error.Indexing(), model.Status);
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
@@ -85,7 +84,6 @@ public sealed class GetDiagnosticsTool
 		builder.Header("infos", all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Info));
 		builder.Header("hidden", all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Hidden));
 		builder.Status(model.Status);
-		builder.Snapshot(model.SnapshotId);
 		builder.BeginBody();
 
 		IEnumerable<IGrouping<string, Diagnostic>> byFile = items

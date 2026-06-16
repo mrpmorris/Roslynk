@@ -29,7 +29,7 @@ public sealed class ReloadSolutionTool
 		"""
 		Reloads a solution from disk in the background; the cleanup after a project or build-file change the
 		incremental model cannot absorb. Returns a header-only text result, not JSON: '#solutionId', '#status',
-		'#projects', '#snapshot'. Returns immediately; the previous snapshot keeps serving reads (status
+		'#projects'. Returns immediately; the previous snapshot keeps serving reads (status
 		Building) until the fresh one is ready. No effect on files. A failed reload is returned as a Faulted
 		#error.
 		""")]
@@ -40,13 +40,12 @@ public sealed class ReloadSolutionTool
 		SolutionModel model = instance.CurrentModel;
 
 		if (model.Status == SolutionStatus.Faulted)
-			return OutlineError.Format(Error.Faulted(model.FaultMessage ?? "The reload failed."), model.Status, model.SnapshotId);
+			return OutlineError.Format(Error.Faulted(model.FaultMessage ?? "The reload failed."), model.Status);
 
 		return new OutlineBuilder()
 			.Header("solutionId", instance.Key.FilePath)
 			.Status(model.Status)
 			.Header("projects", model.Solution?.Projects.Count() ?? 0)
-			.Snapshot(model.SnapshotId)
 			.ToString();
 	}
 }

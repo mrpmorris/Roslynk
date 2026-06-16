@@ -37,7 +37,7 @@ public sealed class RemoveUnusedUsingsTool
 		"""
 		Removes unnecessary using directives (the compiler's CS8019) across the solution, or in one file when
 		documentPath is given; the recurring cleanup after moves and renames. Returns a text result, not JSON:
-		'#applied', '#removedCount', '#status', '#snapshot' header, a blank line, then one solution-relative
+		'#applied', '#removedCount', '#status' header, a blank line, then one solution-relative
 		changed-file path per line. Written atomically through the same safe write path as the other tools. Pass
 		checkOnly to preview the changed files without writing.
 		""")]
@@ -50,7 +50,7 @@ public sealed class RemoveUnusedUsingsTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -64,7 +64,6 @@ public sealed class RemoveUnusedUsingsTool
 			builder.Header("applied", applied);
 			builder.Header("removedCount", removedCount);
 			builder.Status(instance.CurrentModel.Status);
-			builder.Snapshot(instance.CurrentModel.SnapshotId);
 			ChangedFilesOutline.Write(builder, changed, solutionDirectory);
 			return builder.ToString();
 		}

@@ -25,5 +25,5 @@ internal static class OutlineDescriptions
 	/// <summary>The shared failure shape every tool falls back to.</summary>
 	public const string ErrorBlock =
 		"On failure the result is header only: #error=<Indexing|NotFound|Ambiguous|...>, #errorMessage=..., "
-		+ "zero or more #candidate=<fqn>, then #status and #snapshot.";
+		+ "zero or more #candidate=<fqn>, then #status.";
 }

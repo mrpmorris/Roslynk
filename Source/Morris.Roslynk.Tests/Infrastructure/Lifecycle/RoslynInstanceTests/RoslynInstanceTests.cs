@@ -31,14 +31,14 @@ public class RoslynInstanceTests
 	}
 
 	[Fact]
-	public async Task WhenAdvanced_ThenTheSnapshotIdChangesAndStatusStaysReady()
+	public async Task WhenAdvanced_ThenTheNewSolutionIsPublishedAndStatusStaysReady()
 	{
 		using RoslynInstance subject = await LoadReadyAsync();
-		string before = subject.CurrentModel.SnapshotId;
+		Solution advanced = subject.CurrentSolution;
 
-		subject.AdvanceTo(subject.CurrentSolution);
+		subject.AdvanceTo(advanced);
 
-		Assert.NotEqual(before, subject.CurrentModel.SnapshotId);
+		Assert.Same(advanced, subject.CurrentModel.Solution);
 		Assert.Equal(SolutionStatus.Ready, subject.CurrentModel.Status);
 	}
 
