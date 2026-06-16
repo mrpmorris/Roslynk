@@ -17,9 +17,6 @@ public sealed class GetSymbolTool
 {
 	public const string GetSymbolName = "get_symbol";
 
-	private const string MetadataBucket = "<metadata>";
-	private const string GlobalNamespace = "<global>";
-
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
 
@@ -48,7 +45,7 @@ public sealed class GetSymbolTool
 
 		  private Task Search(CancellationToken cancellationToken)
 		A metadata symbol (no source) instead returns '#kind', '#signature', '#assembly'. An ambiguous name
-		returns a 'file -> namespace -> kind,fully-qualified-name,loc' locator tree to
+		returns a 'file -> namespace -> containing type(s) -> kind,name,loc' locator tree to
 		disambiguate. Pass format=full for the verbose fields (#fullName, #accessibility, #source)
 		and a doc summary when globally-resolvable types or staleness matter.
 		{OutlineDescriptions.ErrorBlock} Prefer this over reading the file to identify a symbol.
@@ -165,26 +162,7 @@ public sealed class GetSymbolTool
 	{
 		var root = new SymbolNode();
 		foreach (ISymbol symbol in matches)
-		{
-			Location? location = symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
-			string file = location?.SourceTree?.FilePath is string path
-				? SolutionRelativePath.Of(solutionDirectory, path)!
-				: symbol.ContainingAssembly?.Name ?? MetadataBucket;
-
-			INamespaceSymbol? containing = symbol.ContainingNamespace;
-			string @namespace = containing is null || containing.IsGlobalNamespace ? GlobalNamespace : containing.ToDisplayString();
-
-			SymbolNode leaf = root.Child(file).Child(@namespace).Child($"{SymbolKindText.Of(symbol)},{SymbolResolver.FullyQualifiedName(symbol)}");
-			if (location is not null)
-			{
-				FileLinePositionSpan span = location.GetLineSpan();
-				leaf.AddLocation(
-					span.StartLinePosition.Line + 1,
-					span.StartLinePosition.Character + 1,
-					span.EndLinePosition.Line + 1,
-					span.EndLinePosition.Character + 1);
-			}
-		}
+			SymbolPlacement.Place(root, symbol, solutionDirectory);
 
 		var builder = new OutlineBuilder();
 		builder.Status(model.Status);
