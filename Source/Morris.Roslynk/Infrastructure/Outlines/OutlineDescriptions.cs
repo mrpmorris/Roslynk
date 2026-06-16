@@ -23,10 +23,17 @@ internal static class OutlineDescriptions
 		+ "tab-indented body. Newlines are '\\n'; booleans are Y or N. A #status header is present only when the solution is not "
 		+ "Ready (Building or Faulted); its absence means Ready.";
 
-	/// <summary>How a capped (paginated) result announces that it dropped rows.</summary>
+	/// <summary>How a capped (paginated) result announces that it dropped rows, when the total is known.</summary>
 	public const string Truncation =
 		"If the result is capped at maxResults, a #count=<total available> and #truncated=Y header precede the "
 		+ "body; both are absent when nothing was dropped, so the body is then the complete set.";
+
+	/// <summary>
+	/// How a capped result announces truncation when it cannot cheaply know the total (a scan that
+	/// early-exits), so only the flag is emitted.
+	/// </summary>
+	public const string TruncationFlag =
+		"A #truncated=Y header is present only when more results exist beyond maxResults; it is absent otherwise.";
 
 	/// <summary>The shared failure shape every tool falls back to.</summary>
 	public const string ErrorBlock =

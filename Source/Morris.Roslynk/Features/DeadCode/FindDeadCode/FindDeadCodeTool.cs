@@ -68,7 +68,7 @@ public sealed class FindDeadCodeTool
 		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}, confidence is High or
 		Medium, and the free-text reason is last; a dead type is itself a leaf carrying its own loc. The loc is
 		the full declaration span, ready to pass to apply_patch to remove the member. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
-		solutions with scope. A #truncated=Y header is present only when more candidates exist beyond maxResults. {OutlineDescriptions.ErrorBlock}
+		solutions with scope. {OutlineDescriptions.TruncationFlag} {OutlineDescriptions.ErrorBlock}
 		""")]
 	public async Task<string> FindDeadCode(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

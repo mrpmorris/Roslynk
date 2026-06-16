@@ -31,13 +31,13 @@ public sealed class GetCodeActionsTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		"""
+		$"""
 		Lists Roslyn's code fixes and refactorings available at a position (or selection) in a .cs file.
-		Returns a text result, not JSON: a blank line, then one
+		{OutlineDescriptions.TextNotJson} The body is one
 		'<actionId>,<kind>,<diagnosticId> <title>' line per action (diagnosticId is '-' for a refactoring; the
 		title is free text and trails last). The actionId is opaque and must be passed back verbatim to
 		apply_code_action. Fixes are driven by the compiler diagnostics at that span; refactorings by the span
-		itself. Line and column are 1-based. Prefer discovering a fix here over editing by hand.
+		itself. Line and column are 1-based. {OutlineDescriptions.ErrorBlock} Prefer discovering a fix here over editing by hand.
 		""")]
 	public async Task<string> GetCodeActions(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
