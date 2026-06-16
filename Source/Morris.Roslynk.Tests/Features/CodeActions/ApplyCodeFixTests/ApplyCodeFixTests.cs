@@ -18,7 +18,7 @@ public class ApplyCodeFixTests
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS0219");
 
-		Assert.Contains("#applied=true", result);
+		Assert.Contains("#applied=Y", result);
 		Assert.DoesNotContain("int unused", await File.ReadAllTextAsync(greeter));
 	}
 

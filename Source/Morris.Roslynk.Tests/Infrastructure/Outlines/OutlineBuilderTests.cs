@@ -53,14 +53,14 @@ public class OutlineBuilderTests
 	}
 
 	[Fact]
-	public void WhenABooleanHeaderIsWritten_ThenItIsLowerCaseTrueOrFalse()
+	public void WhenABooleanHeaderIsWritten_ThenItIsYOrN()
 	{
 		var subject = new OutlineBuilder();
 
 		subject.Header("truncated", true);
 		subject.Header("applied", false);
 
-		Assert.Equal("#truncated=true\n#applied=false\n", subject.ToString());
+		Assert.Equal("#truncated=Y\n#applied=N\n", subject.ToString());
 	}
 
 	[Theory]

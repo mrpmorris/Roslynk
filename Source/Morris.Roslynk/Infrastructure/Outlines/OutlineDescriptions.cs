@@ -20,7 +20,7 @@ internal static class OutlineDescriptions
 	/// <summary>The common output preamble: a text block, not JSON.</summary>
 	public const string TextNotJson =
 		"Returns a compact text outline, not JSON: '#'-prefixed header lines, a blank line, then a "
-		+ "tab-indented body. Newlines are '\\n'. A #status header is present only when the solution is not "
+		+ "tab-indented body. Newlines are '\\n'; booleans are Y or N. A #status header is present only when the solution is not "
 		+ "Ready (Building or Faulted); its absence means Ready.";
 
 	/// <summary>The shared failure shape every tool falls back to.</summary>

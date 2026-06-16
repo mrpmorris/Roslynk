@@ -31,7 +31,7 @@ public sealed class OutlineBuilder
 
 	public OutlineBuilder Header(string key, bool value)
 	{
-		Builder.Append('#').Append(key).Append('=').Append(value ? "true" : "false").Append('\n');
+		Builder.Append('#').Append(key).Append('=').Append(value ? "Y" : "N").Append('\n');
 		return this;
 	}
 

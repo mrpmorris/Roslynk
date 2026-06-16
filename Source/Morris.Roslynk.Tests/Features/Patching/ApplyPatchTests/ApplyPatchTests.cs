@@ -22,7 +22,7 @@ public class ApplyPatchTests
 
 		string result = await subject.ApplyPatch(solutionPath, patch);
 
-		Assert.Contains("#applied=true", result);
+		Assert.Contains("#applied=Y", result);
 		Assert.Contains("// patched", await File.ReadAllTextAsync(greeter));
 		Assert.Contains("// patched", await ReadSnapshotTextAsync(instance, greeter));
 	}
@@ -41,7 +41,7 @@ public class ApplyPatchTests
 
 		string result = await subject.ApplyPatch(solutionPath, patch, baseVersions: null, checkOnly: true);
 
-		Assert.Contains("#applied=false", result);
+		Assert.Contains("#applied=N", result);
 		Assert.Equal(original, await File.ReadAllTextAsync(greeter));
 	}
 
@@ -134,7 +134,7 @@ public class ApplyPatchTests
 
 		string result = await subject.ApplyPatch(solutionPath, patch);
 
-		Assert.Contains("#applied=true", result);
+		Assert.Contains("#applied=Y", result);
 		Assert.Contains("// patched", await File.ReadAllTextAsync(greeter));
 	}
 

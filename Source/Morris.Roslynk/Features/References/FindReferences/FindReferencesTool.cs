@@ -38,7 +38,7 @@ public sealed class FindReferencesTool
 		reference under file -> namespace -> type(s) -> member, so a shared declaration is printed once:
 		  #resolvedSymbol=<fully-qualified name>
 		  #count=<locations returned>
-		  #truncated=<true|false>
+		  #truncated=<Y|N>
 
 		  <relative/forward-slash/path.cs>
 		  \t<namespace, or "<global>">

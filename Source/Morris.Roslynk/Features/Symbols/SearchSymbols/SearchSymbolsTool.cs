@@ -35,7 +35,7 @@ public sealed class SearchSymbolsTool
 		solution. {OutlineDescriptions.TextNotJson} Matches are grouped file -> namespace -> type -> member, a
 		matched member nesting under its (parent-only) type:
 		  #count=<results returned>
-		  #truncated=<true|false>
+		  #truncated=<Y|N>
 
 		  <relative/forward-slash/path.cs>
 		  \t<namespace>

@@ -16,7 +16,7 @@ public class FindReferencesTests
 		string result = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
 		Assert.Contains("#resolvedSymbol=SimpleLibrary.Greeter", result);
-		Assert.Contains("#truncated=false", result);
+		Assert.Contains("#truncated=N", result);
 		Assert.Contains("SimpleLibrary/Caller.cs", result);
 		Assert.Contains("\tSimpleLibrary\n", result);
 		Assert.Contains("\t\tclass,Caller\n", result);
@@ -46,7 +46,7 @@ public class FindReferencesTests
 		string result = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Greeter", maxResults: 0);
 
 		Assert.Contains("#count=0", result);
-		Assert.Contains("#truncated=true", result);
+		Assert.Contains("#truncated=Y", result);
 	}
 
 	[Fact]
@@ -74,7 +74,7 @@ public class FindReferencesTests
 
 		Assert.Contains("#resolvedSymbol=RefSpace.IThing", result);
 		Assert.Contains("#count=12", result);
-		Assert.Contains("#truncated=false", result);
+		Assert.Contains("#truncated=N", result);
 		Assert.DoesNotContain("\r", result);
 
 		Assert.Contains("RefLibrary/Things.cs", result);

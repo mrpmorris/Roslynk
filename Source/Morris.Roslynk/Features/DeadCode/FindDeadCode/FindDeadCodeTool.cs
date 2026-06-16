@@ -66,7 +66,7 @@ public sealed class FindDeadCodeTool
 		generated code, and DI/reflection-activated members, and (unless includePublic is true) the public API
 		surface. {OutlineDescriptions.TextNotJson} Candidates are grouped by file:
 		  #count=<candidate count>
-		  #truncated=<true|false>
+		  #truncated=<Y|N>
 		  #note=<conservative caveat>
 
 		  <relative/forward-slash/path.cs>

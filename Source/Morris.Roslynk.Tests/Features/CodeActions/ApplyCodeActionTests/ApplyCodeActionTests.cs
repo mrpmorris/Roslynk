@@ -21,7 +21,7 @@ public class ApplyCodeActionTests
 
 		string result = await subject.ApplyCodeAction(solutionPath, actionId);
 
-		Assert.Contains("#applied=true", result);
+		Assert.Contains("#applied=Y", result);
 		Assert.DoesNotContain("int unused", await File.ReadAllTextAsync(greeter));
 	}
 
@@ -38,7 +38,7 @@ public class ApplyCodeActionTests
 
 		string result = await subject.ApplyCodeAction(solutionPath, actionId, checkOnly: true);
 
-		Assert.Contains("#applied=false", result);
+		Assert.Contains("#applied=N", result);
 		Assert.Equal(before, await File.ReadAllTextAsync(greeter));
 	}
 

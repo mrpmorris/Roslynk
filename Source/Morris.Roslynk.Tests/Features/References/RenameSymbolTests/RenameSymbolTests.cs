@@ -19,7 +19,7 @@ public class RenameSymbolTests
 
 		string result = await subject.RenameSymbol(solutionPath, "SimpleLibrary.Greeter", "Welcomer");
 
-		Assert.Contains("#applied=true", result);
+		Assert.Contains("#applied=Y", result);
 		Assert.Contains("#resolvedSymbol=SimpleLibrary.Greeter", result);
 		Assert.Contains("SimpleLibrary/Greeter.cs", result);
 

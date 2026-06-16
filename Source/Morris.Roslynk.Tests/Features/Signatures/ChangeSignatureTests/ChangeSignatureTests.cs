@@ -18,7 +18,7 @@ public class ChangeSignatureTests
 		string result = await subject.ChangeSignature(
 			solutionPath, "SimpleLibrary.Widget.Compute", "int", "factor", "1", callSiteArgument: "1");
 
-		Assert.Contains("#applied=true", result);
+		Assert.Contains("#applied=Y", result);
 		Assert.Contains("#updatedCallSites=1", result);
 		string text = await File.ReadAllTextAsync(FindFile(solutionPath, "Widget.cs"));
 		Assert.Contains("int factor = 1", text);
@@ -38,7 +38,7 @@ public class ChangeSignatureTests
 		string result = await subject.ChangeSignature(
 			solutionPath, "SimpleLibrary.Widget.Compute", "int", "factor", "1", callSiteArgument: "1", checkOnly: true);
 
-		Assert.Contains("#applied=false", result);
+		Assert.Contains("#applied=N", result);
 		Assert.Contains("Widget.cs", result);
 		Assert.Equal(before, await File.ReadAllTextAsync(widget));
 	}
