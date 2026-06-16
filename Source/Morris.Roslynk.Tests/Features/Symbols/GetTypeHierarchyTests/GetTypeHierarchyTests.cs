@@ -21,6 +21,19 @@ public class GetTypeHierarchyTests
 	}
 
 	[Fact]
+	public async Task WhenASectionIsEmpty_ThenItIsOmitted()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetTypeHierarchyTool(registry, new SymbolResolver());
+
+		string result = await subject.GetTypeHierarchy(TestSolutions.Simple, "SimpleLibrary.Greeter");
+
+		// Greeter has no derived types, so the 'derived' section header is absent entirely.
+		Assert.DoesNotContain("derived", result);
+	}
+
+	[Fact]
 	public async Task WhenTheTypeIsNotFound_ThenNotFoundIsReturned()
 	{
 		using var registry = new InstanceRegistry();

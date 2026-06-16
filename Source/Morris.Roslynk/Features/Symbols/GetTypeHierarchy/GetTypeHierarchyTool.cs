@@ -33,8 +33,8 @@ public sealed class GetTypeHierarchyTool
 	[Description(
 		$"""
 		Returns a type's base-type chain, implemented interfaces, and known derived types, resolved by
-		fully-qualified name. {OutlineDescriptions.TextNotJson} The body has three fixed sections, each entry a
-		'<typeKind>,<fully-qualified name>':
+		fully-qualified name. {OutlineDescriptions.TextNotJson} The body has up to three sections (base,
+		interfaces, derived); an empty section is omitted, and each entry is a '<typeKind>,<fully-qualified name>':
 		  #resolvedType=<fully-qualified type>
 
 		  base
@@ -107,6 +107,9 @@ public sealed class GetTypeHierarchyTool
 
 	private void Section(OutlineBuilder builder, string title, IReadOnlyList<INamedTypeSymbol> types)
 	{
+		if (types.Count == 0)
+			return;
+
 		builder.Line(0, title);
 		foreach (INamedTypeSymbol type in types)
 			builder.Line(1, $"{SymbolKindText.Of(type)},{SymbolResolver.FullyQualifiedName(type)}");
