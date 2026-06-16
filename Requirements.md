@@ -251,7 +251,7 @@ App|M:Sales.CustomerService.GetAsync(System.String)
 
 ### 2.3 Full build / test (slower, out-of-process)
 
-* [ ] `build_solution` — a separate, slower tool that shells out to `dotnet`, distinct from the Tier 1.1 in-process compile check. Use only when diagnostics are clean and full verification is wanted.
+* [removed] `build_solution` — removed. It shelled out to the same `dotnet build` the host can run directly and returned only a lossy parsed summary (counts plus the first error lines). `get_diagnostics` covers the fast in-process compile check; a raw `dotnet build` covers full verification with no fidelity loss.
 
 ### 2.4 Mechanical fixes
 
