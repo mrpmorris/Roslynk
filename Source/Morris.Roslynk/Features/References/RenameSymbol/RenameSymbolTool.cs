@@ -4,8 +4,10 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Rename;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Features.References.RenameSymbol;
@@ -36,12 +38,14 @@ public sealed class RenameSymbolTool
 	[Description(
 		"""
 		Renames a symbol and all its references across the solution using Roslyn (correct across partial
-		classes and code-behind; string literals and comments are left untouched). Refuses an invalid
-		identifier and reports candidates when the name is ambiguous. Pass checkOnly to preview the
-		files that would change without writing. Prefer this over a textual find/replace rename; it renames
-		the symbol itself, so it never touches unrelated same-named text.
+		classes and code-behind; string literals and comments are left untouched). Returns a text result, not
+		JSON: '#applied', '#resolvedSymbol', '#status', '#snapshot' header, a blank line, then one
+		solution-relative changed-file path per line. Refuses an invalid identifier and reports candidates when
+		the name is ambiguous. Pass checkOnly to preview the files that would change without writing. Prefer
+		this over a textual find/replace rename; it renames the symbol itself, so it never touches unrelated
+		same-named text.
 		""")]
-	public async Task<RenameSymbolResult> RenameSymbol(
+	public async Task<string> RenameSymbol(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the symbol to rename.")] string symbolName,
 		[Description("The new name (must be a valid C# identifier).")] string newName,
@@ -50,11 +54,7 @@ public sealed class RenameSymbolTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		RenameSymbolResult Success(bool applied, string resolved, IReadOnlyList<string> changedFiles) =>
-			new(model.SnapshotId, model.Status, error: null, applied, resolved, changedFiles);
-
-		RenameSymbolResult Failure(Error error) =>
-			new(model.SnapshotId, model.Status, error, applied: false, resolvedSymbol: null, changedFiles: null);
+		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
 
 		if (!SyntaxFacts.IsValidIdentifier(newName))
 			return Failure(Error.Invalid($"'{newName}' is not a valid C# identifier."));
@@ -63,6 +63,7 @@ public sealed class RenameSymbolTool
 			return Failure(Error.Indexing());
 
 		Solution solution = model.Solution;
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
 		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, symbolName);
 		if (matches.Count == 0)
@@ -80,13 +81,16 @@ public sealed class RenameSymbolTool
 		string resolved = SymbolResolver.FullyQualifiedName(symbol);
 		Solution renamed = await Renamer.RenameSymbolAsync(solution, symbol, new SymbolRenameOptions(), newName);
 
-		if (checkOnly)
-		{
-			IReadOnlyList<string> preview = ApplyPipeline.GetChangedFilePaths(solution, renamed);
-			return Success(applied: false, resolved, preview);
-		}
+		IReadOnlyList<string> changed = checkOnly
+			? ApplyPipeline.GetChangedFilePaths(solution, renamed)
+			: await ApplyPipeline.ApplyAsync(instance, renamed);
 
-		IReadOnlyList<string> changed = await ApplyPipeline.ApplyAsync(instance, renamed);
-		return Success(applied: true, resolved, changed);
+		var builder = new OutlineBuilder();
+		builder.Header("applied", !checkOnly);
+		builder.Header("resolvedSymbol", resolved);
+		builder.Status(instance.CurrentModel.Status);
+		builder.Snapshot(instance.CurrentModel.SnapshotId);
+		ChangedFilesOutline.Write(builder, changed, solutionDirectory);
+		return builder.ToString();
 	}
 }

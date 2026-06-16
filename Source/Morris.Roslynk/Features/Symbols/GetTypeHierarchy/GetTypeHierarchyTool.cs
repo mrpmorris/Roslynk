@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 
@@ -30,24 +31,32 @@ public sealed class GetTypeHierarchyTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		"""
+		$"""
 		Returns a type's base-type chain, implemented interfaces, and known derived types, resolved by
-		fully-qualified name. Ambiguous names return candidate fully-qualified names instead. Prefer this
-		over reading files to reconstruct a hierarchy; the chain comes from the compiler, including base
-		types defined in referenced assemblies.
+		fully-qualified name. {OutlineDescriptions.TextNotJson} The body has three fixed sections, each entry a
+		'<typeKind>,<fully-qualified name>':
+		  #resolvedType=<fully-qualified type>
+		  #status=Ready
+		  #snapshot=<id>
+
+		  base
+		  \t<typeKind>,<fully-qualified name>
+		  interfaces
+		  \t<typeKind>,<fully-qualified name>
+		  derived
+		  \t<typeKind>,<fully-qualified name>
+		where typeKind is class|struct|interface|enum|delegate. {OutlineDescriptions.ErrorBlock} Prefer this
+		over reading files to reconstruct a hierarchy; the chain comes from the compiler, including base types
+		defined in referenced assemblies.
 		""")]
-	public async Task<GetTypeHierarchyResult> GetTypeHierarchy(
+	public async Task<string> GetTypeHierarchy(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the type, e.g. 'MyNamespace.MyType'.")] string typeName)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		GetTypeHierarchyResult Success(string resolvedType, IReadOnlyList<string> baseTypes, IReadOnlyList<string> interfaces, IReadOnlyList<string> derivedTypes) =>
-			new(model.SnapshotId, model.Status, error: null, resolvedType, baseTypes, interfaces, derivedTypes);
-
-		GetTypeHierarchyResult Failure(Error error) =>
-			new(model.SnapshotId, model.Status, error, resolvedType: null, baseTypes: null, interfaces: null, derivedTypes: null);
+		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -73,15 +82,36 @@ public sealed class GetTypeHierarchyTool
 
 		INamedTypeSymbol type = types[0];
 
-		var baseTypes = new List<string>();
+		var baseTypes = new List<INamedTypeSymbol>();
 		for (INamedTypeSymbol? baseType = type.BaseType; baseType is not null; baseType = baseType.BaseType)
-			baseTypes.Add(SymbolResolver.FullyQualifiedName(baseType));
+			baseTypes.Add(baseType);
 
-		string[] interfaces = type.AllInterfaces.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+		List<INamedTypeSymbol> interfaces = type.AllInterfaces
+			.DistinctBy(SymbolResolver.FullyQualifiedName, StringComparer.Ordinal)
+			.OrderBy(SymbolResolver.FullyQualifiedName, StringComparer.Ordinal)
+			.ToList();
 
-		IEnumerable<INamedTypeSymbol> derived = await SymbolFinder.FindDerivedClassesAsync(type, model.Solution);
-		string[] derivedTypes = derived.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+		List<INamedTypeSymbol> derived = (await SymbolFinder.FindDerivedClassesAsync(type, model.Solution))
+			.DistinctBy(SymbolResolver.FullyQualifiedName, StringComparer.Ordinal)
+			.OrderBy(SymbolResolver.FullyQualifiedName, StringComparer.Ordinal)
+			.ToList();
 
-		return Success(SymbolResolver.FullyQualifiedName(type), baseTypes, interfaces, derivedTypes);
+		var builder = new OutlineBuilder();
+		builder.Header("resolvedType", SymbolResolver.FullyQualifiedName(type));
+		builder.Status(model.Status);
+		builder.Snapshot(model.SnapshotId);
+		builder.BeginBody();
+
+		Section(builder, "base", baseTypes);
+		Section(builder, "interfaces", interfaces);
+		Section(builder, "derived", derived);
+		return builder.ToString();
+	}
+
+	private void Section(OutlineBuilder builder, string title, IReadOnlyList<INamedTypeSymbol> types)
+	{
+		builder.Line(0, title);
+		foreach (INamedTypeSymbol type in types)
+			builder.Line(1, $"{SymbolKindText.Of(type)},{SymbolResolver.FullyQualifiedName(type)}");
 	}
 }

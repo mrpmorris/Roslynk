@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Features.Build.BuildSolution;
@@ -28,24 +29,18 @@ public sealed partial class BuildSolutionTool
 		OpenWorld = true)]
 	[Description(
 		"""
-		Runs a full 'dotnet build' of the solution out-of-process and returns whether it succeeded with
-		error/warning counts and the first error messages. Slower than get_diagnostics (which is an
-		in-process compile); use it for full verification.
+		Runs a full 'dotnet build' of the solution out-of-process. Returns a compact text result, not JSON: a
+		'#succeeded', '#errors', '#warnings', '#status', '#snapshot' header, a blank line, then one trimmed
+		error line per row. Slower than get_diagnostics (an in-process compile); use it for full verification.
 		""")]
-	public async Task<BuildSolutionResult> BuildSolution(
+	public async Task<string> BuildSolution(
 		[Description("Solution handle returned by open_solution (the .sln/.slnx path).")] string solutionId)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		BuildSolutionResult Success(bool succeeded, int errors, int warnings, IReadOnlyList<string> errorMessages) =>
-			new(model.SnapshotId, model.Status, error: null, succeeded, errors, warnings, errorMessages);
-
-		BuildSolutionResult Failure(Error error) =>
-			new(model.SnapshotId, model.Status, error, succeeded: null, errors: null, warnings: null, errorMessages: null);
-
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return OutlineError.Format(Error.Indexing(), model.Status, model.SnapshotId);
 
 		var startInfo = new ProcessStartInfo("dotnet", $"build \"{solutionId}\" --nologo")
 		{
@@ -72,7 +67,18 @@ public sealed partial class BuildSolutionTool
 			.Take(20)
 			.ToArray();
 
-		return Success(process.ExitCode == 0, errors, warnings, errorMessages);
+		var builder = new OutlineBuilder();
+		builder.Header("succeeded", process.ExitCode == 0);
+		builder.Header("errors", errors);
+		builder.Header("warnings", warnings);
+		builder.Status(model.Status);
+		builder.Snapshot(model.SnapshotId);
+		builder.BeginBody();
+
+		foreach (string message in errorMessages)
+			builder.Line(0, OutlineBuilder.Sanitize(message));
+
+		return builder.ToString();
 	}
 
 	private static int ParseCount(string output, Regex regex)

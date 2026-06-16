@@ -1,7 +1,6 @@
 using Morris.Roslynk.Features.CodeActions.GetCodeActions;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Lifecycle;
-using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Tests.Helpers;
 
 namespace Morris.Roslynk.Tests.Features.CodeActions.GetCodeActionsTests;
@@ -16,11 +15,12 @@ public class GetCodeActionsTests
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new GetCodeActionsTool(registry, new CodeActionService());
 
-		GetCodeActionsResult result = await subject.GetCodeActions(solutionPath, greeter, unusedLine, 3, unusedLine, 20);
+		string result = await subject.GetCodeActions(solutionPath, greeter, unusedLine, 3, unusedLine, 20);
 
-		Assert.True(result.IsSuccess);
-		Assert.Contains(result.Actions!, action => action.DiagnosticId == "CS0219");
-		Assert.All(result.Actions!, action => Assert.False(string.IsNullOrEmpty(action.ActionId)));
+		Assert.DoesNotContain("#error=", result);
+		// A body line is "<actionId>,<kind>,CS0219 <title>"; the actionId is the first field and is non-empty.
+		string fixLine = result.Split('\n').First(line => line.Contains(",CS0219 ", StringComparison.Ordinal));
+		Assert.False(string.IsNullOrEmpty(fixLine.Split(',')[0]));
 	}
 
 	[Fact]
@@ -30,10 +30,9 @@ public class GetCodeActionsTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new GetCodeActionsTool(registry, new CodeActionService());
 
-		GetCodeActionsResult result = await subject.GetCodeActions(TestSolutions.Simple, "NoSuchFile.cs", 1, 1);
+		string result = await subject.GetCodeActions(TestSolutions.Simple, "NoSuchFile.cs", 1, 1);
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.NotFound, result.Error!.Code);
+		Assert.Contains("#error=NotFound", result);
 	}
 
 	[Fact]
@@ -42,10 +41,10 @@ public class GetCodeActionsTests
 		using var registry = new InstanceRegistry();
 		var subject = new GetCodeActionsTool(registry, new CodeActionService());
 
-		GetCodeActionsResult result = await subject.GetCodeActions(TestSolutions.Simple, "Widget.cs", 1, 1);
+		string result = await subject.GetCodeActions(TestSolutions.Simple, "Widget.cs", 1, 1);
 
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

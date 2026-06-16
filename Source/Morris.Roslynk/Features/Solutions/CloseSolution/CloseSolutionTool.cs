@@ -23,10 +23,11 @@ public sealed class CloseSolutionTool
 		Idempotent = true,
 		Destructive = false,
 		OpenWorld = false)]
-	[Description("Unloads a solution, freeing its workspace. No effect on files. Returns whether it was open.")]
-	public CloseSolutionResponse CloseSolution(
+	[Description("Unloads a solution, freeing its workspace. No effect on files. Returns an empty result.")]
+	public string CloseSolution(
 		[Description("Solution handle returned by open_solution.")] string solutionId)
 	{
-		return new CloseSolutionResponse(InstanceRegistry.TryClose(solutionId));
+		InstanceRegistry.TryClose(solutionId);
+		return "";
 	}
 }

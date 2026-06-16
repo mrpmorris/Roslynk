@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -31,37 +32,47 @@ public sealed class FindReferencesTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		"""
+		$"""
 		Finds all references to a symbol across the solution, resolved by fully-qualified name (e.g.
-		'Namespace.Type' or 'Namespace.Type.Member'). If the name resolves to more than one symbol the
-		candidate fully-qualified names are returned instead, so you can disambiguate. Prefer this over
-		grepping for a name; it matches the compiler's symbol, not text, so it skips comments, strings, and
-		unrelated same-named members and still finds usages in code-behind and partial classes.
+		'Namespace.Type' or 'Namespace.Type.Member'). {OutlineDescriptions.TextNotJson} The body groups every
+		reference under file -> namespace -> type(s) -> member, so a shared declaration is printed once:
+		  #resolvedSymbol=<fully-qualified name>
+		  #count=<locations returned>
+		  #truncated=<true|false>
+		  #status=Ready
+		  #snapshot=<id>
+
+		  <relative/forward-slash/path.cs>
+		  \t<namespace, or "<global>">
+		  \t\t<typeKind>,<typeName>,<loc|loc|...>   (locations present only when the type declaration itself references the symbol)
+		  \t\t\t<memberKind>,<memberName>,<loc|loc|...>
+		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.Loc}; {OutlineDescriptions.LocList}.
+		{OutlineDescriptions.ErrorBlock} Prefer this over grepping: it matches the compiler's symbol, not text,
+		so it skips comments, strings and unrelated same-named members, and still finds usages in code-behind
+		and partial classes.
 		""")]
-	public async Task<FindReferencesResult> FindReferences(
+	public async Task<string> FindReferences(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'.")] string symbolName,
-		[Description("Maximum reference locations to return. Default 100.")] int maxResults = 100)
+		[Description("Maximum reference locations to return. Default 100.")] int maxResults = 100,
+		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		FindReferencesResult Success(string resolvedSymbol, IReadOnlyList<ReferenceDto> references, bool truncated) =>
-			new(model.SnapshotId, model.Status, error: null, resolvedSymbol, references, truncated);
-
-		FindReferencesResult Failure(Error error) =>
-			new(model.SnapshotId, model.Status, error, resolvedSymbol: null, references: null, truncated: false);
+		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
 
-		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
+		Solution solution = model.Solution;
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(model.Solution, symbolName);
+		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, symbolName);
 
 		if (matches.Count == 0)
 		{
-			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
+			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(solution, symbolName);
 			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", candidates.Count > 0 ? candidates : null));
 		}
 
@@ -72,28 +83,47 @@ public sealed class FindReferencesTool
 		}
 
 		ISymbol symbol = matches[0];
-		var references = new List<ReferenceDto>();
-		foreach (ReferencedSymbol referenced in await SymbolFinder.FindReferencesAsync(symbol, model.Solution))
+
+		var locations = new List<Location>();
+		foreach (ReferencedSymbol referenced in await SymbolFinder.FindReferencesAsync(symbol, solution))
 		{
 			foreach (ReferenceLocation reference in referenced.Locations)
 			{
 				if (reference.Location.IsInSource)
-					references.Add(Map(reference.Location, solutionDirectory));
+					locations.Add(reference.Location);
 			}
 		}
 
-		ReferenceDto[] page = references.Take(Math.Max(0, maxResults)).ToArray();
-		return Success(symbol.ToDisplayString(), page, truncated: references.Count > page.Length);
-	}
+		List<Location> page = locations.Take(Math.Max(0, maxResults)).ToList();
+		bool truncated = locations.Count > page.Count;
 
-	private static ReferenceDto Map(Location location, string? solutionDirectory)
-	{
-		FileLinePositionSpan span = location.GetLineSpan();
-		return new ReferenceDto(
-			sourcePath: SolutionRelativePath.Of(solutionDirectory, span.Path)!,
-			startLine: span.StartLinePosition.Line + 1,
-			startColumn: span.StartLinePosition.Character + 1,
-			endLine: span.EndLinePosition.Line + 1,
-			endColumn: span.EndLinePosition.Character + 1);
+		var root = new SymbolNode();
+		foreach (Location location in page)
+		{
+			EnclosingPath enclosing = await EnclosingDeclaration.ResolveAsync(solution, location, cancellationToken);
+			FileLinePositionSpan span = location.GetLineSpan();
+
+			SymbolNode node = root
+				.Child(SolutionRelativePath.Of(solutionDirectory, span.Path)!)
+				.Child(enclosing.Namespace);
+			foreach (EnclosingSegment segment in enclosing.Segments)
+				node = node.Child($"{segment.Kind},{segment.Name}");
+
+			node.AddLocation(
+				span.StartLinePosition.Line + 1,
+				span.StartLinePosition.Character + 1,
+				span.EndLinePosition.Line + 1,
+				span.EndLinePosition.Character + 1);
+		}
+
+		var builder = new OutlineBuilder();
+		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(symbol));
+		builder.Header("count", page.Count);
+		builder.Header("truncated", truncated);
+		builder.Status(model.Status);
+		builder.Snapshot(model.SnapshotId);
+		builder.BeginBody();
+		root.Render(builder);
+		return builder.ToString();
 	}
 }

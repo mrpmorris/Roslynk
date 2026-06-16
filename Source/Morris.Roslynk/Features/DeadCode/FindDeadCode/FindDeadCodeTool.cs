@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -13,6 +14,8 @@ namespace Morris.Roslynk.Features.DeadCode.FindDeadCode;
 public sealed class FindDeadCodeTool
 {
 	public const string FindDeadCodeName = "find_dead_code";
+
+	private const string NoLocationBucket = "<no-location>";
 
 	private const string Caveat =
 		"Conservative heuristic: interface implementations, virtual/override chains, tests, generated, and " +
@@ -57,14 +60,24 @@ public sealed class FindDeadCodeTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		"""
+		$"""
 		Finds symbols (types, methods, properties, fields, events) with no references, conservatively filtered
 		to avoid false positives: it excludes interface implementations, virtual/override chains, test members,
-		generated code, and DI/reflection-activated members, and; unless includePublic is true; the public
-		API surface. Each candidate carries a confidence and the reason it is suspected; the host decides
-		whether to remove it. Scan is per-symbol, so narrow large solutions with scope.
+		generated code, and DI/reflection-activated members, and (unless includePublic is true) the public API
+		surface. {OutlineDescriptions.TextNotJson} Candidates are grouped by file:
+		  #count=<candidate count>
+		  #truncated=<true|false>
+		  #note=<conservative caveat>
+		  #status=Ready
+		  #snapshot=<id>
+
+		  <relative/forward-slash/path.cs>
+		  \t<kind>,<fully-qualified name>,<confidence> <reason>
+		where kind is one of {OutlineDescriptions.KindList}, confidence is High or Medium, and the free-text
+		reason is last. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
+		solutions with scope. {OutlineDescriptions.ErrorBlock}
 		""")]
-	public async Task<FindDeadCodeResult> FindDeadCode(
+	public async Task<string> FindDeadCode(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Optional fully-qualified-name prefix to limit the scan, e.g. MyApp.Services. Omit for the whole solution.")] string? scope = null,
 		[Description("Include unreferenced public/protected members (the API surface). Default false.")] bool includePublic = false,
@@ -73,16 +86,11 @@ public sealed class FindDeadCodeTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		FindDeadCodeResult Success(IReadOnlyList<DeadCodeCandidate> candidates, bool truncated, string note) =>
-			new(model.SnapshotId, model.Status, error: null, candidates, truncated, note);
-
-		FindDeadCodeResult Failure(Error error) =>
-			new(model.SnapshotId, model.Status, error, candidates: null, truncated: null, note: null);
-
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return OutlineError.Format(Error.Indexing(), model.Status, model.SnapshotId);
 
 		Solution solution = model.Solution;
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
 		HashSet<ProjectId> testProjects = IdentifyTestProjects(solution);
 
@@ -113,11 +121,11 @@ public sealed class FindDeadCodeTool
 		candidates.Sort((left, right) => string.Compare(
 			SymbolResolver.FullyQualifiedName(left), SymbolResolver.FullyQualifiedName(right), StringComparison.Ordinal));
 
-		var results = new List<DeadCodeCandidate>();
+		var results = new List<Candidate>();
 		bool truncated = false;
 		foreach (ISymbol symbol in candidates)
 		{
-			DeadCodeCandidate? candidate = await EvaluateAsync(solution, symbol, testProjects);
+			Candidate? candidate = await EvaluateAsync(solution, symbol, testProjects, solutionDirectory);
 			if (candidate is null)
 				continue;
 
@@ -129,10 +137,29 @@ public sealed class FindDeadCodeTool
 			}
 		}
 
-		return Success(results, truncated, Caveat);
+		var builder = new OutlineBuilder();
+		builder.Header("count", results.Count);
+		builder.Header("truncated", truncated);
+		builder.Header("note", Caveat);
+		builder.Status(model.Status);
+		builder.Snapshot(model.SnapshotId);
+		builder.BeginBody();
+
+		IEnumerable<IGrouping<string, Candidate>> byFile = results
+			.GroupBy(candidate => candidate.File)
+			.OrderBy(group => group.Key, StringComparer.Ordinal);
+
+		foreach (IGrouping<string, Candidate> file in byFile)
+		{
+			builder.Line(0, file.Key);
+			foreach (Candidate candidate in file)
+				builder.Line(1, $"{candidate.Kind},{candidate.Symbol},{candidate.Confidence} {OutlineBuilder.Sanitize(candidate.Reason)}");
+		}
+
+		return builder.ToString();
 	}
 
-	private static async Task<DeadCodeCandidate?> EvaluateAsync(Solution solution, ISymbol symbol, HashSet<ProjectId> testProjects)
+	private static async Task<Candidate?> EvaluateAsync(Solution solution, ISymbol symbol, HashSet<ProjectId> testProjects, string? solutionDirectory)
 	{
 		int nonTestReferences = 0;
 		int testReferences = 0;
@@ -156,12 +183,29 @@ public sealed class FindDeadCodeTool
 				? ("No references found (public API; may be used externally)", "Medium")
 				: ("No references found", "High");
 
-		return new DeadCodeCandidate(
-			SymbolResolver.FullyQualifiedName(symbol),
-			DescribeKind(symbol),
-			SolutionRelativePath.Of(SolutionRelativePath.DirectoryOf(solution), symbol.Locations.FirstOrDefault(location => location.IsInSource)?.SourceTree?.FilePath),
-			reason,
-			confidence);
+		string? path = SolutionRelativePath.Of(
+			solutionDirectory,
+			symbol.Locations.FirstOrDefault(location => location.IsInSource)?.SourceTree?.FilePath);
+
+		return new Candidate(path ?? NoLocationBucket, SymbolKindText.Of(symbol), SymbolResolver.FullyQualifiedName(symbol), reason, confidence);
+	}
+
+	private sealed class Candidate
+	{
+		public string File { get; }
+		public string Kind { get; }
+		public string Symbol { get; }
+		public string Reason { get; }
+		public string Confidence { get; }
+
+		public Candidate(string file, string kind, string symbol, string reason, string confidence)
+		{
+			File = file;
+			Kind = kind;
+			Symbol = symbol;
+			Reason = reason;
+			Confidence = confidence;
+		}
 	}
 
 	private static bool IsCandidate(ISymbol symbol, IMethodSymbol? entryPoint, bool includePublic)
@@ -323,15 +367,4 @@ public sealed class FindDeadCodeTool
 
 		return false;
 	}
-
-	private static string DescribeKind(ISymbol symbol) =>
-		symbol switch
-		{
-			INamedTypeSymbol type => type.TypeKind.ToString(),
-			IMethodSymbol => "Method",
-			IPropertySymbol => "Property",
-			IFieldSymbol => "Field",
-			IEventSymbol => "Event",
-			_ => symbol.Kind.ToString(),
-		};
 }

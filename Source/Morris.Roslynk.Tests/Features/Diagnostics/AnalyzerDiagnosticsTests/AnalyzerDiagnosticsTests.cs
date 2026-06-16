@@ -1,7 +1,6 @@
 using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
-using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Tests.Features.Diagnostics.AnalyzerDiagnosticsTests;
 
@@ -14,11 +13,11 @@ public class AnalyzerDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(
+		string result = await subject.GetDiagnostics(
 			TestSolutions.Simple, includeWarnings: true, includeInfo: true, includeHidden: true, includeAnalyzers: true);
 
-		Assert.True(result.IsSuccess);
-		Assert.Contains(result.Diagnostics!, diagnostic => !diagnostic.Id.StartsWith("CS", StringComparison.Ordinal));
+		Assert.DoesNotContain("#error=", result);
+		Assert.Contains(DiagnosticIds(result), id => !id.StartsWith("CS", StringComparison.Ordinal));
 	}
 
 	[Fact]
@@ -28,11 +27,11 @@ public class AnalyzerDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(
+		string result = await subject.GetDiagnostics(
 			TestSolutions.Simple, includeWarnings: true, includeInfo: true, includeHidden: true, includeAnalyzers: false);
 
-		Assert.True(result.IsSuccess);
-		Assert.All(result.Diagnostics!, diagnostic => Assert.StartsWith("CS", diagnostic.Id));
+		Assert.DoesNotContain("#error=", result);
+		Assert.All(DiagnosticIds(result), id => Assert.StartsWith("CS", id));
 	}
 
 	[Fact]
@@ -41,12 +40,28 @@ public class AnalyzerDiagnosticsTests
 		using var registry = new InstanceRegistry();
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.Simple);
+		string result = await subject.GetDiagnostics(TestSolutions.Simple);
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
+	}
+
+	private static IReadOnlyList<string> DiagnosticIds(string text)
+	{
+		var ids = new List<string>();
+		foreach (string raw in text.Split('\n'))
+		{
+			if (!raw.StartsWith('\t'))
+				continue;
+
+			// \t<severity>,<id>,<line:col> <message>: the id is the second comma-field.
+			string[] parts = raw.TrimStart('\t').Split(',');
+			if (parts.Length >= 2)
+				ids.Add(parts[1]);
+		}
+
+		return ids;
 	}
 }

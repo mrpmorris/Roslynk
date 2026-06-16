@@ -1,8 +1,6 @@
-using Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
 using Morris.Roslynk.Features.CodeActions.ApplyCodeFix;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Lifecycle;
-using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Writing;
 using Morris.Roslynk.Tests.Helpers;
 
@@ -18,10 +16,9 @@ public class ApplyCodeFixTests
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new ApplyCodeFixTool(registry, new CodeActionService(), new ApplyPipeline());
 
-		ApplyCodeActionResult result = await subject.ApplyCodeFix(solutionPath, greeter, "CS0219");
+		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS0219");
 
-		Assert.True(result.IsSuccess);
-		Assert.True(result.Applied);
+		Assert.Contains("#applied=true", result);
 		Assert.DoesNotContain("int unused", await File.ReadAllTextAsync(greeter));
 	}
 
@@ -33,10 +30,9 @@ public class ApplyCodeFixTests
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new ApplyCodeFixTool(registry, new CodeActionService(), new ApplyPipeline());
 
-		ApplyCodeActionResult result = await subject.ApplyCodeFix(solutionPath, greeter, "CS9999");
+		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS9999");
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.NotFound, result.Error!.Code);
+		Assert.Contains("#error=NotFound", result);
 	}
 
 	[Fact]
@@ -45,10 +41,10 @@ public class ApplyCodeFixTests
 		using var registry = new InstanceRegistry();
 		var subject = new ApplyCodeFixTool(registry, new CodeActionService(), new ApplyPipeline());
 
-		ApplyCodeActionResult result = await subject.ApplyCodeFix(TestSolutions.Simple, "Widget.cs", "CS0219");
+		string result = await subject.ApplyCodeFix(TestSolutions.Simple, "Widget.cs", "CS0219");
 
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

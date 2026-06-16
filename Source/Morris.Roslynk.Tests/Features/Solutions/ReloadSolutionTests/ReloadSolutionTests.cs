@@ -12,10 +12,10 @@ public class ReloadSolutionTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new ReloadSolutionTool(registry);
 
-		ReloadSolutionResult result = subject.ReloadSolution(TestSolutions.Simple);
+		string result = subject.ReloadSolution(TestSolutions.Simple);
 
-		Assert.Equal(SolutionStatus.Building, result.Status);
-		Assert.True(result.ProjectCount >= 1);
+		Assert.Contains("#status=Building", result);
+		Assert.DoesNotContain("#projects=0", result);
 
 		await WaitForReadyAsync(registry, TestSolutions.Simple);
 	}

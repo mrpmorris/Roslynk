@@ -1,6 +1,5 @@
 using Morris.Roslynk.Features.Symbols.SearchSymbols;
 using Morris.Roslynk.Infrastructure.Lifecycle;
-using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.SearchSymbolsTests;
 
@@ -13,23 +12,23 @@ public class SearchSymbolsTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry);
 
-		SearchSymbolsResult result = await subject.SearchSymbols(TestSolutions.Simple, "Greet");
+		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet");
 
-		Assert.True(result.IsSuccess);
-		Assert.Contains(result.Results!, item => item.FullName == "SimpleLibrary.Greeter");
+		Assert.DoesNotContain("#error=", result);
+		Assert.Contains("\tSimpleLibrary\n", result);
+		Assert.Contains("class,Greeter", result);
 	}
 
 	[Fact]
-	public async Task WhenNothingMatchesTheQuery_ThenAnEmptyListIsReturned()
+	public async Task WhenNothingMatchesTheQuery_ThenNoResultsAreReturned()
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry);
 
-		SearchSymbolsResult result = await subject.SearchSymbols(TestSolutions.Simple, "NoSuchSymbolNameHere");
+		string result = await subject.SearchSymbols(TestSolutions.Simple, "NoSuchSymbolNameHere");
 
-		Assert.True(result.IsSuccess);
-		Assert.Empty(result.Results!);
+		Assert.Contains("#count=0", result);
 	}
 
 	[Fact]
@@ -38,11 +37,10 @@ public class SearchSymbolsTests
 		using var registry = new InstanceRegistry();
 		var subject = new SearchSymbolsTool(registry);
 
-		SearchSymbolsResult result = await subject.SearchSymbols(TestSolutions.Simple, "Greet");
+		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet");
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

@@ -2,10 +2,11 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Features.CodeActions.ApplyCodeFix;
@@ -36,11 +37,13 @@ public sealed class ApplyCodeFixTool
 	[Description(
 		"""
 		Applies the code fix for the first occurrence of a diagnostic id (e.g. CS0219) in a .cs file; the
-		quick path when you already know which diagnostic to clear, without first listing actions. Written
-		atomically through the same safe write path. Pass checkOnly to preview without writing. Prefer this
-		over hand-editing the file to clear a diagnostic so the in-memory model stays in sync.
+		quick path when you already know which diagnostic to clear, without first listing actions. Returns a
+		text result, not JSON: '#applied', '#action', '#status', '#snapshot' header, a blank line, then one
+		solution-relative changed-file path per line. Written atomically through the same safe write path. Pass
+		checkOnly to preview without writing. Prefer this over hand-editing the file to clear a diagnostic so
+		the in-memory model stays in sync.
 		""")]
-	public async Task<ApplyCodeActionResult> ApplyCodeFix(
+	public async Task<string> ApplyCodeFix(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Path of the .cs file; absolute, or relative to the solution folder.")] string documentPath,
 		[Description("The compiler diagnostic id to fix, e.g. CS0219.")] string diagnosticId,
@@ -50,16 +53,13 @@ public sealed class ApplyCodeFixTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		ApplyCodeActionResult Success(bool applied, IReadOnlyList<string> changedFiles, string? action) =>
-			new(model.SnapshotId, model.Status, error: null, applied, changedFiles, action);
-
-		ApplyCodeActionResult Failure(Error error, string? action = null) =>
-			new(model.SnapshotId, model.Status, error, applied: false, changedFiles: null, action);
+		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
 
 		Solution solution = model.Solution;
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
 		Document? document = CodeActionService.FindDocument(solution, documentPath);
 		if (document is null)
@@ -80,12 +80,18 @@ public sealed class ApplyCodeFixTool
 
 		Solution? changed = await CodeActionService.ChangedSolutionAsync(fix.Action, cancellationToken);
 		if (changed is null)
-			return Failure(Error.Conflict("The fix produced no changes."), fix.Action.Title);
+			return Failure(Error.Conflict("The fix produced no changes."));
 
-		if (checkOnly)
-			return Success(applied: false, ApplyPipeline.GetChangedFilePaths(solution, changed), fix.Action.Title);
+		IReadOnlyList<string> files = checkOnly
+			? ApplyPipeline.GetChangedFilePaths(solution, changed)
+			: await ApplyPipeline.ApplyAsync(instance, changed, cancellationToken);
 
-		IReadOnlyList<string> files = await ApplyPipeline.ApplyAsync(instance, changed, cancellationToken);
-		return Success(applied: true, files, fix.Action.Title);
+		var builder = new OutlineBuilder();
+		builder.Header("applied", !checkOnly);
+		builder.Header("action", fix.Action.Title);
+		builder.Status(instance.CurrentModel.Status);
+		builder.Snapshot(instance.CurrentModel.SnapshotId);
+		ChangedFilesOutline.Write(builder, files, solutionDirectory);
+		return builder.ToString();
 	}
 }

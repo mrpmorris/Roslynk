@@ -1,6 +1,5 @@
 using Morris.Roslynk.Features.Build.BuildSolution;
 using Morris.Roslynk.Infrastructure.Lifecycle;
-using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Tests.Features.Build.BuildSolutionTests;
 
@@ -13,11 +12,10 @@ public class BuildSolutionTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new BuildSolutionTool(registry);
 
-		BuildSolutionResult result = await subject.BuildSolution(TestSolutions.Simple);
+		string result = await subject.BuildSolution(TestSolutions.Simple);
 
-		Assert.True(result.IsSuccess);
-		Assert.True(result.Succeeded);
-		Assert.Equal(0, result.Errors!.Value);
+		Assert.Contains("#succeeded=true", result);
+		Assert.Contains("#errors=0", result);
 	}
 
 	[Fact]
@@ -27,11 +25,10 @@ public class BuildSolutionTests
 		await registry.GetOrAddAsync(TestSolutions.Broken);
 		var subject = new BuildSolutionTool(registry);
 
-		BuildSolutionResult result = await subject.BuildSolution(TestSolutions.Broken);
+		string result = await subject.BuildSolution(TestSolutions.Broken);
 
-		Assert.True(result.IsSuccess);
-		Assert.False(result.Succeeded);
-		Assert.True(result.Errors!.Value >= 1);
+		Assert.Contains("#succeeded=false", result);
+		Assert.DoesNotContain("#errors=0", result);
 	}
 
 	[Fact]
@@ -40,11 +37,10 @@ public class BuildSolutionTests
 		using var registry = new InstanceRegistry();
 		var subject = new BuildSolutionTool(registry);
 
-		BuildSolutionResult result = await subject.BuildSolution(TestSolutions.Simple);
+		string result = await subject.BuildSolution(TestSolutions.Simple);
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

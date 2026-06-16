@@ -3,8 +3,10 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Features.Symbols.SearchSymbols;
 
@@ -28,13 +30,24 @@ public sealed class SearchSymbolsTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		"""
+		$"""
 		Searches source-declared symbols whose name contains the query (case-insensitive), across the
-		solution. Returns up to maxResults matches with a 'truncated' flag when there are more. Prefer this
-		over grepping to locate where something is declared; it searches the compiler's declared symbols
-		and returns fully-qualified names you can pass straight to the other tools.
+		solution. {OutlineDescriptions.TextNotJson} Matches are grouped file -> namespace -> type -> member, a
+		matched member nesting under its (parent-only) type:
+		  #count=<results returned>
+		  #truncated=<true|false>
+		  #status=Ready
+		  #snapshot=<id>
+
+		  <relative/forward-slash/path.cs>
+		  \t<namespace>
+		  \t\t<typeKind>,<typeName>,<loc>
+		  \t\t\t<memberKind>,<memberName>,<loc>
+		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}, and a type's location
+		is present only when the type itself matched. {OutlineDescriptions.ErrorBlock} Prefer this over grepping
+		to locate where something is declared; it searches the compiler's declared symbols.
 		""")]
-	public async Task<SearchSymbolsResult> SearchSymbols(
+	public async Task<string> SearchSymbols(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Substring to match against symbol names (case-insensitive).")] string query,
 		[Description("Maximum results to return. Default 50.")] int maxResults = 50)
@@ -42,25 +55,32 @@ public sealed class SearchSymbolsTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		SearchSymbolsResult Success(IReadOnlyList<SymbolSearchResult> results, bool truncated) =>
-			new(model.SnapshotId, model.Status, error: null, results, truncated);
-
-		SearchSymbolsResult Failure(Error error) =>
-			new(model.SnapshotId, model.Status, error, results: null, truncated: false);
-
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return OutlineError.Format(Error.Indexing(), model.Status, model.SnapshotId);
+
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		IEnumerable<ISymbol> found = await SymbolFinder.FindSourceDeclarationsAsync(
 			model.Solution,
 			name => name.Contains(query, StringComparison.OrdinalIgnoreCase));
 
-		List<SymbolSearchResult> all = found
-			.Select(symbol => new SymbolSearchResult(SymbolResolver.FullyQualifiedName(symbol), symbol.Kind.ToString()))
-			.DistinctBy(result => result.FullName, StringComparer.Ordinal)
+		List<ISymbol> all = found
+			.DistinctBy(SymbolResolver.FullyQualifiedName, StringComparer.Ordinal)
 			.ToList();
 
-		SymbolSearchResult[] results = all.Take(Math.Max(0, maxResults)).ToArray();
-		return Success(results, truncated: all.Count > results.Length);
+		List<ISymbol> results = all.Take(Math.Max(0, maxResults)).ToList();
+
+		var root = new SymbolNode();
+		foreach (ISymbol symbol in results)
+			SymbolPlacement.Place(root, symbol, solutionDirectory);
+
+		var builder = new OutlineBuilder();
+		builder.Header("count", results.Count);
+		builder.Header("truncated", all.Count > results.Count);
+		builder.Status(model.Status);
+		builder.Snapshot(model.SnapshotId);
+		builder.BeginBody();
+		root.Render(builder);
+		return builder.ToString();
 	}
 }

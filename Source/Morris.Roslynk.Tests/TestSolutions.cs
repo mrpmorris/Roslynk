@@ -12,6 +12,7 @@ internal static class TestSolutions
 	private static readonly Lazy<string> BrokenSolution = new(() => Prepare("BrokenSolution", "BrokenSolution.slnx"));
 	private static readonly Lazy<string> RazorSolutionPath = new(() => Prepare("RazorSolution", "RazorSolution.slnx"));
 	private static readonly Lazy<string> MultiTargetSolutionPath = new(() => Prepare("MultiTargetSolution", "MultiTargetSolution.slnx"));
+	private static readonly Lazy<string> ReferencesSolutionPath = new(() => Prepare("ReferencesSolution", "ReferencesSolution.slnx"));
 
 	/// <summary>A clean single-project solution.</summary>
 	public static string Simple => SimpleSolution.Value;
@@ -24,6 +25,9 @@ internal static class TestSolutions
 
 	/// <summary>A net8.0;net10.0 multi-targeted project with a CS0029 present only in the net8.0 compilation.</summary>
 	public static string MultiTarget => MultiTargetSolutionPath.Value;
+
+	/// <summary>A two-file solution with an interface referenced many ways, for testing reference grouping.</summary>
+	public static string References => ReferencesSolutionPath.Value;
 
 	private static string Prepare(params string[] relativeParts)
 	{

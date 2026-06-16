@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 
 namespace Morris.Roslynk.Features.Solutions.ClearCache;
 
@@ -23,9 +24,9 @@ public sealed class ClearCacheTool
 		Idempotent = true,
 		Destructive = false,
 		OpenWorld = false)]
-	[Description("Unloads every solution from memory, freeing all workspaces. No effect on files.")]
-	public ClearCacheResponse ClearCache()
+	[Description("Unloads every solution from memory, freeing all workspaces. No effect on files. Returns '#cleared=<count evicted>'.")]
+	public string ClearCache()
 	{
-		return new ClearCacheResponse(InstanceRegistry.ClearAll());
+		return new OutlineBuilder().Header("cleared", InstanceRegistry.ClearAll()).ToString();
 	}
 }

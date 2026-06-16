@@ -6,8 +6,10 @@ using Microsoft.CodeAnalysis.Editing;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Features.Signatures.ChangeSignature;
@@ -39,12 +41,14 @@ public sealed class ChangeSignatureTool
 		"""
 		Adds a new optional parameter to a method and, if a call-site value is given, threads it through every
 		invocation as a named argument; collapsing the repeated add-a-parameter cascades that are otherwise
-		redone by hand across files. The parameter must have a default so the change stays backward-compatible.
-		v1 targets a single ordinary method only: it refuses virtual/override/abstract methods, interface
-		members and their implementations, partial methods, params methods, and constructors (returns Not
-		Supported). Pass checkOnly to preview the changed files without writing.
+		redone by hand across files. Returns a text result, not JSON: '#applied', '#resolvedMethod',
+		'#updatedCallSites', '#status', '#snapshot' header, a blank line, then one solution-relative changed-file
+		path per line. The parameter must have a default so the change stays backward-compatible. v1 targets a
+		single ordinary method only: it refuses virtual/override/abstract methods, interface members and their
+		implementations, partial methods, params methods, and constructors (returns #error=NotSupported). Pass
+		checkOnly to preview the changed files without writing.
 		""")]
-	public async Task<ChangeSignatureResult> ChangeSignature(
+	public async Task<string> ChangeSignature(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the method to change, e.g. Namespace.Type.Method.")] string methodId,
 		[Description("The new parameter's type, e.g. System.Threading.CancellationToken.")] string parameterType,
@@ -56,14 +60,7 @@ public sealed class ChangeSignatureTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		ChangeSignatureResult Success(bool applied, string resolvedMethod, IReadOnlyList<string> changed, int callSiteCount) =>
-			new(model.SnapshotId, model.Status, error: null, applied, resolvedMethod, changed, callSiteCount);
-
-		ChangeSignatureResult Failure(Error error) =>
-			new(model.SnapshotId, model.Status, error, applied: false, resolvedMethod: null, changedFiles: null, updatedCallSites: 0);
-
-		ChangeSignatureResult NotSupported(string resolvedMethod, string message) =>
-			new(model.SnapshotId, model.Status, Error.NotSupported(message), applied: false, resolvedMethod, changedFiles: null, updatedCallSites: 0);
+		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
 
 		if (!SyntaxFacts.IsValidIdentifier(parameterName))
 			return Failure(Error.Invalid($"'{parameterName}' is not a valid C# identifier."));
@@ -76,6 +73,7 @@ public sealed class ChangeSignatureTool
 			return Failure(Error.Indexing());
 
 		Solution solution = model.Solution;
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
 		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, methodId);
 		if (matches.Count == 0)
@@ -95,11 +93,11 @@ public sealed class ChangeSignatureTool
 
 		string? rejection = Reject(method, parameterName);
 		if (rejection is not null)
-			return NotSupported(resolved, rejection);
+			return Failure(Error.NotSupported(rejection));
 
 		SyntaxNode declarationNode = await method.DeclaringSyntaxReferences[0].GetSyntaxAsync();
 		if (declarationNode is not MethodDeclarationSyntax methodDeclaration)
-			return NotSupported(resolved, "The method is not an ordinary method declaration.");
+			return Failure(Error.NotSupported("The method is not an ordinary method declaration."));
 
 		Document declarationDocument = solution.GetDocument(methodDeclaration.SyntaxTree)!;
 
@@ -128,14 +126,18 @@ public sealed class ChangeSignatureTool
 
 		Solution updated = editor.GetChangedSolution();
 
-		if (checkOnly)
-		{
-			IReadOnlyList<string> preview = ApplyPipeline.GetChangedFilePaths(solution, updated);
-			return Success(applied: false, resolved, preview, callSites.Count);
-		}
+		IReadOnlyList<string> changed = checkOnly
+			? ApplyPipeline.GetChangedFilePaths(solution, updated)
+			: await ApplyPipeline.ApplyAsync(instance, updated);
 
-		IReadOnlyList<string> changed = await ApplyPipeline.ApplyAsync(instance, updated);
-		return Success(applied: true, resolved, changed, callSites.Count);
+		var builder = new OutlineBuilder();
+		builder.Header("applied", !checkOnly);
+		builder.Header("resolvedMethod", resolved);
+		builder.Header("updatedCallSites", callSites.Count);
+		builder.Status(instance.CurrentModel.Status);
+		builder.Snapshot(instance.CurrentModel.SnapshotId);
+		ChangedFilesOutline.Write(builder, changed, solutionDirectory);
+		return builder.ToString();
 	}
 
 	private static string? Reject(IMethodSymbol method, string parameterName)

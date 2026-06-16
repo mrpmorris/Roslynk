@@ -1,7 +1,6 @@
 using Morris.Roslynk.Features.Callers.GetCallers;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
-using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Tests.Features.Callers.GetCallersTests;
 
@@ -14,11 +13,12 @@ public class GetCallersTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new GetCallersTool(registry, new SymbolResolver());
 
-		GetCallersResult result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Greeter.Greet");
+		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Greeter.Greet");
 
-		Assert.True(result.IsSuccess);
-		Assert.NotEmpty(result.Callers!);
-		Assert.Contains(result.Callers!, caller => caller.Contains("Caller.Run", StringComparison.Ordinal));
+		Assert.Contains("#resolvedSymbol=SimpleLibrary.Greeter.Greet", result);
+		Assert.DoesNotContain("#error=", result);
+		Assert.Contains("class,Caller\n", result);
+		Assert.Contains("method,Run,", result);
 	}
 
 	[Fact]
@@ -28,10 +28,9 @@ public class GetCallersTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new GetCallersTool(registry, new SymbolResolver());
 
-		GetCallersResult result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.DoesNotExist");
+		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.DoesNotExist");
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.NotFound, result.Error!.Code);
+		Assert.Contains("#error=NotFound", result);
 	}
 
 	[Fact]
@@ -40,11 +39,10 @@ public class GetCallersTests
 		using var registry = new InstanceRegistry();
 		var subject = new GetCallersTool(registry, new SymbolResolver());
 
-		GetCallersResult result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Greeter.Greet");
+		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Greeter.Greet");
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

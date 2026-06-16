@@ -1,7 +1,6 @@
 using System.Text;
 using Morris.Roslynk.Features.Patching.ApplyPatch;
 using Morris.Roslynk.Infrastructure.Lifecycle;
-using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Tests.Features.Patching.ApplyPatchTests;
 
@@ -21,11 +20,9 @@ public class ApplyPatchTests
 		string original = await File.ReadAllTextAsync(greeter);
 		string patch = BuildFullReplacePatch(GreeterRelativePath, original, original + "// patched\n");
 
-		ApplyPatchResult result = await subject.ApplyPatch(solutionPath, patch);
+		string result = await subject.ApplyPatch(solutionPath, patch);
 
-		Assert.True(result.IsSuccess);
-		Assert.True(result.Applied);
-		Assert.Single(result.ChangedFiles!);
+		Assert.Contains("#applied=true", result);
 		Assert.Contains("// patched", await File.ReadAllTextAsync(greeter));
 		Assert.Contains("// patched", await ReadSnapshotTextAsync(instance, greeter));
 	}
@@ -42,16 +39,14 @@ public class ApplyPatchTests
 		string original = await File.ReadAllTextAsync(greeter);
 		string patch = BuildFullReplacePatch(GreeterRelativePath, original, original + "// patched\n");
 
-		ApplyPatchResult result = await subject.ApplyPatch(solutionPath, patch, baseVersions: null, checkOnly: true);
+		string result = await subject.ApplyPatch(solutionPath, patch, baseVersions: null, checkOnly: true);
 
-		Assert.True(result.IsSuccess);
-		Assert.False(result.Applied);
-		Assert.Single(result.ChangedFiles!);
+		Assert.Contains("#applied=false", result);
 		Assert.Equal(original, await File.ReadAllTextAsync(greeter));
 	}
 
 	[Fact]
-	public async Task WhenABaseVersionIsStale_ThenItIsRejectedWithCurrentContent()
+	public async Task WhenABaseVersionIsStale_ThenItIsRejectedAndNothingIsWritten()
 	{
 		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
 		using var registry = new InstanceRegistry();
@@ -63,11 +58,10 @@ public class ApplyPatchTests
 		string patch = BuildFullReplacePatch(GreeterRelativePath, original, original + "// patched\n");
 		var staleVersions = new[] { new FileVersion(GreeterRelativePath, "0000DEADBEEF") };
 
-		ApplyPatchResult result = await subject.ApplyPatch(solutionPath, patch, staleVersions);
+		string result = await subject.ApplyPatch(solutionPath, patch, staleVersions);
 
-		Assert.Equal(ErrorCode.Stale, result.Error!.Code);
-		ApplyPatchStaleFile stale = Assert.Single(result.StaleFiles!);
-		Assert.Equal(original, stale.CurrentText);
+		Assert.Contains("#error=Stale", result);
+		Assert.Contains("#stale=", result);
 		Assert.Equal(original, await File.ReadAllTextAsync(greeter));
 	}
 
@@ -81,10 +75,10 @@ public class ApplyPatchTests
 
 		string patch = BuildFullReplacePatch("SimpleLibrary/SimpleLibrary.csproj", "<Project/>\n", "<Project></Project>\n");
 
-		ApplyPatchResult result = await subject.ApplyPatch(solutionPath, patch);
+		string result = await subject.ApplyPatch(solutionPath, patch);
 
-		Assert.Equal(ErrorCode.NotSupported, result.Error!.Code);
-		Assert.NotEmpty(result.RejectedFiles!);
+		Assert.Contains("#error=NotSupported", result);
+		Assert.Contains("#rejected=", result);
 	}
 
 	[Fact]
@@ -104,9 +98,9 @@ public class ApplyPatchTests
 			"-this content is not present anywhere\n" +
 			"+replacement\n";
 
-		ApplyPatchResult result = await subject.ApplyPatch(solutionPath, patch);
+		string result = await subject.ApplyPatch(solutionPath, patch);
 
-		Assert.Equal(ErrorCode.Conflict, result.Error!.Code);
+		Assert.Contains("#error=Conflict", result);
 		Assert.Equal(original, await File.ReadAllTextAsync(greeter));
 	}
 
@@ -116,12 +110,12 @@ public class ApplyPatchTests
 		using var registry = new InstanceRegistry();
 		var subject = new ApplyPatchTool(registry);
 
-		ApplyPatchResult result = await subject.ApplyPatch(
+		string result = await subject.ApplyPatch(
 			TestSolutions.Simple,
 			$"--- a/{GreeterRelativePath}\n+++ b/{GreeterRelativePath}\n@@ -1,1 +1,1 @@\n-a\n+b\n");
 
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
@@ -138,10 +132,9 @@ public class ApplyPatchTests
 		string original = await File.ReadAllTextAsync(greeter);
 		string patch = BuildBareFullReplacePatch(GreeterRelativePath, original, original + "// patched\n");
 
-		ApplyPatchResult result = await subject.ApplyPatch(solutionPath, patch);
+		string result = await subject.ApplyPatch(solutionPath, patch);
 
-		Assert.True(result.IsSuccess);
-		Assert.True(result.Applied);
+		Assert.Contains("#applied=true", result);
 		Assert.Contains("// patched", await File.ReadAllTextAsync(greeter));
 	}
 
@@ -157,11 +150,9 @@ public class ApplyPatchTests
 		string original = await File.ReadAllTextAsync(greeter);
 		string patch = $"--- a/{GreeterRelativePath}\n+++ b/{GreeterRelativePath}\n";
 
-		ApplyPatchResult result = await subject.ApplyPatch(solutionPath, patch);
+		string result = await subject.ApplyPatch(solutionPath, patch);
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.Invalid, result.Error!.Code);
-		Assert.False(result.Applied);
+		Assert.Contains("#error=Invalid", result);
 		Assert.Equal(original, await File.ReadAllTextAsync(greeter));
 	}
 

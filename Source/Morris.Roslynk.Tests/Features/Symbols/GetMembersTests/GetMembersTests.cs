@@ -1,7 +1,6 @@
 using Morris.Roslynk.Features.Symbols.GetMembers;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
-using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.GetMembersTests;
 
@@ -10,29 +9,21 @@ public class GetMembersTests
 	[Fact]
 	public async Task WhenATypesMembersAreRequested_ThenItsPublicMethodsAreReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetMembersTool(registry, new SymbolResolver());
+		string result = await RunAsync("SimpleLibrary.Greeter");
 
-		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "SimpleLibrary.Greeter");
-
-		Assert.True(result.IsSuccess);
-		Assert.Equal("SimpleLibrary.Greeter", result.ResolvedType);
-		Assert.Contains(result.Members!, member => member.Name == "Greet");
+		Assert.Contains("#resolvedType=SimpleLibrary.Greeter", result);
+		Assert.DoesNotContain("#error=", result);
+		Assert.Contains("method,Greet", result);
 	}
 
 	[Fact]
-	public async Task WhenAMetadataTypesMembersAreRequested_ThenTheyResolveFromTheReferencedAssembly()
+	public async Task WhenAMetadataTypesMembersAreRequested_ThenTheyResolveUnderTheMetadataBucket()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetMembersTool(registry, new SymbolResolver());
+		string result = await RunAsync("System.String");
 
-		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String");
-
-		Assert.True(result.IsSuccess);
-		Assert.Equal("System.String", result.ResolvedType);
-		Assert.Contains(result.Members!, member => member.Name == "Substring");
+		Assert.Contains("#resolvedType=System.String", result);
+		Assert.Contains("<metadata>", result);
+		Assert.Contains("method,Substring", result);
 	}
 
 	[Fact]
@@ -41,11 +32,10 @@ public class GetMembersTests
 		using var registry = new InstanceRegistry();
 		var subject = new GetMembersTool(registry, new SymbolResolver());
 
-		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "SimpleLibrary.Greeter");
+		string result = await subject.GetMembers(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
@@ -53,124 +43,135 @@ public class GetMembersTests
 	[Fact]
 	public async Task WhenANameFilterEndsWithAStar_ThenOnlyPrefixMatchesAreReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetMembersTool(registry, new SymbolResolver());
+		string result = await RunAsync("System.String", nameFilter: "Sub*");
 
-		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String", nameFilter: "Sub*");
-
-		Assert.True(result.IsSuccess);
-		Assert.Contains(result.Members!, member => member.Name == "Substring");
-		Assert.All(result.Members!, member => Assert.StartsWith("Sub", member.Name, StringComparison.OrdinalIgnoreCase));
+		Assert.Contains("method,Substring", result);
+		Assert.All(MemberNames(result), name => Assert.StartsWith("Sub", name, StringComparison.OrdinalIgnoreCase));
 	}
 
 	[Fact]
 	public async Task WhenANameFilterHasNoStar_ThenItMatchesAsACaseInsensitiveSubstring()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetMembersTool(registry, new SymbolResolver());
+		string result = await RunAsync("System.String", nameFilter: "ubSTR");
 
-		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String", nameFilter: "ubSTR");
-
-		Assert.True(result.IsSuccess);
-		Assert.Contains(result.Members!, member => member.Name == "Substring");
-		Assert.All(result.Members!, member => Assert.Contains("ubstr", member.Name, StringComparison.OrdinalIgnoreCase));
+		Assert.Contains("method,Substring", result);
+		Assert.All(MemberNames(result), name => Assert.Contains("ubstr", name, StringComparison.OrdinalIgnoreCase));
 	}
 
 	[Fact]
 	public async Task WhenMethodsAreExcluded_ThenNoMethodsAreReturnedButOtherKindsRemain()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetMembersTool(registry, new SymbolResolver());
+		string result = await RunAsync("System.String", includeMethods: false);
 
-		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String", includeMethods: false);
-
-		Assert.True(result.IsSuccess);
-		Assert.DoesNotContain(result.Members!, member => member.Kind == "Method");
-		Assert.Contains(result.Members!, member => member.Name == "Length");
+		Assert.DoesNotContain("\tmethod,", result);
+		Assert.Contains("property,Length", result);
 	}
 
 	[Fact]
 	public async Task WhenOnlyFieldsAreRequested_ThenOtherKindsAreExcluded()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetMembersTool(registry, new SymbolResolver());
-
-		GetMembersResult result = await subject.GetMembers(
-			TestSolutions.Simple,
+		string result = await RunAsync(
 			"System.String",
 			includeMethods: false,
 			includeProperties: false,
 			includeEvents: false,
 			includeNestedTypes: false);
 
-		Assert.True(result.IsSuccess);
-		Assert.NotEmpty(result.Members!);
-		Assert.All(result.Members!, member => Assert.Equal("Field", member.Kind));
-		Assert.Contains(result.Members!, member => member.Name == "Empty");
+		Assert.Contains("field,Empty", result);
+		Assert.DoesNotContain("\tmethod,", result);
+		Assert.DoesNotContain("\tproperty,", result);
 	}
 
 	[Fact]
 	public async Task WhenANameFilterMatchesButItsKindIsExcluded_ThenItIsNotReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetMembersTool(registry, new SymbolResolver());
+		string result = await RunAsync("System.String", nameFilter: "Length", includeProperties: false);
 
-		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String", nameFilter: "Length", includeProperties: false);
-
-		Assert.True(result.IsSuccess);
-		Assert.DoesNotContain(result.Members!, member => member.Name == "Length");
+		// The Length property is gone; only the accessor method get_Length (a method) can still match.
+		Assert.DoesNotContain("Length", MemberNames(result));
 	}
 
 	[Fact]
 	public async Task WhenNoFiltersAreGiven_ThenMethodsAndPropertiesAreBothReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetMembersTool(registry, new SymbolResolver());
+		string result = await RunAsync("System.String");
 
-		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String");
-
-		Assert.True(result.IsSuccess);
-		Assert.Contains(result.Members!, member => member.Kind == "Method");
-		Assert.Contains(result.Members!, member => member.Kind == "Property");
+		Assert.Contains("\tmethod,", result);
+		Assert.Contains("\tproperty,", result);
 	}
 
 	[Fact]
-	public async Task WhenAMemberHasSource_ThenItsSourceLocationIsReturnedForReadingTheBody()
+	public async Task WhenAMemberHasSource_ThenItIsGroupedUnderASolutionRelativeFileWithALineRange()
+	{
+		string result = await RunAsync("SimpleLibrary.Greeter", nameFilter: "Greet");
+
+		string fileLine = result.Split('\n').First(line => line.EndsWith("Greeter.cs", StringComparison.Ordinal));
+		Assert.False(Path.IsPathRooted(fileLine), $"expected a solution-relative path, got '{fileLine}'");
+		Assert.DoesNotContain('\\', fileLine);
+
+		string memberLine = result.Split('\n').First(line => line.TrimStart('\t').StartsWith("method,Greet", StringComparison.Ordinal));
+		// kind,name,<range> <signature>: the third comma-field is the line range.
+		string range = memberLine.TrimStart('\t').Split(',')[2].Split(' ')[0];
+		Assert.Matches(@"^\d+(-\d+)?$", range);
+	}
+
+	[Fact]
+	public async Task WhenAMemberComesFromMetadata_ThenItHasNoFileOrLineRange()
+	{
+		string result = await RunAsync("System.String", nameFilter: "Substring");
+
+		Assert.Contains("<metadata>", result);
+		Assert.DoesNotContain(".cs", result);
+		// No line range: kind,name is followed directly by the signature, not a third comma-field.
+		Assert.Contains("method,Substring (", result);
+	}
+
+	private static async Task<string> RunAsync(
+		string typeName,
+		bool includePrivate = false,
+		bool includeInherited = false,
+		string? nameFilter = null,
+		bool includeMethods = true,
+		bool includeFields = true,
+		bool includeProperties = true,
+		bool includeEvents = true,
+		bool includeNestedTypes = true)
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new GetMembersTool(registry, new SymbolResolver());
 
-		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "SimpleLibrary.Greeter", nameFilter: "Greet");
-
-		Assert.True(result.IsSuccess);
-		MemberDto member = Assert.Single(result.Members!, candidate => candidate.Name == "Greet");
-		Assert.False(string.IsNullOrEmpty(member.SourcePath));
-		Assert.False(Path.IsPathRooted(member.SourcePath), $"expected a solution-relative path, got '{member.SourcePath}'");
-		Assert.DoesNotContain('\\', member.SourcePath!);
-		Assert.EndsWith("Greeter.cs", member.SourcePath!);
-		Assert.NotNull(member.StartLine);
-		Assert.NotNull(member.EndLine);
-		Assert.True(member.EndLine >= member.StartLine);
+		return await subject.GetMembers(
+			TestSolutions.Simple,
+			typeName,
+			includePrivate,
+			includeInherited,
+			nameFilter,
+			includeMethods,
+			includeFields,
+			includeProperties,
+			includeEvents,
+			includeNestedTypes);
 	}
 
-	[Fact]
-	public async Task WhenAMemberComesFromMetadata_ThenItHasNoSourceLocation()
+	private static IReadOnlyList<string> MemberNames(string text)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetMembersTool(registry, new SymbolResolver());
+		var names = new List<string>();
+		foreach (string raw in text.Split('\n'))
+		{
+			if (!raw.StartsWith('\t'))
+				continue;
 
-		GetMembersResult result = await subject.GetMembers(TestSolutions.Simple, "System.String", nameFilter: "Substring");
+			string line = raw.TrimStart('\t');
+			int comma = line.IndexOf(',');
+			if (comma < 0)
+				continue;
 
-		Assert.True(result.IsSuccess);
-		Assert.NotEmpty(result.Members!);
-		Assert.All(result.Members!, member => Assert.Null(member.SourcePath));
+			string rest = line[(comma + 1)..];
+			int boundary = rest.IndexOfAny([',', ' ']);
+			names.Add(boundary < 0 ? rest : rest[..boundary]);
+		}
+
+		return names;
 	}
 }

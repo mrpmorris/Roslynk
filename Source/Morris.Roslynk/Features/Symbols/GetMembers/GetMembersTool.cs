@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -12,6 +13,8 @@ namespace Morris.Roslynk.Features.Symbols.GetMembers;
 public sealed class GetMembersTool
 {
 	public const string GetMembersName = "get_members";
+
+	private const string MetadataBucket = "<metadata>";
 
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
@@ -30,19 +33,27 @@ public sealed class GetMembersTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		"""
-		Lists a type's members (methods, properties, fields, events) with kind, accessibility, and
-		signature, resolved by fully-qualified name. Private members and inherited members are excluded
-		unless requested. Narrow a large type with nameFilter (a trailing '*' matches by prefix, otherwise
-		a case-insensitive substring) and the include* kind toggles; these compose with includePrivate and
-		includeInherited. Each member carries its source location (sourcePath, relative to the solution
-		folder, with 1-based startLine and endLine); to read a member's source code, resolve sourcePath
-		against the solution folder and read startLine through endLine with the file tool. Ambiguous names
-		return candidate fully-qualified names instead. Prefer this over reading
-		the .cs file to see what a type contains; it is the compiler's view, correct across partial classes
-		and (with includeInherited) base types.
+		$"""
+		Lists a type's members (methods, properties, fields, events, nested types), resolved by
+		fully-qualified name. {OutlineDescriptions.TextNotJson} Members are grouped by the file that declares
+		them (or '<metadata>' for a referenced assembly), each as:
+		  #resolvedType=<fully-qualified type>
+		  #count=<member count>
+		  #status=Ready
+		  #snapshot=<id>
+
+		  <relative/forward-slash/path.cs>
+		  \t<memberKind>,<name>,<startLine>-<endLine> <signature>
+		where kind is one of {OutlineDescriptions.KindList}; the line range collapses to a single number when
+		start equals end and is omitted for metadata members; the trailing signature is the minimally-qualified
+		parameter list for methods (e.g. '(CancellationToken)') and absent for other kinds. To read a member's
+		body, resolve its path against the solution folder and read startLine through endLine. Private and
+		inherited members are excluded unless requested; narrow a large type with nameFilter (a trailing '*'
+		matches by prefix, otherwise a case-insensitive substring) and the include* kind toggles.
+		{OutlineDescriptions.ErrorBlock} Prefer this over reading the .cs file; it is the compiler's view,
+		correct across partial classes and (with includeInherited) base types.
 		""")]
-	public async Task<GetMembersResult> GetMembers(
+	public async Task<string> GetMembers(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the type, e.g. 'MyNamespace.MyType'.")] string typeName,
 		[Description("Include private members. Default false.")] bool includePrivate = false,
@@ -57,11 +68,7 @@ public sealed class GetMembersTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		GetMembersResult Success(string resolvedType, IReadOnlyList<MemberDto> members) =>
-			new(model.SnapshotId, model.Status, error: null, resolvedType, members);
-
-		GetMembersResult Failure(Error error) =>
-			new(model.SnapshotId, model.Status, error, resolvedType: null, members: null);
+		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -103,33 +110,63 @@ public sealed class GetMembersTool
 				_ => true,
 			};
 
-		MemberDto[] members = Collect(type, includeInherited)
+		List<ISymbol> members = Collect(type, includeInherited)
 			.Where(member => !member.IsImplicitlyDeclared)
 			.Where(member => includePrivate || member.DeclaredAccessibility != Accessibility.Private)
 			.Where(KindIncluded)
 			.Where(member => NameMatches(member.Name))
-			.Select(member => Map(member, solutionDirectory))
-			.ToArray();
+			.ToList();
 
-		return Success(SymbolResolver.FullyQualifiedName(type), members);
+		var byFile = new SortedDictionary<string, List<(int Order, string Line)>>(StringComparer.Ordinal);
+		foreach (ISymbol member in members)
+		{
+			(string file, int order, string line) = Render(member, solutionDirectory);
+			if (!byFile.TryGetValue(file, out List<(int, string)>? lines))
+				byFile[file] = lines = [];
+
+			lines.Add((order, line));
+		}
+
+		var builder = new OutlineBuilder();
+		builder.Header("resolvedType", SymbolResolver.FullyQualifiedName(type));
+		builder.Header("count", members.Count);
+		builder.Status(model.Status);
+		builder.Snapshot(model.SnapshotId);
+		builder.BeginBody();
+
+		foreach (KeyValuePair<string, List<(int Order, string Line)>> file in byFile)
+		{
+			builder.Line(0, file.Key);
+			foreach ((int _, string line) in file.Value.OrderBy(entry => entry.Order).ThenBy(entry => entry.Line, StringComparer.Ordinal))
+				builder.Line(1, line);
+		}
+
+		return builder.ToString();
 	}
 
-	private static MemberDto Map(ISymbol member, string? solutionDirectory)
+	private static (string File, int Order, string Line) Render(ISymbol member, string? solutionDirectory)
 	{
 		SyntaxReference? reference = member.DeclaringSyntaxReferences.FirstOrDefault();
-		FileLinePositionSpan? span = reference is null
-			? null
-			: reference.SyntaxTree.GetLineSpan(reference.Span);
+		FileLinePositionSpan? span = reference?.SyntaxTree.GetLineSpan(reference.Span);
 
-		return new MemberDto(
-			name: member.Name,
-			kind: member.Kind.ToString(),
-			accessibility: member.DeclaredAccessibility.ToString(),
-			signature: member.ToDisplayString(),
-			sourcePath: SolutionRelativePath.Of(solutionDirectory, span?.Path),
-			startLine: span is { } start ? start.StartLinePosition.Line + 1 : null,
-			endLine: span is { } end ? end.EndLinePosition.Line + 1 : null);
+		string file = span is { } located
+			? SolutionRelativePath.Of(solutionDirectory, located.Path)!
+			: MetadataBucket;
+		int startLine = span is { } start ? start.StartLinePosition.Line + 1 : 0;
+		int endLine = span is { } end ? end.EndLinePosition.Line + 1 : 0;
+
+		string line = $"{SymbolKindText.Of(member)},{member.Name}";
+		if (span is not null)
+			line += "," + (startLine == endLine ? startLine.ToString() : $"{startLine}-{endLine}");
+
+		if (member is IMethodSymbol method)
+			line += " " + Signature(method);
+
+		return (file, startLine, line);
 	}
+
+	private static string Signature(IMethodSymbol method) =>
+		"(" + string.Join(", ", method.Parameters.Select(parameter => parameter.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat))) + ")";
 
 	private static IEnumerable<ISymbol> Collect(INamedTypeSymbol type, bool includeInherited)
 	{

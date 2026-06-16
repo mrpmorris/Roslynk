@@ -3,8 +3,10 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Features.Callers.GetCallers;
 
@@ -30,23 +32,31 @@ public sealed class GetCallersTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		"""
-		Finds the methods that call the resolved method (by fully-qualified name). Ambiguous names return
-		candidate fully-qualified names instead. Prefer this over grepping for call sites; it resolves the
-		actual method through the compiler, so overloads and same-named methods are not confused.
+		$"""
+		Finds the methods that call the resolved method (by fully-qualified name). {OutlineDescriptions.TextNotJson}
+		Callers are grouped file -> namespace -> containing type -> calling member, each leaf showing the
+		caller's declaration location:
+		  #resolvedSymbol=<fully-qualified name>
+		  #count=<caller count>
+		  #status=Ready
+		  #snapshot=<id>
+
+		  <relative/forward-slash/path.cs>
+		  \t<namespace>
+		  \t\t<typeKind>,<typeName>
+		  \t\t\t<memberKind>,<memberName>,<loc>
+		where kind is one of {OutlineDescriptions.KindList} and {OutlineDescriptions.Loc}.
+		{OutlineDescriptions.ErrorBlock} Prefer this over grepping for call sites; it resolves the actual
+		method through the compiler, so overloads and same-named methods are not confused.
 		""")]
-	public async Task<GetCallersResult> GetCallers(
+	public async Task<string> GetCallers(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the method, e.g. 'MyNamespace.MyType.MyMethod'.")] string methodName)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		GetCallersResult Success(string resolvedSymbol, IReadOnlyList<string> callers) =>
-			new(model.SnapshotId, model.Status, error: null, resolvedSymbol, callers);
-
-		GetCallersResult Failure(Error error) =>
-			new(model.SnapshotId, model.Status, error, resolvedSymbol: null, callers: null);
+		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -66,12 +76,24 @@ public sealed class GetCallersTool
 		}
 
 		ISymbol symbol = matches[0];
-		IEnumerable<SymbolCallerInfo> callers = await SymbolFinder.FindCallersAsync(symbol, model.Solution);
-		string[] callerNames = callers
-			.Select(caller => SymbolResolver.FullyQualifiedName(caller.CallingSymbol))
-			.Distinct(StringComparer.Ordinal)
-			.ToArray();
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
-		return Success(SymbolResolver.FullyQualifiedName(symbol), callerNames);
+		List<ISymbol> callers = (await SymbolFinder.FindCallersAsync(symbol, model.Solution))
+			.Select(caller => caller.CallingSymbol)
+			.DistinctBy(SymbolResolver.FullyQualifiedName, StringComparer.Ordinal)
+			.ToList();
+
+		var root = new SymbolNode();
+		foreach (ISymbol caller in callers)
+			SymbolPlacement.Place(root, caller, solutionDirectory);
+
+		var builder = new OutlineBuilder();
+		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(symbol));
+		builder.Header("count", callers.Count);
+		builder.Status(model.Status);
+		builder.Snapshot(model.SnapshotId);
+		builder.BeginBody();
+		root.Render(builder);
+		return builder.ToString();
 	}
 }

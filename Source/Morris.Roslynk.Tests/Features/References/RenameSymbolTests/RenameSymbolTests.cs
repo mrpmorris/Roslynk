@@ -1,7 +1,6 @@
 using Morris.Roslynk.Features.References.RenameSymbol;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
-using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Features.References.RenameSymbolTests;
@@ -18,11 +17,11 @@ public class RenameSymbolTests
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ApplyPipeline());
 
-		RenameSymbolResult result = await subject.RenameSymbol(solutionPath, "SimpleLibrary.Greeter", "Welcomer");
+		string result = await subject.RenameSymbol(solutionPath, "SimpleLibrary.Greeter", "Welcomer");
 
-		Assert.True(result.IsSuccess);
-		Assert.True(result.Applied);
-		Assert.NotEmpty(result.ChangedFiles!);
+		Assert.Contains("#applied=true", result);
+		Assert.Contains("#resolvedSymbol=SimpleLibrary.Greeter", result);
+		Assert.Contains("SimpleLibrary/Greeter.cs", result);
 
 		string greeter = await File.ReadAllTextAsync(Path.Combine(libraryDir, "Greeter.cs"));
 		Assert.Contains("class Welcomer", greeter);
@@ -38,12 +37,9 @@ public class RenameSymbolTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ApplyPipeline());
 
-		RenameSymbolResult result = await subject.RenameSymbol(TestSolutions.Simple, "SimpleLibrary.Greeter", "1nvalid");
+		string result = await subject.RenameSymbol(TestSolutions.Simple, "SimpleLibrary.Greeter", "1nvalid");
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.Invalid, result.Error!.Code);
-		Assert.False(result.Applied);
-		Assert.Null(result.ChangedFiles);
+		Assert.Contains("#error=Invalid", result);
 	}
 
 	[Fact]
@@ -52,10 +48,10 @@ public class RenameSymbolTests
 		using var registry = new InstanceRegistry();
 		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ApplyPipeline());
 
-		RenameSymbolResult result = await subject.RenameSymbol(TestSolutions.Simple, "SimpleLibrary.Greeter", "Welcomer");
+		string result = await subject.RenameSymbol(TestSolutions.Simple, "SimpleLibrary.Greeter", "Welcomer");
 
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

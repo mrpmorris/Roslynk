@@ -1,6 +1,5 @@
 using Morris.Roslynk.Features.Usings.RemoveUnusedUsings;
 using Morris.Roslynk.Infrastructure.Lifecycle;
-using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Features.Usings.RemoveUnusedUsingsTests;
@@ -18,11 +17,10 @@ public class RemoveUnusedUsingsTests
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new RemoveUnusedUsingsTool(registry, new ApplyPipeline());
 
-		RemoveUnusedUsingsResult result = await subject.RemoveUnusedUsings(solutionPath);
+		string result = await subject.RemoveUnusedUsings(solutionPath);
 
-		Assert.True(result.IsSuccess);
-		Assert.True(result.Applied);
-		Assert.True(result.RemovedCount >= 1);
+		Assert.Contains("#applied=true", result);
+		Assert.DoesNotContain("#removedCount=0", result);
 		Assert.DoesNotContain("using System.Text;", await File.ReadAllTextAsync(greeter));
 	}
 
@@ -38,11 +36,10 @@ public class RemoveUnusedUsingsTests
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new RemoveUnusedUsingsTool(registry, new ApplyPipeline());
 
-		RemoveUnusedUsingsResult result = await subject.RemoveUnusedUsings(solutionPath, documentPath: null, checkOnly: true);
+		string result = await subject.RemoveUnusedUsings(solutionPath, documentPath: null, checkOnly: true);
 
-		Assert.True(result.IsSuccess);
-		Assert.False(result.Applied);
-		Assert.NotEmpty(result.ChangedFiles!);
+		Assert.Contains("#applied=false", result);
+		Assert.Contains("Greeter.cs", result);
 		Assert.Equal(withUnused, await File.ReadAllTextAsync(greeter));
 	}
 
@@ -53,11 +50,10 @@ public class RemoveUnusedUsingsTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new RemoveUnusedUsingsTool(registry, new ApplyPipeline());
 
-		RemoveUnusedUsingsResult result = await subject.RemoveUnusedUsings(TestSolutions.Simple);
+		string result = await subject.RemoveUnusedUsings(TestSolutions.Simple);
 
-		Assert.True(result.IsSuccess);
-		Assert.False(result.Applied);
-		Assert.Equal(0, result.RemovedCount);
+		Assert.Contains("#applied=false", result);
+		Assert.Contains("#removedCount=0", result);
 	}
 
 	[Fact]
@@ -66,10 +62,10 @@ public class RemoveUnusedUsingsTests
 		using var registry = new InstanceRegistry();
 		var subject = new RemoveUnusedUsingsTool(registry, new ApplyPipeline());
 
-		RemoveUnusedUsingsResult result = await subject.RemoveUnusedUsings(TestSolutions.Simple);
+		string result = await subject.RemoveUnusedUsings(TestSolutions.Simple);
 
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

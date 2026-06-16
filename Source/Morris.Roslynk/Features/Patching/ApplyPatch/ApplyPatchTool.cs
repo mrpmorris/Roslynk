@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Patching;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Writing;
@@ -31,14 +32,16 @@ public sealed class ApplyPatchTool
 	[Description(
 		"""
 		Applies a git unified diff to solution-compiled .cs files, located by content (not line numbers) and
-		written atomically. Prefer this over the host's raw file edit for .cs so the in-memory model stays in
-		sync. Hunk headers may omit line numbers (a bare '@@'); a content-anchored hunk must match exactly one
-		place, so include enough surrounding context that it is unambiguous. Edits existing files only; file
-		creation/deletion and non-.cs targets are rejected. Pass baseVersions (the documentVersion each file
-		was read at) to be told if a file moved since; pass checkOnly to preview the changed files without
-		writing.
+		written atomically. Returns a header-only text result, not JSON: '#applied=<true|false>', '#status',
+		'#snapshot' on success (applied is false for a checkOnly preview). Prefer this over the host's raw file
+		edit for .cs so the in-memory model stays in sync. Hunk headers may omit line numbers (a bare '@@'); a
+		content-anchored hunk must match exactly one place, so include enough surrounding context that it is
+		unambiguous. Edits existing files only; creation/deletion and non-.cs targets are rejected as
+		'#error=NotSupported' with '#rejected=<path>' lines. Pass baseVersions (the documentVersion each file
+		was read at) to be told if a file moved since (returned as '#error=Stale' with '#stale=<path>' lines);
+		pass checkOnly to validate without writing.
 		""")]
-	public async Task<ApplyPatchResult> ApplyPatch(
+	public async Task<string> ApplyPatch(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("A git unified diff (--- / +++ / @@ hunks) targeting one or more .cs files.")] string patch,
 		[Description("Optional: the documentVersion each touched file was based on, to detect external edits.")] IReadOnlyList<FileVersion>? baseVersions = null,
@@ -48,8 +51,7 @@ public sealed class ApplyPatchTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		ApplyPatchResult Failure(Error error) =>
-			new(model.SnapshotId, model.Status, error, applied: false, changedFiles: null, staleFiles: null, rejectedFiles: null);
+		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -79,22 +81,23 @@ public sealed class ApplyPatchTool
 		}
 
 		if (rejected.Count > 0)
-			return new ApplyPatchResult(
-				model.SnapshotId,
-				model.Status,
-				Error.NotSupported(
-					"apply_patch edits existing solution-compiled .cs files only; file creation/deletion and non-source targets are not supported."),
-				applied: false,
-				changedFiles: null,
-				staleFiles: null,
-				rejectedFiles: rejected);
+		{
+			var builder = new OutlineBuilder();
+			builder.Header("error", ErrorCode.NotSupported.ToString());
+			builder.Header("errorMessage", "apply_patch edits existing solution-compiled .cs files only; file creation/deletion and non-source targets are not supported.");
+			foreach (string path in rejected)
+				builder.Header("rejected", path);
+			builder.Status(model.Status);
+			builder.Snapshot(model.SnapshotId);
+			return builder.ToString();
+		}
 
 		IReadOnlyDictionary<string, string> expectedVersions = BuildExpectedVersions(baseVersions);
 
 		await instance.WriteLock.WaitAsync(cancellationToken);
 		try
 		{
-			var stale = new List<ApplyPatchStaleFile>();
+			var stale = new List<string>();
 			var pending = new List<PendingPatch>();
 
 			foreach (PatchTarget target in targets)
@@ -104,7 +107,7 @@ public sealed class ApplyPatchTool
 
 				if (TryGetExpected(expectedVersions, target, out string? expected) && !string.Equals(expected, currentVersion, StringComparison.Ordinal))
 				{
-					stale.Add(new ApplyPatchStaleFile(target.FilePath, currentVersion, diskText));
+					stale.Add(target.FilePath);
 					continue;
 				}
 
@@ -116,23 +119,19 @@ public sealed class ApplyPatchTool
 			}
 
 			if (stale.Count > 0)
-				return new ApplyPatchResult(
-					model.SnapshotId,
-					model.Status,
-					Error.Stale(
-						"Some targets changed on disk since the patch was based; rebase against the returned current text and retry.",
-						stale.Select(file => file.Path).ToArray()),
-					applied: false,
-					changedFiles: null,
-					staleFiles: stale,
-					rejectedFiles: null);
+				return Failure(Error.Stale(
+					"Some targets changed on disk since the patch was based; re-read the file and retry.",
+					stale));
 
-			IReadOnlyList<ApplyPatchChange> changes = pending
-				.Select(item => new ApplyPatchChange(item.FilePath, FileHash.Of(item.NewText)))
-				.ToArray();
+			string Applied(bool applied) =>
+				new OutlineBuilder()
+					.Header("applied", applied)
+					.Status(instance.CurrentModel.Status)
+					.Snapshot(instance.CurrentModel.SnapshotId)
+					.ToString();
 
 			if (checkOnly)
-				return new ApplyPatchResult(model.SnapshotId, model.Status, error: null, applied: false, changedFiles: changes, staleFiles: null, rejectedFiles: null);
+				return Applied(false);
 
 			await AtomicFileWriter.WriteAllAsync(
 				pending.Select(item => new PendingWrite(item.FilePath, item.NewText)).ToArray(),
@@ -146,7 +145,7 @@ public sealed class ApplyPatchTool
 			}
 
 			instance.AdvanceTo(updated);
-			return new ApplyPatchResult(instance.CurrentModel.SnapshotId, instance.CurrentModel.Status, error: null, applied: true, changedFiles: changes, staleFiles: null, rejectedFiles: null);
+			return Applied(true);
 		}
 		finally
 		{

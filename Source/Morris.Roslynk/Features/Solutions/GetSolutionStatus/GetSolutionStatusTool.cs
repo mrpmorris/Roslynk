@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 
 namespace Morris.Roslynk.Features.Solutions.GetSolutionStatus;
 
@@ -25,24 +26,32 @@ public sealed class GetSolutionStatusTool
 		OpenWorld = false)]
 	[Description(
 		"""
-		Lists the solutions currently loaded by the server, each with its load status and project progress:
-		LoadedProjects is how many projects have loaded so far (a live count while still Building) and
-		TotalProjects is the total once known (null until the first load finishes).
+		Lists the solutions currently loaded by the server. Returns a compact text result, not JSON: a
+		'#count' header, a blank line, then one line per solution
+		'<solutionId>,<status>,<loaded>/<total>,<snapshot>' where loaded is how many projects have loaded so
+		far (a live count while still Building) and total is the count once known ('?' until the first load
+		finishes).
 		""")]
-	public GetSolutionStatusResponse GetSolutionStatus()
+	public string GetSolutionStatus()
 	{
-		LoadedSolutionStatus[] solutions = InstanceRegistry.LoadedInstances()
-			.Select(instance =>
-			{
-				SolutionModel model = instance.CurrentModel;
-				int? totalProjects = model.Solution?.Projects.Count();
-				int loadedProjects = model.Status == SolutionStatus.Ready && totalProjects is int total
-					? total
-					: instance.LoadedProjects;
-				return new LoadedSolutionStatus(instance.Key.FilePath, model.Status, model.SnapshotId, loadedProjects, totalProjects);
-			})
-			.ToArray();
+		List<RoslynInstance> instances = InstanceRegistry.LoadedInstances().ToList();
 
-		return new GetSolutionStatusResponse(solutions);
+		var builder = new OutlineBuilder();
+		builder.Header("count", instances.Count);
+		builder.BeginBody();
+
+		foreach (RoslynInstance instance in instances)
+		{
+			SolutionModel model = instance.CurrentModel;
+			int? totalProjects = model.Solution?.Projects.Count();
+			int loadedProjects = model.Status == SolutionStatus.Ready && totalProjects is int total
+				? total
+				: instance.LoadedProjects;
+
+			string totalText = totalProjects?.ToString() ?? "?";
+			builder.Line(0, $"{instance.Key.FilePath},{model.Status},{loadedProjects}/{totalText},{model.SnapshotId}");
+		}
+
+		return builder.ToString();
 	}
 }

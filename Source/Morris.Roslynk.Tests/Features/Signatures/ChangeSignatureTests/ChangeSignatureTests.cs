@@ -1,7 +1,6 @@
 using Morris.Roslynk.Features.Signatures.ChangeSignature;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
-using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Features.Signatures.ChangeSignatureTests;
@@ -16,12 +15,11 @@ public class ChangeSignatureTests
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
 
-		ChangeSignatureResult result = await subject.ChangeSignature(
+		string result = await subject.ChangeSignature(
 			solutionPath, "SimpleLibrary.Widget.Compute", "int", "factor", "1", callSiteArgument: "1");
 
-		Assert.True(result.IsSuccess);
-		Assert.True(result.Applied);
-		Assert.Equal(1, result.UpdatedCallSites);
+		Assert.Contains("#applied=true", result);
+		Assert.Contains("#updatedCallSites=1", result);
 		string text = await File.ReadAllTextAsync(FindFile(solutionPath, "Widget.cs"));
 		Assert.Contains("int factor = 1", text);
 		Assert.Contains("factor: 1", text);
@@ -37,12 +35,11 @@ public class ChangeSignatureTests
 		string widget = FindFile(solutionPath, "Widget.cs");
 		string before = await File.ReadAllTextAsync(widget);
 
-		ChangeSignatureResult result = await subject.ChangeSignature(
+		string result = await subject.ChangeSignature(
 			solutionPath, "SimpleLibrary.Widget.Compute", "int", "factor", "1", callSiteArgument: "1", checkOnly: true);
 
-		Assert.True(result.IsSuccess);
-		Assert.False(result.Applied);
-		Assert.NotEmpty(result.ChangedFiles!);
+		Assert.Contains("#applied=false", result);
+		Assert.Contains("Widget.cs", result);
 		Assert.Equal(before, await File.ReadAllTextAsync(widget));
 	}
 
@@ -53,11 +50,11 @@ public class ChangeSignatureTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
 
-		ChangeSignatureResult result = await subject.ChangeSignature(
+		string result = await subject.ChangeSignature(
 			TestSolutions.Simple, "SimpleLibrary.Greeter.Greet", "int", "times", "1");
 
-		Assert.Equal(ErrorCode.NotSupported, result.Error!.Code);
-		Assert.Contains("interface", result.Error.Message, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("#error=NotSupported", result);
+		Assert.Contains("interface", result, StringComparison.OrdinalIgnoreCase);
 	}
 
 	[Fact]
@@ -67,11 +64,11 @@ public class ChangeSignatureTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
 
-		ChangeSignatureResult result = await subject.ChangeSignature(
+		string result = await subject.ChangeSignature(
 			TestSolutions.Simple, "SimpleLibrary.Widget.Compute", "int", "factor", "");
 
-		Assert.Equal(ErrorCode.Invalid, result.Error!.Code);
-		Assert.Contains("default", result.Error.Message, StringComparison.OrdinalIgnoreCase);
+		Assert.Contains("#error=Invalid", result);
+		Assert.Contains("default", result, StringComparison.OrdinalIgnoreCase);
 	}
 
 	[Fact]
@@ -81,11 +78,10 @@ public class ChangeSignatureTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
 
-		ChangeSignatureResult result = await subject.ChangeSignature(
+		string result = await subject.ChangeSignature(
 			TestSolutions.Simple, "SimpleLibrary.DoesNotExist", "int", "factor", "1");
 
-		Assert.Equal(ErrorCode.NotFound, result.Error!.Code);
-		Assert.Null(result.ResolvedMethod);
+		Assert.Contains("#error=NotFound", result);
 	}
 
 	[Fact]
@@ -94,11 +90,11 @@ public class ChangeSignatureTests
 		using var registry = new InstanceRegistry();
 		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
 
-		ChangeSignatureResult result = await subject.ChangeSignature(
+		string result = await subject.ChangeSignature(
 			TestSolutions.Simple, "SimpleLibrary.Widget.Compute", "int", "factor", "1");
 
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

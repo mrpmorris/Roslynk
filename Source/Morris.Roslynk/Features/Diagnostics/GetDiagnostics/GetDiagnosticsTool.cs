@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
@@ -12,6 +13,8 @@ namespace Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 public sealed class GetDiagnosticsTool
 {
 	public const string GetDiagnosticsName = "get_diagnostics";
+
+	private const string NoLocationBucket = "<no-location>";
 
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly DiagnosticsService DiagnosticsService;
@@ -30,16 +33,25 @@ public sealed class GetDiagnosticsTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		"""
-		Returns diagnostics for an opened solution. Errors are always included; set includeWarnings,
-		includeInfo, or includeHidden to widen the result (all default false, so by default only errors are
-		returned). Per-severity counts are always included so filtering is never silent, and errors are
-		listed first. Analyzers (NetAnalyzers / IDE rules) run by default for a richer result; set
-		includeAnalyzers false to skip them for a faster compiler-only pass. Prefer this over reading files
-		to hunt for problems; it returns the compiler's and analyzers' own diagnostics with exact locations.
-		Prefer this over actually building the solution using `dotnet build`.
+		$"""
+		Returns diagnostics for an opened solution. {OutlineDescriptions.TextNotJson} Per-severity counts are
+		always in the header so filtering is never silent; diagnostics are grouped by file:
+		  #errors=<n>
+		  #warnings=<n>
+		  #infos=<n>
+		  #hidden=<n>
+		  #status=Ready
+		  #snapshot=<id>
+
+		  <relative/forward-slash/path.cs>
+		  \t<severity>,<id>,<line:col> <message>
+		where severity is error|warning|info|hidden and the free-text message is last. Errors are always
+		included; set includeWarnings, includeInfo, or includeHidden to widen (all default false). Analyzers
+		(NetAnalyzers / IDE rules) run by default; set includeAnalyzers false for a faster compiler-only pass.
+		{OutlineDescriptions.ErrorBlock} Prefer this over reading files to hunt for problems, and over running
+		`dotnet build`; it returns the compiler's and analyzers' own diagnostics with exact locations.
 		""")]
-	public async Task<GetDiagnosticsResult> GetDiagnostics(
+	public async Task<string> GetDiagnostics(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Include warning-severity diagnostics. Default false.")] bool includeWarnings = false,
 		[Description("Include info-severity diagnostics. Default false.")] bool includeInfo = false,
@@ -50,24 +62,12 @@ public sealed class GetDiagnosticsTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		GetDiagnosticsResult Success(IReadOnlyList<DiagnosticDto> diagnostics, DiagnosticCounts counts) =>
-			new(model.SnapshotId, model.Status, error: null, diagnostics, counts);
-
-		GetDiagnosticsResult Failure(Error error) =>
-			new(model.SnapshotId, model.Status, error, diagnostics: null, counts: null);
-
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return OutlineError.Format(Error.Indexing(), model.Status, model.SnapshotId);
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetAllDiagnosticsAsync(model.Solution, targetFramework, includeAnalyzers);
-
-		var counts = new DiagnosticCounts(
-			errors: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error),
-			warnings: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning),
-			infos: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Info),
-			hidden: all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Hidden));
 
 		var wanted = new HashSet<DiagnosticSeverity> { DiagnosticSeverity.Error };
 		if (includeWarnings)
@@ -77,27 +77,52 @@ public sealed class GetDiagnosticsTool
 		if (includeHidden)
 			wanted.Add(DiagnosticSeverity.Hidden);
 
-		DiagnosticDto[] items = all
-			.Where(diagnostic => wanted.Contains(diagnostic.Severity))
-			.OrderByDescending(diagnostic => diagnostic.Severity)
-			.ThenBy(diagnostic => diagnostic.Location.SourceTree?.FilePath, StringComparer.OrdinalIgnoreCase)
-			.Select(diagnostic => Map(diagnostic, solutionDirectory))
-			.ToArray();
+		List<Diagnostic> items = all.Where(diagnostic => wanted.Contains(diagnostic.Severity)).ToList();
 
-		return Success(items, counts);
+		var builder = new OutlineBuilder();
+		builder.Header("errors", all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+		builder.Header("warnings", all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning));
+		builder.Header("infos", all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Info));
+		builder.Header("hidden", all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Hidden));
+		builder.Status(model.Status);
+		builder.Snapshot(model.SnapshotId);
+		builder.BeginBody();
+
+		IEnumerable<IGrouping<string, Diagnostic>> byFile = items
+			.GroupBy(diagnostic => FileOf(diagnostic, solutionDirectory))
+			.OrderBy(group => group.Key, StringComparer.Ordinal);
+
+		foreach (IGrouping<string, Diagnostic> file in byFile)
+		{
+			builder.Line(0, file.Key);
+			IEnumerable<Diagnostic> ordered = file
+				.OrderByDescending(diagnostic => diagnostic.Severity)
+				.ThenBy(diagnostic => diagnostic.Location.GetLineSpan().StartLinePosition.Line)
+				.ThenBy(diagnostic => diagnostic.Location.GetLineSpan().StartLinePosition.Character);
+
+			foreach (Diagnostic diagnostic in ordered)
+				builder.Line(1, LineText(diagnostic));
+		}
+
+		return builder.ToString();
 	}
 
-	private static DiagnosticDto Map(Diagnostic diagnostic, string? solutionDirectory)
+	private static string FileOf(Diagnostic diagnostic, string? solutionDirectory) =>
+		diagnostic.Location.IsInSource
+			? SolutionRelativePath.Of(solutionDirectory, diagnostic.Location.GetLineSpan().Path)!
+			: NoLocationBucket;
+
+	private static string LineText(Diagnostic diagnostic)
 	{
+		string severity = diagnostic.Severity.ToString().ToLowerInvariant();
+		string message = OutlineBuilder.Sanitize(diagnostic.GetMessage());
+
+		if (!diagnostic.Location.IsInSource)
+			return $"{severity},{diagnostic.Id} {message}";
+
 		FileLinePositionSpan span = diagnostic.Location.GetLineSpan();
-		return new DiagnosticDto(
-			id: diagnostic.Id,
-			severity: diagnostic.Severity.ToString(),
-			message: diagnostic.GetMessage(),
-			sourcePath: diagnostic.Location.IsInSource ? SolutionRelativePath.Of(solutionDirectory, span.Path) : null,
-			startLine: span.StartLinePosition.Line + 1,
-			startColumn: span.StartLinePosition.Character + 1,
-			endLine: span.EndLinePosition.Line + 1,
-			endColumn: span.EndLinePosition.Character + 1);
+		int line = span.StartLinePosition.Line + 1;
+		int column = span.StartLinePosition.Character + 1;
+		return $"{severity},{diagnostic.Id},{line}:{column} {message}";
 	}
 }

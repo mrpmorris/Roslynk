@@ -12,9 +12,10 @@ public class ClearCacheTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new ClearCacheTool(registry);
 
-		ClearCacheResponse response = subject.ClearCache();
+		string result = subject.ClearCache();
 
-		Assert.True(response.Closed >= 1);
+		Assert.DoesNotContain("#cleared=0", result);
+		Assert.StartsWith("#cleared=", result);
 		Assert.Empty(registry.LoadedInstances());
 	}
 }

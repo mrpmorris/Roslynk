@@ -12,13 +12,12 @@ public class GetSolutionStatusTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new GetSolutionStatusTool(registry);
 
-		GetSolutionStatusResponse response = subject.GetSolutionStatus();
+		string result = subject.GetSolutionStatus();
 
-		LoadedSolutionStatus loaded = Assert.Single(response.Solutions);
-		Assert.Equal(SolutionStatus.Ready, loaded.Status);
-		Assert.False(string.IsNullOrEmpty(loaded.SnapshotId));
-		Assert.Equal(1, loaded.TotalProjects);
-		Assert.Equal(loaded.TotalProjects, loaded.LoadedProjects);
+		Assert.Contains("#count=1", result);
+		// One line "<solutionId>,Ready,1/1,<snapshot>".
+		string line = result.Split('\n').First(candidate => candidate.Contains(",Ready,", StringComparison.Ordinal));
+		Assert.Contains(",1/1,", line);
 	}
 
 	[Fact]
@@ -28,12 +27,10 @@ public class GetSolutionStatusTests
 		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
 		var subject = new GetSolutionStatusTool(registry);
 
-		GetSolutionStatusResponse response = subject.GetSolutionStatus();
+		string result = subject.GetSolutionStatus();
 
-		LoadedSolutionStatus loaded = Assert.Single(response.Solutions);
-		Assert.Equal(SolutionStatus.Ready, loaded.Status);
-		Assert.Equal(2, loaded.TotalProjects);
-		Assert.Equal(2, loaded.LoadedProjects);
+		string line = result.Split('\n').First(candidate => candidate.Contains(",Ready,", StringComparison.Ordinal));
+		Assert.Contains(",2/2,", line);
 	}
 
 	[Fact]
@@ -43,11 +40,11 @@ public class GetSolutionStatusTests
 		registry.GetOrBegin(TestSolutions.Simple);
 		var subject = new GetSolutionStatusTool(registry);
 
-		GetSolutionStatusResponse response = subject.GetSolutionStatus();
+		string result = subject.GetSolutionStatus();
 
-		LoadedSolutionStatus loaded = Assert.Single(response.Solutions);
-		Assert.Equal(SolutionStatus.Building, loaded.Status);
-		Assert.Null(loaded.TotalProjects);
+		Assert.Contains("#count=1", result);
+		Assert.Contains(",Building,", result);
+		Assert.Contains("/?,", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

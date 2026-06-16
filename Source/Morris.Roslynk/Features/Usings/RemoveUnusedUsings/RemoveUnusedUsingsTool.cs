@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
 using Morris.Roslynk.Infrastructure.Writing;
@@ -35,10 +36,12 @@ public sealed class RemoveUnusedUsingsTool
 	[Description(
 		"""
 		Removes unnecessary using directives (the compiler's CS8019) across the solution, or in one file when
-		documentPath is given; the recurring cleanup after moves and renames. Written atomically through the
-		same safe write path as the other tools. Pass checkOnly to preview the changed files without writing.
+		documentPath is given; the recurring cleanup after moves and renames. Returns a text result, not JSON:
+		'#applied', '#removedCount', '#status', '#snapshot' header, a blank line, then one solution-relative
+		changed-file path per line. Written atomically through the same safe write path as the other tools. Pass
+		checkOnly to preview the changed files without writing.
 		""")]
-	public async Task<RemoveUnusedUsingsResult> RemoveUnusedUsings(
+	public async Task<string> RemoveUnusedUsings(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Optional path of a single .cs file to clean (absolute or relative to the solution folder). Omit to clean the whole solution.")] string? documentPath = null,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
@@ -47,16 +50,24 @@ public sealed class RemoveUnusedUsingsTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		RemoveUnusedUsingsResult Success(bool applied, IReadOnlyList<string> changed, int removedCount) =>
-			new(model.SnapshotId, model.Status, error: null, applied, changed, removedCount);
-
-		RemoveUnusedUsingsResult Failure(Error error) =>
-			new(model.SnapshotId, model.Status, error, applied: false, changedFiles: null, removedCount: 0);
+		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
 
 		Solution solution = model.Solution;
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
+
+		string Success(bool applied, IReadOnlyList<string> changed, int removedCount)
+		{
+			var builder = new OutlineBuilder();
+			builder.Header("applied", applied);
+			builder.Header("removedCount", removedCount);
+			builder.Status(instance.CurrentModel.Status);
+			builder.Snapshot(instance.CurrentModel.SnapshotId);
+			ChangedFilesOutline.Write(builder, changed, solutionDirectory);
+			return builder.ToString();
+		}
 
 		HashSet<DocumentId>? targetDocuments = null;
 		if (documentPath is not null)

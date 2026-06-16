@@ -1,7 +1,6 @@
 using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
-using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Tests.Features.Diagnostics.GetDiagnosticsTests;
 
@@ -14,11 +13,11 @@ public class GetDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.Broken);
+		string result = await subject.GetDiagnostics(TestSolutions.Broken);
 
-		Assert.True(result.IsSuccess);
-		Assert.True(result.Counts!.Errors >= 1);
-		Assert.Contains(result.Diagnostics!, diagnostic => diagnostic.Id == "CS0029" && diagnostic.Severity == "Error");
+		Assert.DoesNotContain("#error=", result);
+		Assert.DoesNotContain("#errors=0", result);
+		Assert.Contains("error,CS0029,", result);
 	}
 
 	[Fact]
@@ -28,11 +27,10 @@ public class GetDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.Broken);
+		string result = await subject.GetDiagnostics(TestSolutions.Broken);
 
-		Assert.True(result.IsSuccess);
-		Assert.All(result.Diagnostics!, diagnostic => Assert.Equal("Error", diagnostic.Severity));
-		Assert.True(result.Counts!.Warnings >= 1);
+		Assert.DoesNotContain("\twarning,", result);
+		Assert.DoesNotContain("#warnings=0", result);
 	}
 
 	[Fact]
@@ -42,11 +40,10 @@ public class GetDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.Broken, includeWarnings: true);
+		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeWarnings: true);
 
-		Assert.True(result.IsSuccess);
-		Assert.Contains(result.Diagnostics!, diagnostic => diagnostic.Severity == "Warning");
-		Assert.Contains(result.Diagnostics!, diagnostic => diagnostic.Severity == "Error");
+		Assert.Contains("\twarning,", result);
+		Assert.Contains("\terror,", result);
 	}
 
 	[Fact]
@@ -55,11 +52,10 @@ public class GetDiagnosticsTests
 		using var registry = new InstanceRegistry();
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.Broken);
+		string result = await subject.GetDiagnostics(TestSolutions.Broken);
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Broken);
 	}

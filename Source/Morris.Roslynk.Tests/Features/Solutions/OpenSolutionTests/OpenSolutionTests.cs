@@ -11,17 +11,16 @@ public class OpenSolutionTests
 		using var registry = new InstanceRegistry();
 		var subject = new OpenSolutionTool(registry);
 
-		OpenSolutionResult opening = subject.OpenSolution(TestSolutions.Simple);
+		string opening = subject.OpenSolution(TestSolutions.Simple);
 
-		Assert.Equal(SolutionStatus.Building, opening.Status);
-		Assert.False(string.IsNullOrEmpty(opening.SolutionCurrentSnapshotId));
-		Assert.Empty(opening.Projects!);
+		Assert.Contains("#status=Building", opening);
+		Assert.Contains("#projects=0", opening);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		OpenSolutionResult ready = subject.OpenSolution(TestSolutions.Simple);
+		string ready = subject.OpenSolution(TestSolutions.Simple);
 
-		Assert.Equal(SolutionStatus.Ready, ready.Status);
-		OpenSolutionProject project = Assert.Single(ready.Projects!);
-		Assert.Equal("SimpleLibrary", project.Name);
+		Assert.Contains("#status=Ready", ready);
+		Assert.Contains("#projects=1", ready);
+		Assert.Contains("SimpleLibrary.csproj,", ready);
 	}
 }

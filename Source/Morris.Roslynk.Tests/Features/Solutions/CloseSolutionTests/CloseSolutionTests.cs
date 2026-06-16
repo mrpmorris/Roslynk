@@ -6,16 +6,15 @@ namespace Morris.Roslynk.Tests.Features.Solutions.CloseSolutionTests;
 public class CloseSolutionTests
 {
 	[Fact]
-	public async Task WhenClosingAnOpenSolution_ThenItIsClosedAndClosingAgainReportsFalse()
+	public async Task WhenClosingAnOpenSolution_ThenItIsUnloadedAndTheResultIsEmpty()
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new CloseSolutionTool(registry);
 
-		CloseSolutionResponse first = subject.CloseSolution(TestSolutions.Simple);
-		CloseSolutionResponse second = subject.CloseSolution(TestSolutions.Simple);
+		string result = subject.CloseSolution(TestSolutions.Simple);
 
-		Assert.True(first.Closed);
-		Assert.False(second.Closed);
+		Assert.Equal("", result);
+		Assert.Empty(registry.LoadedInstances());
 	}
 }

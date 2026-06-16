@@ -1,7 +1,6 @@
 using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
-using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Tests.Features.Diagnostics.MultiTargetDiagnosticsTests;
 
@@ -14,10 +13,10 @@ public class MultiTargetDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.MultiTarget, targetFramework: "net8.0");
+		string result = await subject.GetDiagnostics(TestSolutions.MultiTarget, targetFramework: "net8.0");
 
-		Assert.True(result.IsSuccess);
-		Assert.Contains(result.Diagnostics!, diagnostic => diagnostic.Id == "CS0029");
+		Assert.DoesNotContain("#error=", result);
+		Assert.Contains("CS0029", result);
 	}
 
 	[Fact]
@@ -27,10 +26,10 @@ public class MultiTargetDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.MultiTarget, targetFramework: "net10.0");
+		string result = await subject.GetDiagnostics(TestSolutions.MultiTarget, targetFramework: "net10.0");
 
-		Assert.True(result.IsSuccess);
-		Assert.DoesNotContain(result.Diagnostics!, diagnostic => diagnostic.Id == "CS0029");
+		Assert.DoesNotContain("#error=", result);
+		Assert.DoesNotContain("CS0029", result);
 	}
 
 	[Fact]
@@ -39,11 +38,10 @@ public class MultiTargetDiagnosticsTests
 		using var registry = new InstanceRegistry();
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		GetDiagnosticsResult result = await subject.GetDiagnostics(TestSolutions.MultiTarget, targetFramework: "net8.0");
+		string result = await subject.GetDiagnostics(TestSolutions.MultiTarget, targetFramework: "net8.0");
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
 	}

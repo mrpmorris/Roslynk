@@ -1,6 +1,6 @@
 using Morris.Roslynk.Features.DeadCode.FindDeadCode;
 using Morris.Roslynk.Infrastructure.Lifecycle;
-using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.DeadCode.FindDeadCodeTests;
 
@@ -9,69 +9,45 @@ public class FindDeadCodeTests
 	[Fact]
 	public async Task WhenAPrivateMethodIsNeverCalled_ThenItIsReportedWithHighConfidence()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindDeadCodeTool(registry);
+		string result = await RunAsync();
 
-		FindDeadCodeResult result = await subject.FindDeadCode(TestSolutions.Simple);
-
-		Assert.True(result.IsSuccess);
-		DeadCodeCandidate unused = Assert.Single(result.Candidates!, candidate => candidate.Symbol == "SimpleLibrary.Widget.Unused");
-		Assert.Equal("High", unused.Confidence);
+		Assert.DoesNotContain("#error=", result);
+		Assert.Contains("method,SimpleLibrary.Widget.Unused,High", result);
 	}
 
 	[Fact]
 	public async Task WhenAMethodIsReferencedOrImplementsAnInterface_ThenItIsNotReported()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindDeadCodeTool(registry);
+		string result = await RunAsync(includePublic: true);
 
-		FindDeadCodeResult result = await subject.FindDeadCode(TestSolutions.Simple, includePublic: true);
-
-		Assert.True(result.IsSuccess);
-		Assert.DoesNotContain(result.Candidates!, candidate => candidate.Symbol == "SimpleLibrary.Widget.Compute");
-		Assert.DoesNotContain(result.Candidates!, candidate => candidate.Symbol == "SimpleLibrary.Greeter.Greet");
+		Assert.DoesNotContain("SimpleLibrary.Widget.Compute", result);
+		Assert.DoesNotContain("SimpleLibrary.Greeter.Greet", result);
 	}
 
 	[Fact]
 	public async Task WhenIncludePublicIsFalse_ThenUnreferencedPublicMembersAreNotReported()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindDeadCodeTool(registry);
+		string result = await RunAsync(includePublic: false);
 
-		FindDeadCodeResult result = await subject.FindDeadCode(TestSolutions.Simple, includePublic: false);
-
-		Assert.True(result.IsSuccess);
-		Assert.DoesNotContain(result.Candidates!, candidate => candidate.Symbol == "SimpleLibrary.Caller.Run");
+		Assert.DoesNotContain("SimpleLibrary.Caller.Run", result);
 	}
 
 	[Fact]
 	public async Task WhenIncludePublicIsTrue_ThenUnreferencedPublicMembersAreReported()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindDeadCodeTool(registry);
+		string result = await RunAsync(includePublic: true);
 
-		FindDeadCodeResult result = await subject.FindDeadCode(TestSolutions.Simple, includePublic: true);
-
-		Assert.True(result.IsSuccess);
-		Assert.Contains(result.Candidates!, candidate => candidate.Symbol == "SimpleLibrary.Caller.Run");
+		Assert.Contains("SimpleLibrary.Caller.Run", result);
 	}
 
 	[Fact]
 	public async Task WhenAScopeIsGiven_ThenOnlyMatchingSymbolsAreConsidered()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindDeadCodeTool(registry);
+		string result = await RunAsync(scope: "SimpleLibrary.Widget");
 
-		FindDeadCodeResult result = await subject.FindDeadCode(TestSolutions.Simple, scope: "SimpleLibrary.Widget");
-
-		Assert.True(result.IsSuccess);
-		Assert.NotEmpty(result.Candidates!);
-		Assert.All(result.Candidates!, candidate => Assert.StartsWith("SimpleLibrary.Widget", candidate.Symbol));
+		IReadOnlyList<string> symbols = Symbols(result);
+		Assert.NotEmpty(symbols);
+		Assert.All(symbols, symbol => Assert.StartsWith("SimpleLibrary.Widget", symbol));
 	}
 
 	[Fact]
@@ -80,12 +56,37 @@ public class FindDeadCodeTests
 		using var registry = new InstanceRegistry();
 		var subject = new FindDeadCodeTool(registry);
 
-		FindDeadCodeResult result = await subject.FindDeadCode(TestSolutions.Simple);
+		string result = await subject.FindDeadCode(TestSolutions.Simple);
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(ErrorCode.Indexing, result.Error!.Code);
-		Assert.Equal(SolutionStatus.Building, result.Status);
+		Assert.Contains("#error=Indexing", result);
+		Assert.Contains("#status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
+	}
+
+	private static async Task<string> RunAsync(string? scope = null, bool includePublic = false)
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new FindDeadCodeTool(registry);
+
+		return await subject.FindDeadCode(TestSolutions.Simple, scope, includePublic);
+	}
+
+	private static IReadOnlyList<string> Symbols(string text)
+	{
+		var symbols = new List<string>();
+		foreach (string raw in text.Split('\n'))
+		{
+			if (!raw.StartsWith('\t'))
+				continue;
+
+			// \t<kind>,<fully-qualified name>,<confidence> <reason>: the name is the second comma-field.
+			string[] parts = raw.TrimStart('\t').Split(',');
+			if (parts.Length >= 2)
+				symbols.Add(parts[1]);
+		}
+
+		return symbols;
 	}
 }

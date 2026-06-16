@@ -3,7 +3,9 @@ using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
@@ -33,13 +35,14 @@ public sealed class ApplyCodeActionTool
 		OpenWorld = false)]
 	[Description(
 		"""
-		Applies a code action discovered by get_code_actions, identified by its actionId. The action is
-		re-resolved at the same position (nothing is held between calls), then written atomically through the
-		same safe write path as the other tools. Pass checkOnly to preview the changed files without writing.
-		Prefer applying Roslyn's action over re-implementing the change by hand so the in-memory model stays
-		in sync.
+		Applies a code action discovered by get_code_actions, identified by its actionId. Returns a text
+		result, not JSON: '#applied', '#action', '#status', '#snapshot' header, a blank line, then one
+		solution-relative changed-file path per line. The action is re-resolved at the same position (nothing is
+		held between calls), then written atomically through the same safe write path as the other tools. Pass
+		checkOnly to preview the changed files without writing. Prefer applying Roslyn's action over
+		re-implementing the change by hand so the in-memory model stays in sync.
 		""")]
-	public async Task<ApplyCodeActionResult> ApplyCodeAction(
+	public async Task<string> ApplyCodeAction(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("The actionId from get_code_actions.")] string actionId,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
@@ -48,11 +51,7 @@ public sealed class ApplyCodeActionTool
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
-		ApplyCodeActionResult Success(bool applied, IReadOnlyList<string> changedFiles, string? action) =>
-			new(model.SnapshotId, model.Status, error: null, applied, changedFiles, action);
-
-		ApplyCodeActionResult Failure(Error error, string? action = null) =>
-			new(model.SnapshotId, model.Status, error, applied: false, changedFiles: null, action);
+		string Failure(Error error) => OutlineError.Format(error, model.Status, model.SnapshotId);
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
@@ -61,19 +60,26 @@ public sealed class ApplyCodeActionTool
 			return Failure(Error.Invalid("The actionId could not be decoded; get a fresh one from get_code_actions."));
 
 		Solution solution = model.Solution;
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
 		Document? document = CodeActionService.FindDocument(solution, actionRef.DocumentPath);
 		if (document is null)
-			return Failure(Error.NotFound($"'{actionRef.DocumentPath}' is no longer a solution document."), actionRef.Key);
+			return Failure(Error.NotFound($"'{actionRef.DocumentPath}' is no longer a solution document."));
 
 		Solution? changed = await CodeActionService.ComputeChangedSolutionAsync(document, actionRef, cancellationToken);
 		if (changed is null)
-			return Failure(Error.Conflict("The action is no longer available; the code may have changed. Re-run get_code_actions."), actionRef.Key);
+			return Failure(Error.Conflict("The action is no longer available; the code may have changed. Re-run get_code_actions."));
 
-		if (checkOnly)
-			return Success(applied: false, ApplyPipeline.GetChangedFilePaths(solution, changed), actionRef.Key);
+		IReadOnlyList<string> files = checkOnly
+			? ApplyPipeline.GetChangedFilePaths(solution, changed)
+			: await ApplyPipeline.ApplyAsync(instance, changed, cancellationToken);
 
-		IReadOnlyList<string> files = await ApplyPipeline.ApplyAsync(instance, changed, cancellationToken);
-		return Success(applied: true, files, actionRef.Key);
+		var builder = new OutlineBuilder();
+		builder.Header("applied", !checkOnly);
+		builder.Header("action", actionRef.Key);
+		builder.Status(instance.CurrentModel.Status);
+		builder.Snapshot(instance.CurrentModel.SnapshotId);
+		ChangedFilesOutline.Write(builder, files, solutionDirectory);
+		return builder.ToString();
 	}
 }
