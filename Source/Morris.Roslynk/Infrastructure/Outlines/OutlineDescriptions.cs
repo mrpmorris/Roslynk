@@ -17,6 +17,12 @@ internal static class OutlineDescriptions
 	/// <summary>How a list of locations is written inside one comma-delimited leaf.</summary>
 	public const string LocList = "multiple locations are pipe-delimited (loc|loc|...) so they sit inside the comma-delimited line";
 
+	/// <summary>How the owning project file (name.ext) labels path-bearing output.</summary>
+	public const string Project =
+		"each path is labelled with its owning project file (name.ext): as a #project=<name.ext> header before "
+		+ "a single #path, or as the outermost node above the path in a nested body; it is absent when the "
+		+ "result has no source (a metadata symbol)";
+
 	/// <summary>How a name that itself contains a comma is encoded inside a comma-delimited leaf.</summary>
 	public const string ListFieldQuoting =
 		"a type or member name that itself contains a comma (a generic type with several type arguments, e.g. "

@@ -11,6 +11,7 @@ public class GetSymbolTests
 	{
 		string result = await RunAsync("SimpleLibrary.Greeter");
 
+		Assert.Contains("#project=SimpleLibrary.csproj", result);
 		Assert.Contains("#path=SimpleLibrary/Greeter.cs", result);
 		Assert.Contains("#loc=", result);
 		Assert.Contains("public class Greeter : IGreeter", result);
@@ -64,6 +65,7 @@ public class GetSymbolTests
 		Assert.Contains("#signature=", result);
 		Assert.Contains("#assembly=", result);
 		Assert.DoesNotContain("#path=", result);
+		Assert.DoesNotContain("#project=", result);
 	}
 
 	[Fact]

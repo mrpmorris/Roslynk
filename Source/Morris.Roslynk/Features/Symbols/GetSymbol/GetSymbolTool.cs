@@ -35,17 +35,18 @@ public sealed class GetSymbolTool
 	[Description(
 		$"""
 		Returns a symbol's declaration, resolved by fully-qualified name. {OutlineDescriptions.TextNotJson} A
-		single source match returns a '#path=<relative/path.cs>' and
+		single source match returns a '#project=<name.ext>', '#path=<relative/path.cs>' and
 		'#loc=<startLine:startCol-endLine:endCol>' header, a blank line, then the verbatim declaration cut
 		before its body (the opening brace or '=>'). The declaration line itself conveys accessibility, kind,
 		return type, name and parameters, so those are not repeated. Example:
+		  #project=VendmanagerWeb.csproj
 		  #path=VendmanagerWeb/Components/Pages/Ops/TaskManager/TaskManager.razor.cs
 		  #loc=196:5-214:6
 
 		  private Task Search(CancellationToken cancellationToken)
 		A metadata symbol (no source) instead returns '#source=metadata', '#kind', '#signature', '#assembly'.
 		An ambiguous name returns a 'file -> namespace -> containing type(s) -> kind,name,loc' locator tree to
-		disambiguate. {OutlineDescriptions.ErrorBlock} Prefer this over reading the file to identify a symbol.
+		disambiguate. {OutlineDescriptions.Project}. {OutlineDescriptions.ErrorBlock} Prefer this over reading the file to identify a symbol.
 		""")]
 	public async Task<string> GetSymbol(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
@@ -73,10 +74,10 @@ public sealed class GetSymbolTool
 		if (matches.Count > 1)
 			return Locator(matches, model, solutionDirectory);
 
-		return await DetailLeanAsync(matches[0], solutionDirectory, cancellationToken);
+		return await DetailLeanAsync(matches[0], model.Solution, solutionDirectory, cancellationToken);
 	}
 
-	private async Task<string> DetailLeanAsync(ISymbol symbol, string? solutionDirectory, CancellationToken cancellationToken)
+	private async Task<string> DetailLeanAsync(ISymbol symbol, Solution solution, string? solutionDirectory, CancellationToken cancellationToken)
 	{
 		SyntaxReference? reference = symbol.DeclaringSyntaxReferences.FirstOrDefault();
 		if (reference is null)
@@ -87,6 +88,8 @@ public sealed class GetSymbolTool
 		SyntaxNode node = await reference.GetSyntaxAsync(cancellationToken);
 
 		var builder = new OutlineBuilder();
+		if (ProjectName.Of(solution, reference.SyntaxTree) is string project)
+			builder.Header("project", project);
 		builder.Header("path", SolutionRelativePath.Of(solutionDirectory, span.Path)!);
 		builder.Header("loc", $"{span.StartLinePosition.Line + 1}:{span.StartLinePosition.Character + 1}-{span.EndLinePosition.Line + 1}:{span.EndLinePosition.Character + 1}");
 		builder.BeginBody();

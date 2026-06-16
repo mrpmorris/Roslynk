@@ -34,8 +34,8 @@ public sealed class FindDefinitionTool
 		$"""
 		Resolves the symbol used at a source position (file, 1-based line and column) and returns where it is
 		declared; the 'go to definition' jump, by position. {OutlineDescriptions.TextNotJson} The result is a
-		'#fullName', '#kind' header plus '#path=<relative/path.cs>' and '#loc=<line:col>' for a source symbol,
-		or '#assembly=<name>' for a metadata symbol. {OutlineDescriptions.ErrorBlock} Prefer this over grepping
+		'#fullName', '#kind' header plus '#project=<name.ext>', '#path=<relative/path.cs>' and '#loc=<line:col>' for a source symbol,
+		or '#assembly=<name>' for a metadata symbol. {OutlineDescriptions.Project}. {OutlineDescriptions.ErrorBlock} Prefer this over grepping
 		to chase a definition; it follows the compiler's binding, so it lands on the right symbol even when
 		names are overloaded or shadowed.
 		""")]
@@ -73,6 +73,8 @@ public sealed class FindDefinitionTool
 		}
 
 		FileLinePositionSpan span = location.GetLineSpan();
+		if (ProjectName.Of(model.Solution, location.SourceTree!) is string project)
+			builder.Header("project", project);
 		builder.Header("path", SolutionRelativePath.Of(solutionDirectory, span.Path)!);
 		builder.Header("loc", $"{span.StartLinePosition.Line + 1}:{span.StartLinePosition.Character + 1}-{span.EndLinePosition.Line + 1}:{span.EndLinePosition.Character + 1}");
 		return builder.ToString();
