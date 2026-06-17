@@ -92,7 +92,7 @@ public static class RazorDocumentGenerator
 	private static bool TryGetGenerator(Project project, out IIncrementalGenerator? generator)
 	{
 		generator = null;
-		AnalyzerReference? reference = project.AnalyzerReferences.FirstOrDefault(candidate =>
+		var reference = project.AnalyzerReferences.FirstOrDefault(candidate =>
 			candidate.FullPath is string path && path.EndsWith(RazorCompilerFileName, StringComparison.OrdinalIgnoreCase));
 
 		if (reference?.FullPath is not string razorPath)
