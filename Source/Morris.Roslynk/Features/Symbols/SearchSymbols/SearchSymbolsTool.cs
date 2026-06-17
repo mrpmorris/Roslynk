@@ -36,12 +36,13 @@ public sealed class SearchSymbolsTool
 		matched member nesting under its (parent-only) type:
 
 		  <project>
-		  \t<relative/forward-slash/path.cs>
-		  \t\t<namespace>
-		  \t\t\t<typeKind>,<typeName>,<loc>
-		  \t\t\t\t<memberKind>,<memberName>,<loc>
+		  \t<relative/forward-slash/folder>
+		  \t\t<file.cs>
+		  \t\t\t<namespace>
+		  \t\t\t\t<typeKind>,<typeName>,<loc>
+		  \t\t\t\t\t<memberKind>,<memberName>,<loc>
 		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}, and a type's location
-		is present only when the type itself matched; {OutlineDescriptions.ListFieldQuoting}. {OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock} Prefer this over grepping
+		is present only when the type itself matched; {OutlineDescriptions.ListFieldQuoting}. {OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over grepping
 		to locate where something is declared; it searches the compiler's declared symbols.
 		""")]
 	public async Task<string> SearchSymbols(

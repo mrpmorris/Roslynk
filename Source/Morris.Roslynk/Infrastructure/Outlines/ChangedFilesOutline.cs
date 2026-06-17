@@ -31,13 +31,7 @@ public static class ChangedFilesOutline
 				fileDepth = 1;
 			}
 
-			IEnumerable<string> files = project
-				.Select(entry => entry.Relative)
-				.Distinct(StringComparer.Ordinal)
-				.OrderBy(path => path, StringComparer.Ordinal);
-
-			foreach (string path in files)
-				builder.Line(fileDepth, path);
+			FolderFiles.Write(builder, fileDepth, project, entry => entry.Relative, (_, _) => { });
 		}
 	}
 }

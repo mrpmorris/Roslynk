@@ -40,13 +40,14 @@ public sealed class GetMembersTool
 		  #resolvedType=<fully-qualified type>
 
 		  <project>
-		  \t<relative/forward-slash/path.cs>
-		  \t\t<memberKind>,<name>,<loc>,<paramType|paramType|...>
+		  \t<relative/forward-slash/folder>
+		  \t\t<file.cs>
+		  \t\t\t<memberKind>,<name>,<loc>,<paramType|paramType|...>
 		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; the loc is empty for a metadata member; the trailing signature is a pipe-delimited list of minimally-qualified parameter types, present only for methods that take parameters. To read a member's
 		body, resolve its path against the solution folder and read startLine through endLine. Private and
 		inherited members are excluded unless requested; narrow a large type with nameFilter (a trailing '*'
 		matches by prefix, otherwise a case-insensitive substring) and the include* kind toggles.
-		{OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock} Prefer this over reading the .cs file; it is the compiler's view,
+		{OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading the .cs file; it is the compiler's view,
 		correct across partial classes and (with includeInherited) base types.
 		""")]
 	public async Task<string> GetMembers(
@@ -134,12 +135,11 @@ public sealed class GetMembersTool
 				fileDepth = 1;
 			}
 
-			foreach (var file in project.GroupBy(entry => entry.File).OrderBy(group => group.Key, StringComparer.Ordinal))
+			FolderFiles.Write(builder, fileDepth, project, entry => entry.File, (memberDepth, file) =>
 			{
-				builder.Line(fileDepth, file.Key);
 				foreach (var entry in file.OrderBy(item => item.Order).ThenBy(item => item.Line, StringComparer.Ordinal))
-					builder.Line(fileDepth + 1, entry.Line);
-			}
+					builder.Line(memberDepth, entry.Line);
+			});
 		}
 
 		return builder.ToString();

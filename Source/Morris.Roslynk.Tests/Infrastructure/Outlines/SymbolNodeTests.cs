@@ -64,6 +64,37 @@ public class SymbolNodeTests
 		Assert.Equal("field,Bar,1:1\nmethod,Foo,2:1\n", Render(root));
 	}
 
+	[Fact]
+	public void WhenChildPathHasAFolder_ThenTheFileNestsUnderAFolderNode()
+	{
+		var root = new SymbolNode();
+
+		root.ChildPath("A/B/File.cs").Child("class,X").AddLocation(1, 1, 1, 1);
+
+		Assert.Equal("A/B\n\tFile.cs\n\t\tclass,X,1:1\n", Render(root));
+	}
+
+	[Fact]
+	public void WhenChildPathHasNoFolder_ThenTheFileIsADirectChild()
+	{
+		var root = new SymbolNode();
+
+		root.ChildPath("File.cs").Child("class,X").AddLocation(1, 1, 1, 1);
+
+		Assert.Equal("File.cs\n\tclass,X,1:1\n", Render(root));
+	}
+
+	[Fact]
+	public void WhenTwoFilesShareAFolder_ThenTheFolderIsPrintedOnce()
+	{
+		var root = new SymbolNode();
+
+		root.ChildPath("A/One.cs").Child("class,X").AddLocation(1, 1, 1, 1);
+		root.ChildPath("A/Two.cs").Child("class,Y").AddLocation(2, 1, 2, 1);
+
+		Assert.Equal("A\n\tOne.cs\n\t\tclass,X,1:1\n\tTwo.cs\n\t\tclass,Y,2:1\n", Render(root));
+	}
+
 	private static string Render(SymbolNode root)
 	{
 		var builder = new OutlineBuilder();

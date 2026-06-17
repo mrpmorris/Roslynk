@@ -39,10 +39,11 @@ public sealed class FindImplementationsTool
 		  #resolvedSymbol=<fully-qualified name>
 
 		  <project>
-		  \t<relative/forward-slash/path.cs>
-		  \t\t<namespace>
-		  \t\t\t<typeKind>,<typeName>,<loc>
-		{OutlineDescriptions.ListFieldQuoting} {OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to find implementors; it walks the
+		  \t<relative/forward-slash/folder>
+		  \t\t<file.cs>
+		  \t\t\t<namespace>
+		  \t\t\t\t<typeKind>,<typeName>,<loc>
+		{OutlineDescriptions.ListFieldQuoting} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to find implementors; it walks the
 		compiler's type graph, not text.
 		""")]
 	public async Task<string> FindImplementations(

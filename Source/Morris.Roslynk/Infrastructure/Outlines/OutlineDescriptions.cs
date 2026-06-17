@@ -23,6 +23,11 @@ internal static class OutlineDescriptions
 		+ "but others such as .vbproj kept): as a #project=<project> header before a single #path, or as the "
 		+ "outermost node above the path in a nested body; it is absent when the result has no source (a metadata symbol)";
 
+	/// <summary>How a file path in a nested body is split into a folder line and a file-name child.</summary>
+	public const string FilePathSplit =
+		"in a nested body a file path is split into a folder line with the file name nested beneath it, so files "
+		+ "that share a folder list the folder once (a file at the solution root has no folder line)";
+
 	/// <summary>How a name that itself contains a comma is encoded inside a comma-delimited leaf.</summary>
 	public const string ListFieldQuoting =
 		"a type or member name that itself contains a comma (a generic type with several type arguments, e.g. "

@@ -26,7 +26,7 @@ public static class SymbolPlacement
 			? root.Child(project)
 			: root;
 
-		SymbolNode node = start.Child(file).Child(NamespaceOf(symbol));
+		SymbolNode node = start.ChildPath(file).Child(NamespaceOf(symbol));
 
 		var parents = new List<INamedTypeSymbol>();
 		for (INamedTypeSymbol? containing = symbol.ContainingType; containing is not null; containing = containing.ContainingType)

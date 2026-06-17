@@ -39,12 +39,13 @@ public sealed class GetCallersTool
 		  #resolvedSymbol=<fully-qualified name>
 
 		  <project>
-		  \t<relative/forward-slash/path.cs>
-		  \t\t<namespace>
-		  \t\t\t<typeKind>,<typeName>
-		  \t\t\t\t<memberKind>,<memberName>,<loc>
+		  \t<relative/forward-slash/folder>
+		  \t\t<file.cs>
+		  \t\t\t<namespace>
+		  \t\t\t\t<typeKind>,<typeName>
+		  \t\t\t\t\t<memberKind>,<memberName>,<loc>
 		where kind is one of {OutlineDescriptions.KindList} and {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}.
-		{OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock} Prefer this over grepping for call sites; it resolves the actual
+		{OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over grepping for call sites; it resolves the actual
 		method through the compiler, so overloads and same-named methods are not confused.
 		""")]
 	public async Task<string> GetCallers(

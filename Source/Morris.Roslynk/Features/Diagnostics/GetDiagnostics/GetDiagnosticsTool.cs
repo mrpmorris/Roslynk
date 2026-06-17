@@ -42,13 +42,14 @@ public sealed class GetDiagnosticsTool
 		  #hidden=<n>
 
 		  <project>
-		  \t<relative/forward-slash/path.cs>
-		  \t\t<severity>
-		  \t\t\t<id>,<line:col> <message>
+		  \t<relative/forward-slash/folder>
+		  \t\t<file.cs>
+		  \t\t\t<severity>
+		  \t\t\t\t<id>,<line:col>,<message>
 		where severity is the plural group errors|warnings|infos|hidden and the free-text message is last. Errors are always
 		included; set includeWarnings, includeInfo, or includeHidden to widen (all default false). Analyzers
 		(NetAnalyzers / IDE rules) run by default; set includeAnalyzers false for a faster compiler-only pass.
-		{OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to hunt for problems, and over running
+		{OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to hunt for problems, and over running
 		`dotnet build`; it returns the compiler's and analyzers' own diagnostics with exact locations.
 		""")]
 	public async Task<string> GetDiagnostics(
@@ -101,30 +102,24 @@ public sealed class GetDiagnosticsTool
 				fileDepth = 1;
 			}
 
-			IEnumerable<IGrouping<string, Diagnostic>> byFile = project
-				.GroupBy(diagnostic => FileOf(diagnostic, solutionDirectory))
-				.OrderBy(group => group.Key, StringComparer.Ordinal);
-
-			foreach (IGrouping<string, Diagnostic> file in byFile)
+			FolderFiles.Write(builder, fileDepth, project, diagnostic => FileOf(diagnostic, solutionDirectory), (severityDepth, file) =>
 			{
-				builder.Line(fileDepth, file.Key);
-
 				IEnumerable<IGrouping<DiagnosticSeverity, Diagnostic>> bySeverity = file
 					.GroupBy(diagnostic => diagnostic.Severity)
 					.OrderByDescending(group => group.Key);
 
 				foreach (IGrouping<DiagnosticSeverity, Diagnostic> severity in bySeverity)
 				{
-					builder.Line(fileDepth + 1, SeverityLabel(severity.Key));
+					builder.Line(severityDepth, SeverityLabel(severity.Key));
 
 					IEnumerable<Diagnostic> ordered = severity
 						.OrderBy(diagnostic => diagnostic.Location.GetLineSpan().StartLinePosition.Line)
 						.ThenBy(diagnostic => diagnostic.Location.GetLineSpan().StartLinePosition.Character);
 
 					foreach (Diagnostic diagnostic in ordered)
-						builder.Line(fileDepth + 2, EntryText(diagnostic));
+						builder.Line(severityDepth + 1, EntryText(diagnostic));
 				}
-			}
+			});
 		}
 
 		return builder.ToString();
@@ -152,11 +147,11 @@ public sealed class GetDiagnosticsTool
 		string message = OutlineBuilder.Sanitize(diagnostic.GetMessage());
 
 		if (!diagnostic.Location.IsInSource)
-			return $"{diagnostic.Id} {message}";
+			return $"{diagnostic.Id},{message}";
 
 		FileLinePositionSpan span = diagnostic.Location.GetLineSpan();
 		int line = span.StartLinePosition.Line + 1;
 		int column = span.StartLinePosition.Character + 1;
-		return $"{diagnostic.Id},{line}:{column} {message}";
+		return $"{diagnostic.Id},{line}:{column},{message}";
 	}
 }

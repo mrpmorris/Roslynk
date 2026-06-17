@@ -19,10 +19,10 @@ public class FindReferencesTests
 		Assert.DoesNotContain("#truncated", result);
 		Assert.DoesNotContain("#count", result);
 		Assert.Contains(result.Split('\n'), line => line == "SimpleLibrary");
-		Assert.Contains("SimpleLibrary/Caller.cs", result);
-		Assert.Contains("\tSimpleLibrary\n", result);
-		Assert.Contains("\t\tclass,Caller\n", result);
-		Assert.Contains("\t\t\tmethod,Run,5:", result);
+		Assert.Contains(result.Split('\n'), line => line == "\tSimpleLibrary");
+		Assert.Contains(result.Split('\n'), line => line == "\t\tCaller.cs");
+		Assert.Contains("\t\t\t\tclass,Caller\n", result);
+		Assert.Contains("\t\t\t\t\tmethod,Run,5:", result);
 		Assert.DoesNotContain("\r", result);
 	}
 
@@ -80,17 +80,17 @@ public class FindReferencesTests
 		Assert.DoesNotContain("#truncated", result);
 		Assert.DoesNotContain("\r", result);
 
-		Assert.Contains("RefLibrary/Things.cs", result);
-		Assert.Contains("RefLibrary/Outer.cs", result);
-		Assert.Contains("\tRefSpace\n", result);
+		Assert.Contains(result.Split('\n'), line => line == "\t\tThings.cs");
+		Assert.Contains(result.Split('\n'), line => line == "\t\tOuter.cs");
+		Assert.Contains("\t\t\tRefSpace\n", result);
 
 		// A type referenced in its own base list carries a location; Alpha/Beta sit at namespace depth.
-		Assert.Contains("\t\tclass,Alpha,", result);
-		Assert.Contains("\t\tclass,Beta,", result);
+		Assert.Contains("\t\t\t\tclass,Alpha,", result);
+		Assert.Contains("\t\t\t\tclass,Beta,", result);
 
 		// Outer is referenced nowhere itself, so it is a parent-only line; Nested nests one level deeper.
-		Assert.Contains("\t\tclass,Outer\n", result);
-		Assert.Contains("\t\t\tclass,Nested,", result);
+		Assert.Contains("\t\t\t\tclass,Outer\n", result);
+		Assert.Contains("\t\t\t\t\tclass,Nested,", result);
 
 		// Methods nest under their type; a method declaring two locals plus a return type lists three locations.
 		Assert.Equal(3, LocationCountUnder(result, "method,AlphaPair"));

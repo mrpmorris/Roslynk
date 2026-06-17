@@ -62,14 +62,15 @@ public sealed class FindDeadCodeTool
 		surface. {OutlineDescriptions.TextNotJson} Candidates nest file -> namespace -> type -> member:
 
 		  <project>
-		  \t<relative/forward-slash/path.cs>
-		  \t\t<namespace>
-		  \t\t\t<typeKind>,<typeName>
-		  \t\t\t\t<memberKind>,<memberName>,<loc>,<confidence> <reason>
+		  \t<relative/forward-slash/folder>
+		  \t\t<file.cs>
+		  \t\t\t<namespace>
+		  \t\t\t\t<typeKind>,<typeName>
+		  \t\t\t\t\t<memberKind>,<memberName>,<loc>,<confidence> <reason>
 		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; confidence is High or
 		Medium, and the free-text reason is last; a dead type is itself a leaf carrying its own loc. The loc is
 		the full declaration span, ready to pass to apply_patch to remove the member. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
-		solutions with scope. {OutlineDescriptions.TruncationFlag} {OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock}
+		solutions with scope. {OutlineDescriptions.TruncationFlag} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock}
 		""")]
 	public async Task<string> FindDeadCode(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
@@ -141,7 +142,7 @@ public sealed class FindDeadCodeTool
 		foreach (Candidate candidate in results)
 		{
 			SymbolNode start = candidate.Project is string project ? root.Child(project) : root;
-			SymbolNode node = start.Child(candidate.File).Child(candidate.Namespace);
+			SymbolNode node = start.ChildPath(candidate.File).Child(candidate.Namespace);
 			foreach (string type in candidate.ContainingTypes)
 				node = node.Child(type);
 

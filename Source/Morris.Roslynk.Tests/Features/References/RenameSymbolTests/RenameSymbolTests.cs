@@ -22,7 +22,7 @@ public class RenameSymbolTests
 		Assert.Contains("#applied=Y", result);
 		Assert.Contains("#resolvedSymbol=SimpleLibrary.Greeter", result);
 		Assert.Contains(result.Split('\n'), line => line == "SimpleLibrary");
-		Assert.Contains("SimpleLibrary/Greeter.cs", result);
+		Assert.Contains(result.Split('\n'), line => line.TrimStart('\t') == "Greeter.cs");
 
 		string greeter = await File.ReadAllTextAsync(Path.Combine(libraryDir, "Greeter.cs"));
 		Assert.Contains("class Welcomer", greeter);

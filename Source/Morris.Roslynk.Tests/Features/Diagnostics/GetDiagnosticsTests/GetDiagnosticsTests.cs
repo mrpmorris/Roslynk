@@ -19,7 +19,7 @@ public class GetDiagnosticsTests
 		Assert.DoesNotContain("#errors=0", result);
 		Assert.Contains(result.Split('\n'), line => line == "BrokenLibrary");
 		Assert.Contains("\terrors\n", result);
-		Assert.Contains("\t\tCS0029,", result);
+		Assert.Contains("CS0029,9:27,", result);
 	}
 
 	[Fact]

@@ -33,6 +33,16 @@ public sealed class SymbolNode
 		return child;
 	}
 
+	/// <summary>
+	/// Returns the leaf node for a file path, nesting it under a folder node when the path has a directory
+	/// part (so siblings that share a folder collapse to a single folder line); a path with no directory part
+	/// (a root-level file, or a synthetic bucket) is a direct child as-is.
+	/// </summary>
+	public SymbolNode ChildPath(string path)
+	{
+		(string? folder, string name) = OutlinePath.Split(path);
+		return folder is null ? Child(name) : Child(folder).Child(name);
+	}
 	public void AddLocation(int line, int column, int endLine, int endColumn) =>
 		Locations.Add((line, column, endLine, endColumn));
 

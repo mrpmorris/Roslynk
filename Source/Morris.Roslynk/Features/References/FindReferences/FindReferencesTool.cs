@@ -39,12 +39,13 @@ public sealed class FindReferencesTool
 		  #resolvedSymbol=<fully-qualified name>
 
 		  <project>
-		  \t<relative/forward-slash/path.cs>
-		  \t\t<namespace, or "<global>">
-		  \t\t\t<typeKind>,<typeName>,<loc|loc|...>   (locations present only when the type declaration itself references the symbol)
-		  \t\t\t\t<memberKind>,<memberName>,<loc|loc|...>
+		  \t<relative/forward-slash/folder>
+		  \t\t<file.cs>
+		  \t\t\t<namespace, or "<global>">
+		  \t\t\t\t<typeKind>,<typeName>,<loc|loc|...>   (locations present only when the type declaration itself references the symbol)
+		  \t\t\t\t\t<memberKind>,<memberName>,<loc|loc|...>
 		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.Loc}; {OutlineDescriptions.LocList}; {OutlineDescriptions.ListFieldQuoting}.
-		{OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.ErrorBlock} Prefer this over grepping: it matches the compiler's symbol, not text,
+		{OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over grepping: it matches the compiler's symbol, not text,
 		so it skips comments, strings and unrelated same-named members, and still finds usages in code-behind
 		and partial classes.
 		""")]
@@ -104,7 +105,7 @@ public sealed class FindReferencesTool
 				? root.Child(project)
 				: root;
 			SymbolNode node = fileParent
-				.Child(SolutionRelativePath.Of(solutionDirectory, span.Path)!)
+				.ChildPath(SolutionRelativePath.Of(solutionDirectory, span.Path)!)
 				.Child(enclosing.Namespace);
 			foreach (EnclosingSegment segment in enclosing.Segments)
 				node = node.Child($"{segment.Kind},{OutlineBuilder.Field(segment.Name)}");
