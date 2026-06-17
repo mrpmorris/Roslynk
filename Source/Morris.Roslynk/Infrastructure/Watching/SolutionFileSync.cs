@@ -42,6 +42,9 @@ public sealed class SolutionFileSync
 	/// <summary>The hash of each build file as it was on disk at load, so we can tell a real edit from a touch.</summary>
 	private readonly ConcurrentDictionary<string, string> BuildFileBaseline;
 
+	/// <summary>Whether each project file uses default compile globs, so a new .cs can be folded in vs reloaded.</summary>
+	private readonly ConcurrentDictionary<string, bool> UsesDefaultCompileItemsCache = new(StringComparer.OrdinalIgnoreCase);
+
 	public SolutionFileSync(RoslynInstance instance)
 	{
 		Instance = instance ?? throw new ArgumentNullException(nameof(instance));
@@ -114,20 +117,33 @@ public sealed class SolutionFileSync
 
 	private async Task OnSourceFileChangedAsync(string path, CancellationToken cancellationToken)
 	{
-		if (Instance.CurrentSolution.GetDocumentIdsWithFilePath(path).IsEmpty)
-		{
-			// A .cs file that is not (yet) a known document; a new file under a glob, for example. That
-			// changes the compilation structurally, so let the next read reload rather than guess.
-			Instance.MarkDirty();
-			return;
-		}
+		Solution current = Instance.CurrentSolution;
+		bool known = !current.GetDocumentIdsWithFilePath(path).IsEmpty;
 
 		if (!File.Exists(path))
 		{
-			Instance.MarkDirty();
+			// Deleted: drop a known document incrementally; an unknown path needs nothing.
+			if (known)
+				await FoldRemoveAsync(path, cancellationToken);
 			return;
 		}
 
+		if (!known)
+		{
+			// A new .cs file. Fold it into every project whose directory owns it and uses default compile
+			// globs; otherwise its membership is MSBuild's call, so mark dirty and reload on next use.
+			if (TryFindDefaultGlobProjects(current, path, out IReadOnlyList<ProjectId> projects))
+				await FoldAddAsync(path, projects, cancellationToken);
+			else
+				Instance.MarkDirty();
+			return;
+		}
+
+		await FoldTextAsync(current, path, cancellationToken);
+	}
+
+	private async Task FoldTextAsync(Solution snapshot, string path, CancellationToken cancellationToken)
+	{
 		string diskText;
 		try
 		{
@@ -138,37 +154,117 @@ public sealed class SolutionFileSync
 			return; // File momentarily locked by the editor; a later event or the dirty path will catch up.
 		}
 
-		await Instance.WriteLock.WaitAsync(cancellationToken);
-		try
+		// Cheap pre-check against the current snapshot so our own writes / identical saves do not enqueue a
+		// no-op; the transform re-applies authoritatively against the latest snapshot under the write lock.
+		ImmutableArray<DocumentId> ids = snapshot.GetDocumentIdsWithFilePath(path);
+		Document? document = ids.IsEmpty ? null : snapshot.GetDocument(ids[0]);
+		if (document is null)
+			return;
+
+		string loaded = (await document.GetTextAsync(cancellationToken)).ToString();
+		if (string.Equals(loaded, diskText, StringComparison.Ordinal))
+			return; // Our own write, an editor touch, or a save with identical bytes.
+
+		await Instance.EnqueueWriteAsync((current, token) =>
 		{
-			Solution current = Instance.CurrentSolution;
-			ImmutableArray<DocumentId> ids = current.GetDocumentIdsWithFilePath(path);
-			if (ids.IsEmpty)
-				return;
-
-			Document? document = current.GetDocument(ids[0]);
-			if (document is null)
-				return; // The path maps only to additional/analyzer documents, which we do not fold in yet.
-
-			string loaded = (await document.GetTextAsync(cancellationToken)).ToString();
-			if (string.Equals(loaded, diskText, StringComparison.Ordinal))
-				return; // Our own write, an editor touch, or a save with identical bytes.
-
 			SourceText newText = SourceText.From(diskText);
 			Solution updated = current;
-			foreach (DocumentId id in ids)
+			foreach (DocumentId id in current.GetDocumentIdsWithFilePath(path))
 			{
 				if (updated.GetDocument(id) is not null)
 					updated = updated.WithDocumentText(id, newText);
 			}
 
-			Instance.AdvanceTo(updated);
-		}
-		finally
-		{
-			Instance.WriteLock.Release();
-		}
+			return Task.FromResult(new WriteResult(updated, []));
+		}, cancellationToken);
 	}
+
+	private async Task FoldRemoveAsync(string path, CancellationToken cancellationToken)
+	{
+		await Instance.EnqueueWriteAsync((current, token) =>
+		{
+			Solution updated = current;
+			foreach (DocumentId id in current.GetDocumentIdsWithFilePath(path))
+				updated = updated.RemoveDocument(id);
+
+			return Task.FromResult(new WriteResult(updated, []));
+		}, cancellationToken);
+	}
+
+	private async Task FoldAddAsync(string path, IReadOnlyList<ProjectId> projects, CancellationToken cancellationToken)
+	{
+		string diskText;
+		try
+		{
+			diskText = await File.ReadAllTextAsync(path, cancellationToken);
+		}
+		catch (IOException)
+		{
+			return;
+		}
+
+		await Instance.EnqueueWriteAsync((current, token) =>
+		{
+			string name = System.IO.Path.GetFileName(path);
+			Solution updated = current;
+			foreach (ProjectId projectId in projects)
+			{
+				if (updated.GetProject(projectId) is null)
+					continue;
+				if (updated.GetDocumentIdsWithFilePath(path).Any(id => id.ProjectId == projectId))
+					continue;
+
+				DocumentId documentId = DocumentId.CreateNewId(projectId);
+				updated = updated.AddDocument(documentId, name, SourceText.From(diskText), filePath: path);
+			}
+
+			return Task.FromResult(new WriteResult(updated, []));
+		}, cancellationToken);
+	}
+
+	private bool TryFindDefaultGlobProjects(Solution solution, string path, out IReadOnlyList<ProjectId> projects)
+	{
+		var matches = new List<ProjectId>();
+		string? fileDirectory = System.IO.Path.GetDirectoryName(path);
+		if (fileDirectory is not null)
+		{
+			foreach (Project project in solution.Projects)
+			{
+				if (project.FilePath is null)
+					continue;
+
+				string projectDirectory = System.IO.Path.GetDirectoryName(project.FilePath)!;
+				if (IsUnder(fileDirectory, projectDirectory) && UsesDefaultCompileItems(project.FilePath))
+					matches.Add(project.Id);
+			}
+		}
+
+		projects = matches;
+		return matches.Count > 0;
+	}
+
+	private bool UsesDefaultCompileItems(string projectFilePath) =>
+		UsesDefaultCompileItemsCache.GetOrAdd(projectFilePath, file =>
+		{
+			string text;
+			try
+			{
+				text = File.ReadAllText(file);
+			}
+			catch (IOException)
+			{
+				return false;
+			}
+			catch (UnauthorizedAccessException)
+			{
+				return false;
+			}
+
+			// Default SDK globs are signalled by the absence of explicit compile items / opt-out.
+			return !text.Contains("<EnableDefaultCompileItems>false", StringComparison.OrdinalIgnoreCase)
+				&& !text.Contains("<Compile Include", StringComparison.OrdinalIgnoreCase)
+				&& !text.Contains("<Compile Remove", StringComparison.OrdinalIgnoreCase);
+		});
 
 	private void OnBuildFileChanged(string path)
 	{

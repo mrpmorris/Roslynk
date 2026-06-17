@@ -52,7 +52,7 @@ public sealed class GetTypeHierarchyTool
 		[Description("Fully-qualified name of the type, e.g. 'MyNamespace.MyType'.")] string typeName)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
-		SolutionModel model = instance.CurrentModel;
+		SolutionModel model = await instance.ReadModelAsync();
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 

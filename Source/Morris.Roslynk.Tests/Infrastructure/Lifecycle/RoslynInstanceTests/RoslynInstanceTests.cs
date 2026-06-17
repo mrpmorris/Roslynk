@@ -67,6 +67,122 @@ public class RoslynInstanceTests
 		Assert.NotSame(previous, subject.CurrentModel.Solution);
 	}
 
+	private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
+
+	[Fact]
+	public async Task WhenWritesAreEnqueued_ThenTheyApplyInOrder()
+	{
+		using RoslynInstance subject = await LoadReadyAsync();
+
+		var order = new List<int>();
+		var writes = new List<Task>();
+		for (int index = 0; index < 5; index++)
+		{
+			int captured = index;
+			writes.Add(subject.EnqueueWriteAsync((current, token) =>
+			{
+				lock (order)
+					order.Add(captured);
+				return Task.FromResult(new WriteResult(current, []));
+			}));
+		}
+
+		await Task.WhenAll(writes).WaitAsync(Timeout);
+		Assert.Equal(new[] { 0, 1, 2, 3, 4 }, order);
+	}
+
+	[Fact]
+	public async Task WhenAReadStartsDuringAWrite_ThenItWaitsForTheWriteToPublish()
+	{
+		using RoslynInstance subject = await LoadReadyAsync();
+
+		var started = new TaskCompletionSource();
+		var release = new TaskCompletionSource();
+		Task write = subject.EnqueueWriteAsync(async (current, token) =>
+		{
+			started.SetResult();
+			await release.Task;
+			return new WriteResult(current, []);
+		});
+
+		await started.Task.WaitAsync(Timeout);
+		Task<SolutionModel> read = subject.ReadModelAsync();
+		await Task.Delay(50);
+		Assert.False(read.IsCompleted);
+
+		release.SetResult();
+		await write.WaitAsync(Timeout);
+		SolutionModel model = await read.WaitAsync(Timeout);
+		Assert.Equal(SolutionStatus.Ready, model.Status);
+	}
+
+	[Fact]
+	public async Task WhenADiagnosticsBuildIsQueuedAfterWrites_ThenTheWritesDrainFirst()
+	{
+		using RoslynInstance subject = await LoadReadyAsync();
+
+		var events = new List<string>();
+		Task write = subject.EnqueueWriteAsync((current, token) =>
+		{
+			lock (events)
+				events.Add("write");
+			return Task.FromResult(new WriteResult(current, []));
+		});
+		Task build = subject.RequestDiagnosticsAsync("key", (solution, token) =>
+		{
+			lock (events)
+				events.Add("build");
+			return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
+		});
+
+		await Task.WhenAll(write, build).WaitAsync(Timeout);
+		Assert.Equal(new[] { "write", "build" }, events);
+	}
+
+	[Fact]
+	public async Task WhenNothingChangedSinceTheLastBuild_ThenTheCachedDiagnosticsAreReused()
+	{
+		using RoslynInstance subject = await LoadReadyAsync();
+
+		int compiles = 0;
+		Task<IReadOnlyList<Diagnostic>> Compute(Solution solution, CancellationToken token)
+		{
+			Interlocked.Increment(ref compiles);
+			return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
+		}
+
+		await subject.RequestDiagnosticsAsync("key", Compute).WaitAsync(Timeout);
+		await subject.RequestDiagnosticsAsync("key", Compute).WaitAsync(Timeout);
+		Assert.Equal(1, compiles);
+
+		await subject.EnqueueWriteAsync((current, token) => Task.FromResult(new WriteResult(current, []))).WaitAsync(Timeout);
+		await subject.RequestDiagnosticsAsync("key", Compute).WaitAsync(Timeout);
+		Assert.Equal(2, compiles);
+	}
+
+	[Fact]
+	public async Task WhenAWriteTransformThrows_ThenLaterWorkStillRuns()
+	{
+		using RoslynInstance subject = await LoadReadyAsync();
+
+		Task faulting = subject.EnqueueWriteAsync((current, token) => throw new InvalidOperationException("boom"));
+		await Assert.ThrowsAsync<InvalidOperationException>(() => faulting);
+
+		IReadOnlyList<string> changed = await subject
+			.EnqueueWriteAsync((current, token) => Task.FromResult(new WriteResult(current, ["after"])))
+			.WaitAsync(Timeout);
+		Assert.Equal(new[] { "after" }, changed);
+	}
+
+	[Fact]
+	public async Task WhenDisposed_ThenFurtherWritesFault()
+	{
+		RoslynInstance subject = await LoadReadyAsync();
+		subject.Dispose();
+
+		await Assert.ThrowsAnyAsync<Exception>(() =>
+			subject.EnqueueWriteAsync((current, token) => Task.FromResult(new WriteResult(current, []))));
+	}
 	private static async Task<RoslynInstance> LoadReadyAsync()
 	{
 		var instance = new RoslynInstance(SolutionKey.For(TestSolutions.Simple));

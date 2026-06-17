@@ -109,6 +109,62 @@ public class SolutionFileSyncTests
 		Assert.Same(before, instance.CurrentSolution);
 	}
 
+	[Fact]
+	public async Task WhenANewSourceFileIsAddedUnderADefaultGlobProject_ThenItIsFoldedInWithoutReload()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
+		string added = Path.Combine(projectDir, "Added.cs");
+		await File.WriteAllTextAsync(added, "namespace SimpleLibrary; public class Added { }");
+
+		await subject.OnFileChangedAsync(added);
+
+		Assert.False(instance.IsDirty);
+		Assert.NotEmpty(instance.CurrentSolution.GetDocumentIdsWithFilePath(added));
+	}
+
+	[Fact]
+	public async Task WhenAKnownSourceFileIsDeleted_ThenItIsRemovedWithoutReload()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		Assert.NotEmpty(instance.CurrentSolution.GetDocumentIdsWithFilePath(greeter));
+		File.Delete(greeter);
+
+		await subject.OnFileChangedAsync(greeter);
+
+		Assert.False(instance.IsDirty);
+		Assert.Empty(instance.CurrentSolution.GetDocumentIdsWithFilePath(greeter));
+	}
+
+	[Fact]
+	public async Task WhenANewSourceFileIsAddedUnderAProjectWithExplicitCompileItems_ThenTheInstanceIsMarkedDirty()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string projectFile = FindFile(solutionPath, "*.csproj");
+		string optedOut = (await File.ReadAllTextAsync(projectFile))
+			.Replace("</Project>", "  <PropertyGroup><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>\n</Project>");
+		await File.WriteAllTextAsync(projectFile, optedOut);
+
+		string added = Path.Combine(Path.GetDirectoryName(projectFile)!, "AddedExplicit.cs");
+		await File.WriteAllTextAsync(added, "namespace SimpleLibrary; public class AddedExplicit { }");
+
+		await subject.OnFileChangedAsync(added);
+
+		Assert.True(instance.IsDirty);
+	}
 	private static async Task<string> ReadDocumentTextAsync(Solution solution, string path)
 	{
 		DocumentId id = solution.GetDocumentIdsWithFilePath(path).First();

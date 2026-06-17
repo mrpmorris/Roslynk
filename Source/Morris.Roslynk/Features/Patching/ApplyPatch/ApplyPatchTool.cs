@@ -93,62 +93,85 @@ public sealed class ApplyPatchTool
 
 		IReadOnlyDictionary<string, string> expectedVersions = BuildExpectedVersions(baseVersions);
 
-		await instance.WriteLock.WaitAsync(cancellationToken);
+		const string staleMessage = "Some targets changed on disk since the patch was based; re-read the file and retry.";
+
+		string Applied(bool applied) =>
+			new OutlineBuilder()
+				.Header("applied", applied)
+				.Status(instance.CurrentModel.Status)
+				.ToString();
+
+		if (checkOnly)
+		{
+			PatchComputation preview = await ComputeAsync(solution, targets, expectedVersions, cancellationToken);
+			if (preview.Conflict is not null)
+				return Failure(Error.Conflict(preview.Conflict));
+			if (preview.Stale.Count > 0)
+				return Failure(Error.Stale(staleMessage, preview.Stale));
+
+			return Applied(false);
+		}
+
 		try
 		{
-			var stale = new List<string>();
-			var pending = new List<PendingPatch>();
-
-			foreach (PatchTarget target in targets)
+			await instance.EnqueueWriteAsync(async (current, token) =>
 			{
-				string diskText = await File.ReadAllTextAsync(target.FilePath, cancellationToken);
-				string currentVersion = FileHash.Of(diskText);
+				PatchComputation computation = await ComputeAsync(current, targets, expectedVersions, token);
+				if (computation.Conflict is not null)
+					throw new PatchConflictException(computation.Conflict);
+				if (computation.Stale.Count > 0)
+					throw new PatchStaleException(computation.Stale);
 
-				if (TryGetExpected(expectedVersions, target, out string? expected) && !string.Equals(expected, currentVersion, StringComparison.Ordinal))
+				await AtomicFileWriter.WriteAllAsync(
+					computation.Pending.Select(item => new PendingWrite(item.FilePath, item.NewText)).ToArray(),
+					token);
+
+				Solution updated = current;
+				foreach (PendingPatch item in computation.Pending)
 				{
-					stale.Add(target.FilePath);
-					continue;
+					if (updated.GetDocument(item.DocumentId) is not null)
+						updated = updated.WithDocumentText(item.DocumentId, SourceText.From(item.NewText));
 				}
 
-				PatchApplyResult result = PatchApplier.Apply(diskText, target.FilePatch);
-				if (!result.Success)
-					return Failure(Error.Conflict($"{target.FilePath}: {result.FailureReason}"));
+				return new WriteResult(updated, computation.Pending.Select(item => item.FilePath).ToArray());
+			}, cancellationToken);
 
-				pending.Add(new PendingPatch(target.DocumentId, target.FilePath, result.NewText!));
-			}
-
-			if (stale.Count > 0)
-				return Failure(Error.Stale(
-					"Some targets changed on disk since the patch was based; re-read the file and retry.",
-					stale));
-
-			string Applied(bool applied) =>
-				new OutlineBuilder()
-					.Header("applied", applied)
-					.Status(instance.CurrentModel.Status)
-					.ToString();
-
-			if (checkOnly)
-				return Applied(false);
-
-			await AtomicFileWriter.WriteAllAsync(
-				pending.Select(item => new PendingWrite(item.FilePath, item.NewText)).ToArray(),
-				cancellationToken);
-
-			Solution updated = instance.CurrentSolution;
-			foreach (PendingPatch item in pending)
-			{
-				if (updated.GetDocument(item.DocumentId) is not null)
-					updated = updated.WithDocumentText(item.DocumentId, SourceText.From(item.NewText));
-			}
-
-			instance.AdvanceTo(updated);
 			return Applied(true);
 		}
-		finally
+		catch (PatchStaleException stale)
 		{
-			instance.WriteLock.Release();
+			return Failure(Error.Stale(staleMessage, stale.Paths));
 		}
+		catch (PatchConflictException conflict)
+		{
+			return Failure(Error.Conflict(conflict.Message));
+		}
+	}
+
+	private static async Task<PatchComputation> ComputeAsync(Solution solution, IReadOnlyList<PatchTarget> targets, IReadOnlyDictionary<string, string> expectedVersions, CancellationToken cancellationToken)
+	{
+		var stale = new List<string>();
+		var pending = new List<PendingPatch>();
+
+		foreach (PatchTarget target in targets)
+		{
+			string diskText = await File.ReadAllTextAsync(target.FilePath, cancellationToken);
+			string currentVersion = FileHash.Of(diskText);
+
+			if (TryGetExpected(expectedVersions, target, out string? expected) && !string.Equals(expected, currentVersion, StringComparison.Ordinal))
+			{
+				stale.Add(target.FilePath);
+				continue;
+			}
+
+			PatchApplyResult result = PatchApplier.Apply(diskText, target.FilePatch);
+			if (!result.Success)
+				return PatchComputation.FromConflict($"{target.FilePath}: {result.FailureReason}");
+
+			pending.Add(new PendingPatch(target.DocumentId, target.FilePath, result.NewText!));
+		}
+
+		return stale.Count > 0 ? PatchComputation.FromStale(stale) : PatchComputation.FromPending(pending);
 	}
 
 	private static IReadOnlyDictionary<string, string> BuildExpectedVersions(IReadOnlyList<FileVersion>? baseVersions)
@@ -272,6 +295,38 @@ public sealed class ApplyPatchTool
 			DocumentId = documentId;
 			FilePath = filePath;
 			NewText = newText;
+		}
+	}
+
+	private sealed class PatchComputation
+	{
+		public IReadOnlyList<PendingPatch> Pending { get; }
+		public IReadOnlyList<string> Stale { get; }
+		public string? Conflict { get; }
+
+		private PatchComputation(IReadOnlyList<PendingPatch> pending, IReadOnlyList<string> stale, string? conflict)
+		{
+			Pending = pending;
+			Stale = stale;
+			Conflict = conflict;
+		}
+
+		public static PatchComputation FromPending(IReadOnlyList<PendingPatch> pending) => new(pending, [], null);
+		public static PatchComputation FromStale(IReadOnlyList<string> stale) => new([], stale, null);
+		public static PatchComputation FromConflict(string message) => new([], [], message);
+	}
+
+	private sealed class PatchStaleException : Exception
+	{
+		public IReadOnlyList<string> Paths { get; }
+
+		public PatchStaleException(IReadOnlyList<string> paths) => Paths = paths;
+	}
+
+	private sealed class PatchConflictException : Exception
+	{
+		public PatchConflictException(string message) : base(message)
+		{
 		}
 	}
 }

@@ -53,7 +53,7 @@ public sealed class GetCallersTool
 		[Description("Fully-qualified name of the method, e.g. 'MyNamespace.MyType.MyMethod'.")] string methodName)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
-		SolutionModel model = instance.CurrentModel;
+		SolutionModel model = await instance.ReadModelAsync();
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 

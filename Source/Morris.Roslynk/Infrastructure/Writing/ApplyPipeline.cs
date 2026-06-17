@@ -13,29 +13,23 @@ namespace Morris.Roslynk.Infrastructure.Writing;
 /// </summary>
 public sealed class ApplyPipeline
 {
-	public async Task<IReadOnlyList<string>> ApplyAsync(RoslynInstance instance, Solution updated, CancellationToken cancellationToken = default)
+	public Task<IReadOnlyList<string>> ApplyAsync(RoslynInstance instance, Solution updated, CancellationToken cancellationToken = default)
 	{
 		if (instance is null)
 			throw new ArgumentNullException(nameof(instance));
 		if (updated is null)
 			throw new ArgumentNullException(nameof(updated));
 
-		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("apply_changes"))
+		// The single-writer consumer runs this against the latest snapshot under the write lock, then
+		// publishes the edited snapshot; the stale-write guard re-validates each file against disk.
+		return instance.EnqueueWriteAsync(async (current, token) =>
 		{
-			await instance.WriteLock.WaitAsync(cancellationToken);
-			try
-			{
-				IReadOnlyList<PendingWrite> writes = await BuildWritesAsync(instance.CurrentSolution, updated, cancellationToken);
-				await AtomicFileWriter.WriteAllAsync(writes, cancellationToken);
-				instance.AdvanceTo(updated);
-				activity?.SetTag("roslynk.changed.count", writes.Count);
-				return writes.Select(write => write.FilePath).ToArray();
-			}
-			finally
-			{
-				instance.WriteLock.Release();
-			}
-		}
+			using Activity? activity = RoslynkActivitySource.Instance.StartActivity("apply_changes");
+			IReadOnlyList<PendingWrite> writes = await BuildWritesAsync(current, updated, token);
+			await AtomicFileWriter.WriteAllAsync(writes, token);
+			activity?.SetTag("roslynk.changed.count", writes.Count);
+			return new WriteResult(updated, writes.Select(write => write.FilePath).ToArray());
+		}, cancellationToken);
 	}
 
 	/// <summary>The files an update would change, without writing anything (for previews / checkOnly).</summary>

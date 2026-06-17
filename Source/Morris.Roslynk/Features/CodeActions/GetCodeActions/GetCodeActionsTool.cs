@@ -49,7 +49,7 @@ public sealed class GetCodeActionsTool
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
-		SolutionModel model = instance.CurrentModel;
+		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
 
 		if (model.Solution is null)
 			return OutlineError.Format(Error.Indexing(), model.Status);

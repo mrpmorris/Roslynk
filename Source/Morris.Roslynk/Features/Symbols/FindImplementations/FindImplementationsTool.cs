@@ -51,7 +51,7 @@ public sealed class FindImplementationsTool
 		[Description("Fully-qualified name of the interface/abstract symbol, e.g. 'MyNamespace.IMyType'.")] string symbolName)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
-		SolutionModel model = instance.CurrentModel;
+		SolutionModel model = await instance.ReadModelAsync();
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 

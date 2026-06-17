@@ -46,7 +46,7 @@ public sealed class FindDefinitionTool
 		[Description("1-based column of the usage.")] int column)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
-		SolutionModel model = instance.CurrentModel;
+		SolutionModel model = await instance.ReadModelAsync();
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 

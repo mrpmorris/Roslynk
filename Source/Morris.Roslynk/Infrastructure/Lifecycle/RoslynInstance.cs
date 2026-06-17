@@ -1,3 +1,4 @@
+using System.Threading.Channels;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -6,11 +7,12 @@ namespace Morris.Roslynk.Infrastructure.Lifecycle;
 
 /// <summary>
 /// One loaded solution shared by everyone using it. The current (solution, status) pair lives in an
-/// atomically-swapped <see cref="SolutionModel"/>: the initial load and any rebuild run in the
-/// background, flipping the model to <see cref="SolutionStatus.Building"/> while in flight; still
-/// serving the previous snapshot during a rebuild; and back to <see cref="SolutionStatus.Ready"/> when
-/// done, so reads never block and never see a torn state. The single-writer lock serializes applied
-/// edits; the last-access stamp lets the registry idle-evict.
+/// atomically-swapped <see cref="SolutionModel"/>. All mutations (applied edits and watcher folds) and the
+/// deferred diagnostics build are ordered work items on a single-consumer channel, so writes never overlap
+/// and a build queued after pending writes drains them first. A <see cref="SemaphoreSlimReadWriteLock"/>
+/// makes reads wait for an in-flight write to publish its new model; reads otherwise run lock-free on the
+/// immutable snapshot. Compilation is forced only by the diagnostics build, gated by <see cref="BuildNeeded"/>
+/// with a cached result so repeat calls with no intervening write are free.
 /// </summary>
 public sealed class RoslynInstance : IDisposable
 {
@@ -18,20 +20,25 @@ public sealed class RoslynInstance : IDisposable
 	private SolutionWorkspace? WorkspaceField;
 	private ProjectLoadTracker LoadTrackerField = new();
 	private volatile bool DirtyField;
+	private volatile bool BuildNeededField = true;
+	private DiagnosticsCacheEntry? DiagnosticsCacheField;
 	private long LastAccessedTicks;
 	private IDisposable? Watcher;
 	private readonly TaskCompletionSource ReadySignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-	public SolutionKey Key { get; }
+	private readonly SemaphoreSlimReadWriteLock Lock = new();
+	private readonly Channel<WorkItem> Work = Channel.CreateUnbounded<WorkItem>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
+	private readonly CancellationTokenSource Shutdown = new();
+	private readonly Task Consumer;
 
-	/// <summary>Serializes writes to this instance so two applies cannot interleave.</summary>
-	public SemaphoreSlim WriteLock { get; } = new(initialCount: 1, maxCount: 1);
+	public SolutionKey Key { get; }
 
 	public RoslynInstance(SolutionKey key)
 	{
 		Key = key;
 		CurrentModelField = SolutionModel.Loading(solution: null);
 		LastAccessedTicks = DateTime.UtcNow.Ticks;
+		Consumer = Task.Run(ConsumeAsync);
 	}
 
 	/// <summary>The current snapshot and its load status, swapped atomically as loads and edits complete.</summary>
@@ -67,6 +74,9 @@ public sealed class RoslynInstance : IDisposable
 
 	public void MarkDirty() => DirtyField = true;
 
+	/// <summary>Whether the snapshot changed since the last diagnostics build, so the next build must recompile.</summary>
+	public bool BuildNeeded => BuildNeededField;
+
 	/// <summary>Hands the instance the watcher that keeps it fresh, disposing any previous one (a rebuild
 	/// re-attaches), so the two share a lifetime.</summary>
 	public void AttachWatcher(IDisposable watcher)
@@ -77,6 +87,144 @@ public sealed class RoslynInstance : IDisposable
 
 	/// <summary>A task that completes when the first load finishes, whether it became Ready or Faulted.</summary>
 	public Task WaitUntilReadyAsync() => ReadySignal.Task;
+
+	/// <summary>
+	/// Acquires the read side of the lock briefly, captures the current immutable model, and releases. A read
+	/// that starts while a write is applying blocks here until the write publishes its new model; the caller
+	/// then works on the captured immutable snapshot lock-free.
+	/// </summary>
+	public async Task<SolutionModel> ReadModelAsync(CancellationToken cancellationToken = default)
+	{
+		using (await Lock.AcquireReadAsync(cancellationToken))
+			return CurrentModel;
+	}
+
+	/// <summary>
+	/// Enqueues a write. The single consumer takes the write side of the lock (so reads wait), publishes
+	/// <see cref="SolutionStatus.Updating"/>, runs <paramref name="transform"/> against the latest snapshot,
+	/// publishes the edited snapshot as Ready, marks a build needed, and completes with the changed paths.
+	/// </summary>
+	public Task<IReadOnlyList<string>> EnqueueWriteAsync(Func<Solution, CancellationToken, Task<WriteResult>> transform, CancellationToken cancellationToken = default)
+	{
+		if (transform is null)
+			throw new ArgumentNullException(nameof(transform));
+
+		var completion = new TaskCompletionSource<IReadOnlyList<string>>(TaskCreationOptions.RunContinuationsAsynchronously);
+		var item = new WorkItem(() => RunWriteAsync(transform, completion, cancellationToken), exception => completion.TrySetException(exception));
+		if (!Work.Writer.TryWrite(item))
+			completion.TrySetException(new ObjectDisposedException(nameof(RoslynInstance)));
+
+		return completion.Task;
+	}
+
+	/// <summary>
+	/// Enqueues a diagnostics build. Ordered after pending writes (so they drain first); returns a cached
+	/// result when nothing changed since the last build with the same <paramref name="cacheKey"/>. The compile
+	/// runs without holding the read side, so other reads continue on the uncompiled snapshot meanwhile.
+	/// </summary>
+	public Task<DiagnosticsResult> RequestDiagnosticsAsync(string cacheKey, Func<Solution, CancellationToken, Task<IReadOnlyList<Diagnostic>>> compute, CancellationToken cancellationToken = default)
+	{
+		if (cacheKey is null)
+			throw new ArgumentNullException(nameof(cacheKey));
+		if (compute is null)
+			throw new ArgumentNullException(nameof(compute));
+
+		var completion = new TaskCompletionSource<DiagnosticsResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+		var item = new WorkItem(() => RunDiagnosticsAsync(cacheKey, compute, completion, cancellationToken), exception => completion.TrySetException(exception));
+		if (!Work.Writer.TryWrite(item))
+			completion.TrySetException(new ObjectDisposedException(nameof(RoslynInstance)));
+
+		return completion.Task;
+	}
+
+	private async Task ConsumeAsync()
+	{
+		try
+		{
+			await foreach (WorkItem item in Work.Reader.ReadAllAsync(Shutdown.Token))
+			{
+				try
+				{
+					await item.Run();
+				}
+				catch (Exception exception)
+				{
+					// Backstop: a handler should complete its own TCS, but never let one escape and kill the consumer.
+					item.Fault(exception);
+				}
+			}
+		}
+		catch (OperationCanceledException)
+		{
+		}
+		finally
+		{
+			while (Work.Reader.TryRead(out WorkItem? pending))
+				pending.Fault(new ObjectDisposedException(nameof(RoslynInstance)));
+		}
+	}
+
+	private async Task RunWriteAsync(Func<Solution, CancellationToken, Task<WriteResult>> transform, TaskCompletionSource<IReadOnlyList<string>> completion, CancellationToken cancellationToken)
+	{
+		SolutionModel model = CurrentModel;
+		if (model.Solution is null)
+		{
+			completion.TrySetException(new InvalidOperationException("The solution is still loading."));
+			return;
+		}
+
+		Solution current = model.Solution;
+		using (await Lock.AcquireWriteAsync(cancellationToken))
+		{
+			Swap(SolutionModel.Updating(current));
+			try
+			{
+				WriteResult result = await transform(current, cancellationToken);
+				AdvanceTo(result.Updated);
+				BuildNeededField = true;
+				Volatile.Write(ref DiagnosticsCacheField, null);
+				completion.TrySetResult(result.ChangedPaths);
+			}
+			catch (Exception exception)
+			{
+				Swap(SolutionModel.Ready(current));
+				completion.TrySetException(exception);
+			}
+		}
+	}
+
+	private async Task RunDiagnosticsAsync(string cacheKey, Func<Solution, CancellationToken, Task<IReadOnlyList<Diagnostic>>> compute, TaskCompletionSource<DiagnosticsResult> completion, CancellationToken cancellationToken)
+	{
+		SolutionModel model = CurrentModel;
+		if (model.Solution is null)
+		{
+			completion.TrySetException(new InvalidOperationException("The solution is still loading."));
+			return;
+		}
+
+		Solution solution = model.Solution;
+		DiagnosticsCacheEntry? cached = Volatile.Read(ref DiagnosticsCacheField);
+		if (!BuildNeededField && cached is not null && cached.Key == cacheKey)
+		{
+			completion.TrySetResult(new DiagnosticsResult(cached.Diagnostics, cached.Solution));
+			return;
+		}
+
+		Swap(SolutionModel.Loading(solution));
+		try
+		{
+			IReadOnlyList<Diagnostic> diagnostics = await compute(solution, cancellationToken);
+			Swap(SolutionModel.Ready(solution));
+			BuildNeededField = false;
+			Volatile.Write(ref DiagnosticsCacheField, new DiagnosticsCacheEntry(cacheKey, diagnostics, solution));
+			completion.TrySetResult(new DiagnosticsResult(diagnostics, solution));
+		}
+		catch (Exception exception)
+		{
+			Swap(SolutionModel.Ready(solution));
+			completion.TrySetException(exception);
+		}
+	}
 
 	/// <summary>
 	/// Starts the initial background load. The model stays <see cref="SolutionStatus.Building"/> with no
@@ -100,6 +248,8 @@ public sealed class RoslynInstance : IDisposable
 			{
 				SolutionWorkspace workspace = await loader(tracker);
 				Volatile.Write(ref WorkspaceField, workspace);
+				BuildNeededField = true;
+				Volatile.Write(ref DiagnosticsCacheField, null);
 				Swap(SolutionModel.Ready(workspace.Solution));
 				onReady(this);
 			}
@@ -128,6 +278,8 @@ public sealed class RoslynInstance : IDisposable
 			throw new ArgumentNullException(nameof(onReady));
 
 		DirtyField = false;
+		BuildNeededField = true;
+		Volatile.Write(ref DiagnosticsCacheField, null);
 		var tracker = new ProjectLoadTracker();
 		Volatile.Write(ref LoadTrackerField, tracker);
 		Swap(SolutionModel.Loading(CurrentModel.Solution));
@@ -166,8 +318,25 @@ public sealed class RoslynInstance : IDisposable
 
 	public void Dispose()
 	{
+		Work.Writer.TryComplete();
+		Shutdown.Cancel();
 		Watcher?.Dispose();
 		Volatile.Read(ref WorkspaceField)?.Dispose();
-		WriteLock.Dispose();
+		Lock.Dispose();
+		Shutdown.Dispose();
 	}
+
+	private sealed class WorkItem
+	{
+		public Func<Task> Run { get; }
+		public Action<Exception> Fault { get; }
+
+		public WorkItem(Func<Task> run, Action<Exception> fault)
+		{
+			Run = run;
+			Fault = fault;
+		}
+	}
+
+	private sealed record DiagnosticsCacheEntry(string Key, IReadOnlyList<Diagnostic> Diagnostics, Solution Solution);
 }

@@ -61,14 +61,21 @@ public sealed class GetDiagnosticsTool
 		[Description("Run the project's analyzers (NetAnalyzers / IDE rules) for a richer result. Default true; set false for a faster compiler-only pass.")] bool includeAnalyzers = true)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
-		SolutionModel model = instance.CurrentModel;
+		SolutionModel model = await instance.ReadModelAsync();
 
 		if (model.Solution is null)
 			return OutlineError.Format(Error.Indexing(), model.Status);
 
-		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
+		// Fence writes, drain in-flight ones, then build (or reuse the cached result when nothing changed).
+		string cacheKey = $"{targetFramework ?? "*"}|{includeAnalyzers}";
+		DiagnosticsResult diagnostics = await instance.RequestDiagnosticsAsync(
+			cacheKey,
+			(solution, token) => DiagnosticsService.GetAllDiagnosticsAsync(solution, targetFramework, includeAnalyzers, token));
 
-		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetAllDiagnosticsAsync(model.Solution, targetFramework, includeAnalyzers);
+		Solution compiled = diagnostics.Solution;
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(compiled);
+
+		IReadOnlyList<Diagnostic> all = diagnostics.Diagnostics;
 
 		var wanted = new HashSet<DiagnosticSeverity> { DiagnosticSeverity.Error };
 		if (includeWarnings)
@@ -85,11 +92,11 @@ public sealed class GetDiagnosticsTool
 		builder.Header("warnings", all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning));
 		builder.Header("infos", all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Info));
 		builder.Header("hidden", all.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Hidden));
-		builder.Status(model.Status);
+		builder.Status(instance.CurrentModel.Status);
 		builder.BeginBody();
 
 		IEnumerable<IGrouping<string?, Diagnostic>> byProject = items
-			.GroupBy(diagnostic => ProjectOf(diagnostic, model.Solution))
+			.GroupBy(diagnostic => ProjectOf(diagnostic, compiled))
 			.OrderBy(group => group.Key is null)
 			.ThenBy(group => group.Key, StringComparer.Ordinal);
 

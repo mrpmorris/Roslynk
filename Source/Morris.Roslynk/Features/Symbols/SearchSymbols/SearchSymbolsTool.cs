@@ -51,7 +51,7 @@ public sealed class SearchSymbolsTool
 		[Description("Maximum results to return. Default 50.")] int maxResults = 50)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
-		SolutionModel model = instance.CurrentModel;
+		SolutionModel model = await instance.ReadModelAsync();
 
 		if (model.Solution is null)
 			return OutlineError.Format(Error.Indexing(), model.Status);

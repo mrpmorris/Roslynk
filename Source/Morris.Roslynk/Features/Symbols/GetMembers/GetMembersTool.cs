@@ -63,7 +63,7 @@ public sealed class GetMembersTool
 		[Description("Include nested type members. Default true.")] bool includeNestedTypes = true)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
-		SolutionModel model = instance.CurrentModel;
+		SolutionModel model = await instance.ReadModelAsync();
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 

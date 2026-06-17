@@ -17,6 +17,10 @@ public sealed class SolutionModel
 	public static SolutionModel Loading(Solution? solution) =>
 		new() { Status = SolutionStatus.Building, Solution = solution };
 
+	/// <summary>An edit being applied; the previous <paramref name="solution"/> is still served until it completes.</summary>
+	public static SolutionModel Updating(Solution solution) =>
+		new() { Status = SolutionStatus.Updating, Solution = solution };
+
 	/// <summary>A published snapshot ready to be read.</summary>
 	public static SolutionModel Ready(Solution solution) =>
 		new() { Status = SolutionStatus.Ready, Solution = solution };

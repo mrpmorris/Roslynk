@@ -56,7 +56,7 @@ public sealed class FindReferencesTool
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
-		SolutionModel model = instance.CurrentModel;
+		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
