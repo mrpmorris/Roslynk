@@ -6,24 +6,34 @@ namespace Morris.Roslynk.Tests.Infrastructure.Razor;
 public class RazorGenerationProbeTests
 {
 	/// <summary>
-	/// Documents a known limitation (a canary). The Razor source generator
-	/// (<c>Microsoft.CodeAnalysis.Razor.Compiler</c>) is loaded as an analyzer and the <c>.razor</c> file
-	/// is present as an additional document, yet no generated documents are produced under
-	/// <see cref="Microsoft.CodeAnalysis.MSBuild.MSBuildWorkspace"/>: the design-time build does not plumb
-	/// the per-<c>AdditionalFiles</c> <c>TargetPath</c> metadata the generator needs. So <c>@code</c>
-	/// members and their markup bindings never enter the compilation, which is why Razor read-context
-	/// (semantic find-references into <c>.razor</c>) is not implemented. If a future Roslyn/Razor version
-	/// starts emitting these documents, this test flips; revisit Razor read-context then.
+	/// The SDK's Razor source generator targets a newer Roslyn than we load, so the workspace's analyzer
+	/// loader refuses it and produces no documents. <see cref="Morris.Roslynk.Infrastructure.Razor.RazorDocumentGenerator"/>
+	/// works around that by running the generator itself and adding the result as a document, so the component
+	/// partial enters the compilation. These tests guard that workaround.
 	/// </summary>
 	[Fact]
-	public async Task RazorSourceGenerationProducesNoDocumentsUnderMSBuildWorkspace()
+	public async Task WhenARazorProjectIsLoaded_ThenTheGeneratedComponentDocumentIsAdded()
 	{
 		using var registry = new InstanceRegistry();
 		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.Razor);
 		Project project = instance.CurrentSolution.Projects.First();
 
-		IEnumerable<SourceGeneratedDocument> generated = await project.GetSourceGeneratedDocumentsAsync();
+		Assert.Contains(project.Documents, document =>
+			document.Name.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase)
+			&& document.Name.Contains("Counter", StringComparison.OrdinalIgnoreCase));
+	}
 
-		Assert.Empty(generated);
+	[Fact]
+	public async Task WhenARazorProjectIsLoaded_ThenTheComponentPartialBaseIsInTheCompilation()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.Razor);
+		Project project = instance.CurrentSolution.Projects.First();
+
+		Compilation compilation = (await project.GetCompilationAsync())!;
+		INamedTypeSymbol? counter = compilation.GetTypeByMetadataName("RazorLib.Counter");
+
+		Assert.NotNull(counter);
+		Assert.Equal("ComponentBase", counter!.BaseType?.Name);
 	}
 }

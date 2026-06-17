@@ -41,13 +41,17 @@ public sealed class ApplyPipeline
 			foreach (DocumentId documentId in projectChanges.GetChangedDocuments())
 			{
 				string? path = updated.GetDocument(documentId)?.FilePath;
-				if (path is not null)
+				if (path is not null && !IsGenerated(path))
 					paths.Add(path);
 			}
 		}
 
 		return paths;
 	}
+
+	/// <summary>A generated document (a Razor .g.cs added to the model) is never persisted to disk.</summary>
+	private static bool IsGenerated(string path) =>
+		path.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase);
 
 	private static async Task<IReadOnlyList<PendingWrite>> BuildWritesAsync(Solution current, Solution updated, CancellationToken cancellationToken)
 	{
@@ -61,6 +65,11 @@ public sealed class ApplyPipeline
 
 				string? path = updatedDocument.FilePath;
 				if (path is null)
+					continue;
+
+				// Generated documents (the Razor .g.cs we add to the model) have no real file on disk and must
+				// never be written back; they are regenerated on the next load.
+				if (IsGenerated(path))
 					continue;
 
 				string loadedText = (await currentDocument.GetTextAsync(cancellationToken)).ToString();

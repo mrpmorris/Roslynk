@@ -3,6 +3,7 @@ using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
 using Morris.Roslynk.Infrastructure.Observability;
+using Morris.Roslynk.Infrastructure.Razor;
 
 namespace Morris.Roslynk.Infrastructure.Workspaces;
 
@@ -47,6 +48,7 @@ public sealed class SolutionWorkspace : IDisposable
 			using (workspace.RegisterWorkspaceFailedHandler(e => loadDiagnostics.Add(e.Diagnostic.Message)))
 			{
 				Solution solution = await workspace.OpenSolutionAsync(solutionPath, progress, cancellationToken);
+				solution = await RazorDocumentGenerator.AugmentAsync(solution, cancellationToken);
 				activity?.SetTag("roslynk.project.count", solution.Projects.Count());
 				return new SolutionWorkspace(workspace, solution, loadDiagnostics.ToArray());
 			}
