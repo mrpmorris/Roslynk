@@ -1,5 +1,6 @@
 using Morris.Roslynk.Features.Symbols.FindDefinition;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.FindDefinitionTests;
@@ -11,7 +12,7 @@ public class FindDefinitionTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindDefinitionTool(registry, new SymbolResolver());
+		var subject = new FindDefinitionTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string callerPath = Path.Combine(Path.GetDirectoryName(TestSolutions.Simple)!, "SimpleLibrary", "Caller.cs");
 		string text = await File.ReadAllTextAsync(callerPath);
@@ -32,7 +33,7 @@ public class FindDefinitionTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindDefinitionTool(registry, new SymbolResolver());
+		var subject = new FindDefinitionTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string solutionDir = Path.GetDirectoryName(TestSolutions.Simple)!;
 		string callerPath = Path.Combine(solutionDir, "SimpleLibrary", "Caller.cs");
@@ -50,7 +51,7 @@ public class FindDefinitionTests
 	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
 	{
 		using var registry = new InstanceRegistry();
-		var subject = new FindDefinitionTool(registry, new SymbolResolver());
+		var subject = new FindDefinitionTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string callerPath = Path.Combine(Path.GetDirectoryName(TestSolutions.Simple)!, "SimpleLibrary", "Caller.cs");
 

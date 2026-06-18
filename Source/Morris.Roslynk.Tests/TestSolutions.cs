@@ -13,6 +13,7 @@ internal static class TestSolutions
 	private static readonly Lazy<string> RazorSolutionPath = new(() => Prepare("RazorSolution", "RazorSolution.slnx"));
 	private static readonly Lazy<string> MultiTargetSolutionPath = new(() => Prepare("MultiTargetSolution", "MultiTargetSolution.slnx"));
 	private static readonly Lazy<string> ReferencesSolutionPath = new(() => Prepare("ReferencesSolution", "ReferencesSolution.slnx"));
+	private static readonly Lazy<string> ConditionalSolutionPath = new(() => Prepare("ConditionalSolution", "ConditionalSolution.slnx"));
 
 	/// <summary>A clean single-project solution.</summary>
 	public static string Simple => SimpleSolution.Value;
@@ -28,6 +29,9 @@ internal static class TestSolutions
 
 	/// <summary>A two-file solution with an interface referenced many ways, for testing reference grouping.</summary>
 	public static string References => ReferencesSolutionPath.Value;
+
+	/// <summary>A single-project solution whose method is called in both the #if DEBUG and #else branches.</summary>
+	public static string Conditional => ConditionalSolutionPath.Value;
 
 	private static string Prepare(params string[] relativeParts)
 	{
@@ -71,13 +75,18 @@ internal static class TestSolutions
 	/// Copies the SimpleSolution fixture (source only) to a fresh temp directory and restores it, so
 	/// write tests can modify files without dirtying the committed fixture.
 	/// </summary>
-	public static string CreateScratchSimpleSolution()
+	public static string CreateScratchSimpleSolution() => CreateScratch("SimpleSolution", "SimpleSolution.slnx");
+
+	/// <summary>A writable scratch copy of the ConditionalSolution fixture, for tests that rename/edit it.</summary>
+	public static string CreateScratchConditionalSolution() => CreateScratch("ConditionalSolution", "ConditionalSolution.slnx");
+
+	private static string CreateScratch(string fixtureName, string solutionFile)
 	{
-		string sourceDir = Path.Combine(FindTestFixturesRoot(), "SimpleSolution");
-		string destDir = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"), "SimpleSolution");
+		string sourceDir = Path.Combine(FindTestFixturesRoot(), fixtureName);
+		string destDir = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"), fixtureName);
 		CopyExcludingBuildOutput(sourceDir, destDir);
 
-		string solutionPath = Path.Combine(destDir, "SimpleSolution.slnx");
+		string solutionPath = Path.Combine(destDir, solutionFile);
 		Restore(solutionPath);
 		return solutionPath;
 	}

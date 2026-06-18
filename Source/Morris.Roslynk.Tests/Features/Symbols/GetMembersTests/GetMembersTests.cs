@@ -1,5 +1,6 @@
 using Morris.Roslynk.Features.Symbols.GetMembers;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.GetMembersTests;
@@ -30,7 +31,7 @@ public class GetMembersTests
 	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
 	{
 		using var registry = new InstanceRegistry();
-		var subject = new GetMembersTool(registry, new SymbolResolver());
+		var subject = new GetMembersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetMembers(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
@@ -152,7 +153,7 @@ public class GetMembersTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetMembersTool(registry, new SymbolResolver());
+		var subject = new GetMembersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		return await subject.GetMembers(
 			TestSolutions.Simple,

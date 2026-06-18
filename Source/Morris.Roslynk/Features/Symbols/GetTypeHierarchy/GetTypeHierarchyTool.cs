@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 
@@ -16,11 +17,13 @@ public sealed class GetTypeHierarchyTool
 
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
+	private readonly ProjectionService ProjectionService;
 
-	public GetTypeHierarchyTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver)
+	public GetTypeHierarchyTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
+		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
 	}
 
 	[McpServerTool(
@@ -59,12 +62,13 @@ public sealed class GetTypeHierarchyTool
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(model.Solution, typeName);
-		List<INamedTypeSymbol> types = matches.OfType<INamedTypeSymbol>().ToList();
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, typeName);
+		List<IReadOnlyList<ProjectionSymbol>> typeGroups = groups.Where(group => group[0].Symbol is INamedTypeSymbol).ToList();
 
-		if (types.Count == 0)
+		if (typeGroups.Count == 0)
 		{
-			string[] resolved = matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+			string[] resolved = groups.Select(group => SymbolResolver.FullyQualifiedName(group[0].Symbol)).Distinct(StringComparer.Ordinal).ToArray();
 			IReadOnlyList<string> candidates = resolved.Length > 0
 				? resolved
 				: await SymbolResolver.SuggestAsync(model.Solution, typeName);
@@ -72,13 +76,14 @@ public sealed class GetTypeHierarchyTool
 			return Failure(Error.NotFound($"No type matched '{typeName}'.", candidates.Count > 0 ? candidates : null));
 		}
 
-		if (types.Count > 1)
+		if (typeGroups.Count > 1)
 		{
-			string[] candidates = types.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+			string[] candidates = typeGroups.Select(group => SymbolResolver.FullyQualifiedName(group[0].Symbol)).Distinct(StringComparer.Ordinal).ToArray();
 			return Failure(Error.Ambiguous($"'{typeName}' matched several types.", candidates));
 		}
 
-		INamedTypeSymbol type = types[0];
+		IReadOnlyList<ProjectionSymbol> resolvedType = typeGroups[0];
+		var type = (INamedTypeSymbol)resolvedType[0].Symbol;
 
 		var baseTypes = new List<INamedTypeSymbol>();
 		for (INamedTypeSymbol? baseType = type.BaseType; baseType is not null; baseType = baseType.BaseType)
@@ -89,8 +94,20 @@ public sealed class GetTypeHierarchyTool
 			.OrderBy(SymbolResolver.FullyQualifiedName, StringComparer.Ordinal)
 			.ToList();
 
-		List<INamedTypeSymbol> derived = (await SymbolFinder.FindDerivedClassesAsync(type, model.Solution))
-			.DistinctBy(SymbolResolver.FullyQualifiedName, StringComparer.Ordinal)
+		// Union derived types across every projection so a derived type that compiles only in a branch
+		// inactive in the loaded configuration is still listed.
+		var seenDerived = new HashSet<string>(StringComparer.Ordinal);
+		var derivedList = new List<INamedTypeSymbol>();
+		foreach (ProjectionSymbol projectionSymbol in resolvedType)
+		{
+			foreach (INamedTypeSymbol derivedType in await SymbolFinder.FindDerivedClassesAsync((INamedTypeSymbol)projectionSymbol.Symbol, projectionSymbol.Projection.Solution))
+			{
+				if (seenDerived.Add(SymbolResolver.FullyQualifiedName(derivedType)))
+					derivedList.Add(derivedType);
+			}
+		}
+
+		List<INamedTypeSymbol> derived = derivedList
 			.OrderBy(SymbolResolver.FullyQualifiedName, StringComparer.Ordinal)
 			.ToList();
 

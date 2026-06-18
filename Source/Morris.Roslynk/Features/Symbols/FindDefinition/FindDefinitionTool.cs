@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -16,11 +17,13 @@ public sealed class FindDefinitionTool
 
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
+	private readonly ProjectionService ProjectionService;
 
-	public FindDefinitionTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver)
+	public FindDefinitionTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
+		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
 	}
 
 	[McpServerTool(
@@ -55,7 +58,21 @@ public sealed class FindDefinitionTool
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
-		ISymbol? symbol = await SymbolResolver.ResolveAtPositionAsync(model.Solution, filePath, line, column);
+		// Try each projection in turn: a position inside a branch inactive in the loaded configuration resolves
+		// to no symbol in the base projection but binds in the projection where that branch is active.
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
+		ISymbol? symbol = null;
+		Solution resolvedSolution = model.Solution;
+		foreach (Projection projection in projections)
+		{
+			symbol = await SymbolResolver.ResolveAtPositionAsync(projection.Solution, filePath, line, column);
+			if (symbol is not null)
+			{
+				resolvedSolution = projection.Solution;
+				break;
+			}
+		}
+
 		if (symbol is null)
 			return Failure(Error.NotFound($"No symbol resolved at {filePath} ({line}, {column})."));
 
@@ -73,7 +90,7 @@ public sealed class FindDefinitionTool
 		}
 
 		FileLinePositionSpan span = location.GetLineSpan();
-		if (ProjectName.Of(model.Solution, location.SourceTree!) is string project)
+		if (ProjectName.Of(resolvedSolution, location.SourceTree!) is string project)
 			builder.Header("project", project);
 		builder.Header("path", SolutionRelativePath.Of(solutionDirectory, span.Path)!);
 		builder.Header("loc", $"{span.StartLinePosition.Line + 1}:{span.StartLinePosition.Character + 1}-{span.EndLinePosition.Line + 1}:{span.EndLinePosition.Character + 1}");

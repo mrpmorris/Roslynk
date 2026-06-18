@@ -1,5 +1,6 @@
 using Morris.Roslynk.Features.Symbols.GetTypeHierarchy;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.GetTypeHierarchyTests;
@@ -11,7 +12,7 @@ public class GetTypeHierarchyTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetTypeHierarchyTool(registry, new SymbolResolver());
+		var subject = new GetTypeHierarchyTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetTypeHierarchy(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
@@ -25,7 +26,7 @@ public class GetTypeHierarchyTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetTypeHierarchyTool(registry, new SymbolResolver());
+		var subject = new GetTypeHierarchyTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetTypeHierarchy(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
@@ -38,7 +39,7 @@ public class GetTypeHierarchyTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetTypeHierarchyTool(registry, new SymbolResolver());
+		var subject = new GetTypeHierarchyTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetTypeHierarchy(TestSolutions.Simple, "SimpleLibrary.DoesNotExist");
 
@@ -49,7 +50,7 @@ public class GetTypeHierarchyTests
 	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
 	{
 		using var registry = new InstanceRegistry();
-		var subject = new GetTypeHierarchyTool(registry, new SymbolResolver());
+		var subject = new GetTypeHierarchyTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetTypeHierarchy(TestSolutions.Simple, "SimpleLibrary.Greeter");
 

@@ -1,5 +1,6 @@
 using Morris.Roslynk.Features.References.RenameSymbol;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Writing;
 
@@ -15,7 +16,7 @@ public class RenameSymbolTests
 
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ApplyPipeline());
+		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, "SimpleLibrary.Greeter", "Welcomer");
 
@@ -36,7 +37,7 @@ public class RenameSymbolTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ApplyPipeline());
+		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(TestSolutions.Simple, "SimpleLibrary.Greeter", "1nvalid");
 
@@ -47,7 +48,7 @@ public class RenameSymbolTests
 	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
 	{
 		using var registry = new InstanceRegistry();
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ApplyPipeline());
+		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(TestSolutions.Simple, "SimpleLibrary.Greeter", "Welcomer");
 

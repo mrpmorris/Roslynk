@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -17,11 +18,13 @@ public sealed class GetCallersTool
 
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
+	private readonly ProjectionService ProjectionService;
 
-	public GetCallersTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver)
+	public GetCallersTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
+		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
 	}
 
 	[McpServerTool(
@@ -60,34 +63,40 @@ public sealed class GetCallersTool
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(model.Solution, methodName);
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
-		if (matches.Count == 0)
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, methodName);
+
+		if (groups.Count == 0)
 		{
 			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, methodName);
 			return Failure(Error.NotFound($"No symbol matched '{methodName}'.", candidates.Count > 0 ? candidates : null));
 		}
 
-		if (matches.Count > 1)
+		if (groups.Count > 1)
 		{
-			string[] candidates = matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+			string[] candidates = groups.Select(group => SymbolResolver.FullyQualifiedName(group[0].Symbol)).Distinct(StringComparer.Ordinal).ToArray();
 			return Failure(Error.Ambiguous($"'{methodName}' matched several symbols.", candidates));
 		}
 
-		ISymbol symbol = matches[0];
-		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
+		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
 
-		List<ISymbol> callers = (await SymbolFinder.FindCallersAsync(symbol, model.Solution))
-			.Select(caller => caller.CallingSymbol)
-			.DistinctBy(SymbolResolver.FullyQualifiedName, StringComparer.Ordinal)
-			.ToList();
-
+		// Union callers across every projection, deduped by stable symbol identity, so a caller that only
+		// compiles in a branch inactive in the loaded configuration is still reported.
+		var seen = new HashSet<string>(StringComparer.Ordinal);
 		var root = new SymbolNode();
-		foreach (ISymbol caller in callers)
-			SymbolPlacement.Place(root, caller, model.Solution, solutionDirectory);
+		foreach (ProjectionSymbol projectionSymbol in resolved)
+		{
+			foreach (SymbolCallerInfo caller in await SymbolFinder.FindCallersAsync(projectionSymbol.Symbol, projectionSymbol.Projection.Solution))
+			{
+				if (seen.Add(ProjectionService.KeyOf(caller.CallingSymbol)))
+					SymbolPlacement.Place(root, caller.CallingSymbol, projectionSymbol.Projection.Solution, solutionDirectory);
+			}
+		}
 
 		var builder = new OutlineBuilder();
-		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(symbol));
+		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(resolved[0].Symbol));
 		builder.Status(model.Status);
 		builder.BeginBody();
 		root.Render(builder);

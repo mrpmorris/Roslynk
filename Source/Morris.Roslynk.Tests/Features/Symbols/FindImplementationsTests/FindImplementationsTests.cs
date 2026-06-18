@@ -1,5 +1,6 @@
 using Morris.Roslynk.Features.Symbols.FindImplementations;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.FindImplementationsTests;
@@ -11,7 +12,7 @@ public class FindImplementationsTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindImplementationsTool(registry, new SymbolResolver());
+		var subject = new FindImplementationsTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindImplementations(TestSolutions.Simple, "SimpleLibrary.IGreeter");
 
@@ -25,7 +26,7 @@ public class FindImplementationsTests
 	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
 	{
 		using var registry = new InstanceRegistry();
-		var subject = new FindImplementationsTool(registry, new SymbolResolver());
+		var subject = new FindImplementationsTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindImplementations(TestSolutions.Simple, "SimpleLibrary.IGreeter");
 

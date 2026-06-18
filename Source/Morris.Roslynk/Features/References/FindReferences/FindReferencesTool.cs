@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -17,11 +18,13 @@ public sealed class FindReferencesTool
 
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
+	private readonly ProjectionService ProjectionService;
 
-	public FindReferencesTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver)
+	public FindReferencesTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
+		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
 	}
 
 	[McpServerTool(
@@ -66,42 +69,57 @@ public sealed class FindReferencesTool
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, symbolName);
+		// Run against every projection (per-TFM projects + #if-toggle variants) so references in conditionally
+		// compiled branches that are inactive in the loaded configuration are still found.
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(solution, cancellationToken);
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName, cancellationToken);
 
-		if (matches.Count == 0)
+		if (groups.Count == 0)
 		{
 			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(solution, symbolName);
 			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", candidates.Count > 0 ? candidates : null));
 		}
 
-		if (matches.Count > 1)
+		if (groups.Count > 1)
 		{
-			string[] candidates = matches.Select(match => match.ToDisplayString()).Distinct(StringComparer.Ordinal).ToArray();
+			string[] candidates = groups.Select(group => group[0].Symbol.ToDisplayString()).Distinct(StringComparer.Ordinal).ToArray();
 			return Failure(Error.Ambiguous($"'{symbolName}' matched several symbols.", candidates));
 		}
 
-		ISymbol symbol = matches[0];
+		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
+		ISymbol representative = resolved[0].Symbol;
 
-		var locations = new List<Location>();
-		foreach (ReferencedSymbol referenced in await SymbolFinder.FindReferencesAsync(symbol, solution))
+		// Union references from each projection instance of the symbol, deduped by file + span so a reference
+		// in shared (non-conditional) code is reported once even though it is seen in several projections.
+		var seen = new HashSet<string>(StringComparer.Ordinal);
+		var hits = new List<(Location Location, Solution Solution)>();
+		foreach (ProjectionSymbol projectionSymbol in resolved)
 		{
-			foreach (ReferenceLocation reference in referenced.Locations)
+			foreach (ReferencedSymbol referenced in await SymbolFinder.FindReferencesAsync(projectionSymbol.Symbol, projectionSymbol.Projection.Solution, cancellationToken))
 			{
-				if (reference.Location.IsInSource)
-					locations.Add(reference.Location);
+				foreach (ReferenceLocation reference in referenced.Locations)
+				{
+					if (!reference.Location.IsInSource)
+						continue;
+
+					FileLinePositionSpan referenceSpan = reference.Location.GetLineSpan();
+					string key = $"{referenceSpan.Path}|{referenceSpan.StartLinePosition}-{referenceSpan.EndLinePosition}";
+					if (seen.Add(key))
+						hits.Add((reference.Location, projectionSymbol.Projection.Solution));
+				}
 			}
 		}
 
-		List<Location> page = locations.Take(Math.Max(0, maxResults)).ToList();
-		bool truncated = locations.Count > page.Count;
+		List<(Location Location, Solution Solution)> page = hits.Take(Math.Max(0, maxResults)).ToList();
+		bool truncated = hits.Count > page.Count;
 
 		var root = new SymbolNode();
-		foreach (Location location in page)
+		foreach ((Location location, Solution locationSolution) in page)
 		{
-			EnclosingPath enclosing = await EnclosingDeclaration.ResolveAsync(solution, location, cancellationToken);
+			EnclosingPath enclosing = await EnclosingDeclaration.ResolveAsync(locationSolution, location, cancellationToken);
 			FileLinePositionSpan span = location.GetLineSpan();
 
-			SymbolNode fileParent = location.SourceTree is SyntaxTree tree && ProjectName.Of(solution, tree) is string project
+			SymbolNode fileParent = location.SourceTree is SyntaxTree tree && ProjectName.Of(locationSolution, tree) is string project
 				? root.Child(project)
 				: root;
 			SymbolNode node = fileParent
@@ -118,10 +136,10 @@ public sealed class FindReferencesTool
 		}
 
 		var builder = new OutlineBuilder();
-		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(symbol));
+		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(representative));
 		if (truncated)
 		{
-			builder.Header("count", locations.Count);
+			builder.Header("count", hits.Count);
 			builder.Header("truncated", true);
 		}
 		builder.Status(model.Status);

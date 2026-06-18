@@ -1,5 +1,6 @@
 using Morris.Roslynk.Features.Callers.GetCallers;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.Callers.GetCallersTests;
@@ -11,7 +12,7 @@ public class GetCallersTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetCallersTool(registry, new SymbolResolver());
+		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Greeter.Greet");
 
@@ -26,7 +27,7 @@ public class GetCallersTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetCallersTool(registry, new SymbolResolver());
+		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.DoesNotExist");
 
@@ -37,7 +38,7 @@ public class GetCallersTests
 	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
 	{
 		using var registry = new InstanceRegistry();
-		var subject = new GetCallersTool(registry, new SymbolResolver());
+		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Greeter.Greet");
 

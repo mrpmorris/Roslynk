@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -18,11 +19,13 @@ public sealed class GetSymbolTool
 
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
+	private readonly ProjectionService ProjectionService;
 
-	public GetSymbolTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver)
+	public GetSymbolTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
+		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
 	}
 
 	[McpServerTool(
@@ -63,18 +66,32 @@ public sealed class GetSymbolTool
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(model.Solution, symbolName);
+		// Resolve across every projection (with metadata fallback) so a symbol declared only in a branch
+		// inactive in the loaded configuration is still found; group by stable identity.
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
+		var bySymbol = new Dictionary<string, (ISymbol Symbol, Solution Solution)>(StringComparer.Ordinal);
+		var order = new List<string>();
+		foreach (Projection projection in projections)
+		{
+			foreach (ISymbol candidate in await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(projection.Solution, symbolName, cancellationToken))
+			{
+				string key = ProjectionService.KeyOf(candidate);
+				if (bySymbol.TryAdd(key, (candidate, projection.Solution)))
+					order.Add(key);
+			}
+		}
 
-		if (matches.Count == 0)
+		if (order.Count == 0)
 		{
 			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
 			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", suggestions.Count > 0 ? suggestions : null));
 		}
 
-		if (matches.Count > 1)
-			return Locator(matches, model, solutionDirectory);
+		if (order.Count > 1)
+			return Locator(order.Select(key => bySymbol[key]).ToList(), model, solutionDirectory);
 
-		return await DetailLeanAsync(matches[0], model.Solution, solutionDirectory, cancellationToken);
+		(ISymbol Symbol, Solution Solution) match = bySymbol[order[0]];
+		return await DetailLeanAsync(match.Symbol, match.Solution, solutionDirectory, cancellationToken);
 	}
 
 	private async Task<string> DetailLeanAsync(ISymbol symbol, Solution solution, string? solutionDirectory, CancellationToken cancellationToken)
@@ -109,11 +126,11 @@ public sealed class GetSymbolTool
 		return builder.ToString();
 	}
 
-	private static string Locator(IReadOnlyList<ISymbol> matches, SolutionModel model, string? solutionDirectory)
+	private static string Locator(IReadOnlyList<(ISymbol Symbol, Solution Solution)> matches, SolutionModel model, string? solutionDirectory)
 	{
 		var root = new SymbolNode();
-		foreach (ISymbol symbol in matches)
-			SymbolPlacement.Place(root, symbol, model.Solution!, solutionDirectory);
+		foreach ((ISymbol symbol, Solution solution) in matches)
+			SymbolPlacement.Place(root, symbol, solution, solutionDirectory);
 
 		var builder = new OutlineBuilder();
 		builder.Status(model.Status);

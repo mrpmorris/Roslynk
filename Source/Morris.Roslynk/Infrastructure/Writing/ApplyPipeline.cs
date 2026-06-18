@@ -36,12 +36,13 @@ public sealed class ApplyPipeline
 	public static IReadOnlyList<string> GetChangedFilePaths(Solution current, Solution updated)
 	{
 		var paths = new List<string>();
+		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		foreach (ProjectChanges projectChanges in updated.GetChanges(current).GetProjectChanges())
 		{
 			foreach (DocumentId documentId in projectChanges.GetChangedDocuments())
 			{
 				string? path = updated.GetDocument(documentId)?.FilePath;
-				if (path is not null && !IsGenerated(path))
+				if (path is not null && !IsGenerated(path) && seen.Add(path))
 					paths.Add(path);
 			}
 		}
@@ -56,6 +57,7 @@ public sealed class ApplyPipeline
 	private static async Task<IReadOnlyList<PendingWrite>> BuildWritesAsync(Solution current, Solution updated, CancellationToken cancellationToken)
 	{
 		var writes = new List<PendingWrite>();
+		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 		foreach (ProjectChanges projectChanges in updated.GetChanges(current).GetProjectChanges())
 		{
 			foreach (DocumentId documentId in projectChanges.GetChangedDocuments())
@@ -70,6 +72,10 @@ public sealed class ApplyPipeline
 				// Generated documents (the Razor .g.cs we add to the model) have no real file on disk and must
 				// never be written back; they are regenerated on the next load.
 				if (IsGenerated(path))
+					continue;
+
+				// A file shared across target-framework projects appears as several documents; write it once.
+				if (!seen.Add(path))
 					continue;
 
 				string loadedText = (await currentDocument.GetTextAsync(cancellationToken)).ToString();

@@ -2,9 +2,11 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Rename;
+using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -19,12 +21,14 @@ public sealed class RenameSymbolTool
 
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
+	private readonly ProjectionService ProjectionService;
 	private readonly ApplyPipeline ApplyPipeline;
 
-	public RenameSymbolTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ApplyPipeline applyPipeline)
+	public RenameSymbolTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService, ApplyPipeline applyPipeline)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
+		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
 		ApplyPipeline = applyPipeline ?? throw new ArgumentNullException(nameof(applyPipeline));
 	}
 
@@ -62,32 +66,75 @@ public sealed class RenameSymbolTool
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
 
-		Solution solution = model.Solution;
-		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
+		Solution baseSolution = model.Solution;
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(baseSolution);
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, symbolName);
-		if (matches.Count == 0)
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(baseSolution);
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName);
+		if (groups.Count == 0)
 		{
-			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(solution, symbolName);
+			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(baseSolution, symbolName);
 			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", suggestions.Count > 0 ? suggestions : null));
 		}
-		if (matches.Count > 1)
+		if (groups.Count > 1)
 		{
-			string[] candidates = matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
+			string[] candidates = groups.Select(group => SymbolResolver.FullyQualifiedName(group[0].Symbol)).Distinct(StringComparer.Ordinal).ToArray();
 			return Failure(Error.Ambiguous("The name is ambiguous; rename using one of the candidate fully-qualified names.", candidates));
 		}
 
-		ISymbol symbol = matches[0];
-		string resolved = SymbolResolver.FullyQualifiedName(symbol);
-		Solution renamed = await Renamer.RenameSymbolAsync(solution, symbol, new SymbolRenameOptions(), newName);
+		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
+		string resolvedName = SymbolResolver.FullyQualifiedName(resolved[0].Symbol);
+
+		// Rename in each projection — each rewrites only its own active branch, semantically — then union the
+		// per-file text changes (deduped by span), so a symbol used in both #if and #else branches, or across
+		// target frameworks, is rewritten everywhere rather than leaving the inactive branch stale.
+		var changesByPath = new Dictionary<string, Dictionary<TextSpan, TextChange>>(StringComparer.OrdinalIgnoreCase);
+		foreach (ProjectionSymbol projectionSymbol in resolved)
+		{
+			Solution projectionSolution = projectionSymbol.Projection.Solution;
+			Solution renamed = await Renamer.RenameSymbolAsync(projectionSolution, projectionSymbol.Symbol, new SymbolRenameOptions(), newName);
+
+			foreach (ProjectChanges projectChanges in renamed.GetChanges(projectionSolution).GetProjectChanges())
+			{
+				foreach (DocumentId documentId in projectChanges.GetChangedDocuments())
+				{
+					Document originalDocument = projectionSolution.GetDocument(documentId)!;
+					if (originalDocument.FilePath is not string path)
+						continue;
+
+					Document renamedDocument = renamed.GetDocument(documentId)!;
+					if (!changesByPath.TryGetValue(path, out Dictionary<TextSpan, TextChange>? perSpan))
+					{
+						perSpan = [];
+						changesByPath[path] = perSpan;
+					}
+
+					foreach (TextChange change in await renamedDocument.GetTextChangesAsync(originalDocument))
+						perSpan[change.Span] = change;
+				}
+			}
+		}
+
+		// Apply the unioned changes onto the base solution (every document that shares the file), so the write
+		// path persists each file once and the published snapshot reflects all branches.
+		Solution updated = baseSolution;
+		foreach ((string path, Dictionary<TextSpan, TextChange> perSpan) in changesByPath)
+		{
+			List<TextChange> ordered = perSpan.Values.OrderBy(change => change.Span.Start).ToList();
+			foreach (DocumentId documentId in baseSolution.GetDocumentIdsWithFilePath(path))
+			{
+				SourceText text = await baseSolution.GetDocument(documentId)!.GetTextAsync();
+				updated = updated.WithDocumentText(documentId, text.WithChanges(ordered));
+			}
+		}
 
 		IReadOnlyList<string> changed = checkOnly
-			? ApplyPipeline.GetChangedFilePaths(solution, renamed)
-			: await ApplyPipeline.ApplyAsync(instance, renamed);
+			? ApplyPipeline.GetChangedFilePaths(baseSolution, updated)
+			: await ApplyPipeline.ApplyAsync(instance, updated);
 
 		var builder = new OutlineBuilder();
 		builder.Header("applied", !checkOnly);
-		builder.Header("resolvedSymbol", resolved);
+		builder.Header("resolvedSymbol", resolvedName);
 		builder.Status(instance.CurrentModel.Status);
 		ChangedFilesOutline.Write(builder, changed, instance.CurrentSolution, solutionDirectory);
 		return builder.ToString();

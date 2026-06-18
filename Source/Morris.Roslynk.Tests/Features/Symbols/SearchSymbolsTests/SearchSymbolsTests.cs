@@ -1,5 +1,6 @@
 using Morris.Roslynk.Features.Symbols.SearchSymbols;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Projections;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.SearchSymbolsTests;
 
@@ -10,7 +11,7 @@ public class SearchSymbolsTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new SearchSymbolsTool(registry);
+		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet");
 
@@ -24,7 +25,7 @@ public class SearchSymbolsTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new SearchSymbolsTool(registry);
+		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "NoSuchSymbolNameHere");
 
@@ -35,7 +36,7 @@ public class SearchSymbolsTests
 	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
 	{
 		using var registry = new InstanceRegistry();
-		var subject = new SearchSymbolsTool(registry);
+		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet");
 

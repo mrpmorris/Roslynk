@@ -1,5 +1,6 @@
 using Morris.Roslynk.Features.Symbols.GetSymbol;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.GetSymbolTests;
@@ -89,7 +90,7 @@ public class GetSymbolTests
 	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
 	{
 		using var registry = new InstanceRegistry();
-		var subject = new GetSymbolTool(registry, new SymbolResolver());
+		var subject = new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetSymbol(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
@@ -103,7 +104,7 @@ public class GetSymbolTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetSymbolTool(registry, new SymbolResolver());
+		var subject = new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService());
 
 		return await subject.GetSymbol(TestSolutions.Simple, symbolName);
 	}

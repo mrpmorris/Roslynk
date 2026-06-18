@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -18,11 +19,13 @@ public sealed class GetMembersTool
 
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
+	private readonly ProjectionService ProjectionService;
 
-	public GetMembersTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver)
+	public GetMembersTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
+		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
 	}
 
 	[McpServerTool(
@@ -72,19 +75,26 @@ public sealed class GetMembersTool
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
-		List<INamedTypeSymbol> types = (await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(model.Solution, typeName))
-			.OfType<INamedTypeSymbol>()
-			.ToList();
-
-		if (types.Count == 0)
-			return Failure(Error.NotFound($"No type matched '{typeName}'."));
-		if (types.Count > 1)
+		// Resolve the type in every projection so members declared in a branch inactive in the loaded
+		// configuration are included; group by fully-qualified name so the same type across projections is one.
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
+		var typeInstances = new List<(INamedTypeSymbol Type, Solution Solution)>();
+		var distinctTypes = new HashSet<string>(StringComparer.Ordinal);
+		foreach (Projection projection in projections)
 		{
-			string[] candidates = types.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
-			return Failure(Error.Ambiguous($"'{typeName}' matched multiple types.", candidates));
+			foreach (INamedTypeSymbol candidate in (await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(projection.Solution, typeName)).OfType<INamedTypeSymbol>())
+			{
+				typeInstances.Add((candidate, projection.Solution));
+				distinctTypes.Add(SymbolResolver.FullyQualifiedName(candidate));
+			}
 		}
 
-		INamedTypeSymbol type = types[0];
+		if (distinctTypes.Count == 0)
+			return Failure(Error.NotFound($"No type matched '{typeName}'."));
+		if (distinctTypes.Count > 1)
+			return Failure(Error.Ambiguous($"'{typeName}' matched multiple types.", distinctTypes.OrderBy(name => name, StringComparer.Ordinal).ToArray()));
+
+		INamedTypeSymbol type = typeInstances[0].Type;
 
 		bool NameMatches(string name)
 		{
@@ -107,14 +117,22 @@ public sealed class GetMembersTool
 				_ => true,
 			};
 
-		List<ISymbol> members = Collect(type, includeInherited)
-			.Where(member => !member.IsImplicitlyDeclared)
-			.Where(member => includePrivate || member.DeclaredAccessibility != Accessibility.Private)
-			.Where(KindIncluded)
-			.Where(member => NameMatches(member.Name))
-			.ToList();
-
-		var entries = members.Select(member => Render(member, model.Solution, solutionDirectory)).ToList();
+		// Union members across every projection instance of the type, deduped by stable identity so a member
+		// in shared code is listed once while a member declared only in an inactive branch still appears.
+		var seen = new HashSet<string>(StringComparer.Ordinal);
+		var entries = new List<(string? Project, string File, int Order, string Line)>();
+		foreach ((INamedTypeSymbol typeInstance, Solution typeSolution) in typeInstances)
+		{
+			foreach (ISymbol member in Collect(typeInstance, includeInherited)
+				.Where(member => !member.IsImplicitlyDeclared)
+				.Where(member => includePrivate || member.DeclaredAccessibility != Accessibility.Private)
+				.Where(KindIncluded)
+				.Where(member => NameMatches(member.Name)))
+			{
+				if (seen.Add(ProjectionService.KeyOf(member)))
+					entries.Add(Render(member, typeSolution, solutionDirectory));
+			}
+		}
 
 		var builder = new OutlineBuilder();
 		builder.Header("resolvedType", SymbolResolver.FullyQualifiedName(type));

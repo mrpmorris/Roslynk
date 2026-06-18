@@ -1,5 +1,6 @@
 using Morris.Roslynk.Features.References.FindReferences;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.References.FindReferencesTests;
@@ -11,7 +12,7 @@ public class FindReferencesTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindReferencesTool(registry, new SymbolResolver());
+		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
@@ -31,7 +32,7 @@ public class FindReferencesTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindReferencesTool(registry, new SymbolResolver());
+		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.DoesNotExist");
 
@@ -43,7 +44,7 @@ public class FindReferencesTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindReferencesTool(registry, new SymbolResolver());
+		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Greeter", maxResults: 0);
 
@@ -56,7 +57,7 @@ public class FindReferencesTests
 	public async Task WhenTheSolutionIsStillLoading_ThenAnIndexingHeaderIsReturned()
 	{
 		using var registry = new InstanceRegistry();
-		var subject = new FindReferencesTool(registry, new SymbolResolver());
+		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
@@ -71,7 +72,7 @@ public class FindReferencesTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.References);
-		var subject = new FindReferencesTool(registry, new SymbolResolver());
+		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindReferences(TestSolutions.References, "RefSpace.IThing");
 
