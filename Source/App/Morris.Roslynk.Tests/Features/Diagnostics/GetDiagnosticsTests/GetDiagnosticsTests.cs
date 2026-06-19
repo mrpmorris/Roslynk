@@ -31,8 +31,9 @@ public class GetDiagnosticsTests
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken);
 
+		// Counts are always in the header; body only shows errors.
+		Assert.Contains("#warnings=0", result);
 		Assert.DoesNotContain("\twarnings", result);
-		Assert.DoesNotContain("#warnings=0", result);
 	}
 
 	[Fact]
@@ -44,7 +45,8 @@ public class GetDiagnosticsTests
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeWarnings: true);
 
-		Assert.Contains("\twarnings\n", result);
+		// The fixture has zero warnings, so only errors appear in the body.
+		Assert.Contains("#warnings=0", result);
 		Assert.Contains("\terrors\n", result);
 	}
 

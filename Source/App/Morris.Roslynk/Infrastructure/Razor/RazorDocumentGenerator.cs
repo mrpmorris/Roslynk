@@ -1,7 +1,9 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Text;
 
 namespace Morris.Roslynk.Infrastructure.Razor;
 
@@ -41,9 +43,19 @@ public static class RazorDocumentGenerator
 
 	private static async Task<Solution> AugmentProjectAsync(Solution solution, Project project, CancellationToken cancellationToken)
 	{
-		if (!HasRazorInputs(project) || !TryGetGenerator(project, out IIncrementalGenerator? generator))
-			return solution;
+		bool hasGenerator = TryGetGenerator(project, out IIncrementalGenerator? generator);
+		bool hasRazorInputs = HasRazorInputs(project);
 
+		if (hasGenerator && hasRazorInputs)
+			solution = await RunGeneratorAsync(solution, project, generator!, cancellationToken);
+
+		solution = await AddPreGeneratedFilesAsync(solution, project, cancellationToken);
+
+		return solution;
+	}
+
+	private static async Task<Solution> RunGeneratorAsync(Solution solution, Project project, IIncrementalGenerator generator, CancellationToken cancellationToken)
+	{
 		try
 		{
 			Compilation? compilation = await project.GetCompilationAsync(cancellationToken);
@@ -51,7 +63,7 @@ public static class RazorDocumentGenerator
 				return solution;
 
 			GeneratorDriver driver = CSharpGeneratorDriver.Create(
-				generators: [generator!.AsSourceGenerator()],
+				generators: [generator.AsSourceGenerator()],
 				additionalTexts: project.AnalyzerOptions.AdditionalFiles,
 				parseOptions: parseOptions,
 				optionsProvider: project.AnalyzerOptions.AnalyzerConfigOptionsProvider);
@@ -79,9 +91,60 @@ public static class RazorDocumentGenerator
 		}
 		catch (Exception)
 		{
-			// Freshness, not correctness: a generator that throws leaves the project as the workspace loaded it.
 			return solution;
 		}
+	}
+
+	private static async Task<Solution> AddPreGeneratedFilesAsync(Solution solution, Project project, CancellationToken cancellationToken)
+	{
+		if (project.FilePath is not string projectFilePath || project.OutputFilePath is not string outputFilePath)
+			return solution;
+
+		string? generatedDir = GetRazorGeneratedDirectory(projectFilePath, outputFilePath);
+		if (generatedDir is null || !Directory.Exists(generatedDir))
+			return solution;
+
+		try
+		{
+			foreach (string file in Directory.EnumerateFiles(generatedDir, "*.g.cs", SearchOption.AllDirectories))
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+
+				if (!solution.GetDocumentIdsWithFilePath(file).IsEmpty)
+					continue;
+
+				string content = await File.ReadAllTextAsync(file, cancellationToken);
+				SourceText text = SourceText.From(content);
+				string hintName = System.IO.Path.GetFileName(file);
+				DocumentId documentId = DocumentId.CreateNewId(project.Id, hintName);
+				solution = solution.AddDocument(documentId, hintName, text, filePath: file);
+			}
+		}
+		catch (Exception)
+		{
+		}
+
+		return solution;
+	}
+
+	private static string? GetRazorGeneratedDirectory(string projectFilePath, string outputFilePath)
+	{
+		string projectDir = System.IO.Path.GetDirectoryName(projectFilePath)!;
+		string? outputDir = System.IO.Path.GetDirectoryName(outputFilePath);
+
+		if (outputDir is null)
+			return null;
+
+		string relativeOutput = System.IO.Path.GetRelativePath(projectDir, outputDir);
+		string[] parts = relativeOutput.Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+
+		if (parts.Length < 2 || !string.Equals(parts[0], "bin", StringComparison.OrdinalIgnoreCase))
+			return null;
+
+		string configuration = parts[1];
+		string targetFramework = parts.Length > 2 ? parts[2] : "";
+
+		return System.IO.Path.Combine(projectDir, "obj", configuration, targetFramework, "generated", "Microsoft.CodeAnalysis.Razor.Compiler");
 	}
 
 	private static bool HasRazorInputs(Project project) =>
@@ -92,14 +155,61 @@ public static class RazorDocumentGenerator
 	private static bool TryGetGenerator(Project project, out IIncrementalGenerator? generator)
 	{
 		generator = null;
+
 		var reference = project.AnalyzerReferences.FirstOrDefault(candidate =>
 			candidate.FullPath is string path && path.EndsWith(RazorCompilerFileName, StringComparison.OrdinalIgnoreCase));
 
-		if (reference?.FullPath is not string razorPath)
+		string? razorPath = reference?.FullPath;
+		razorPath ??= FindRazorCompilerInSdkDirectory();
+
+		if (razorPath is null)
 			return false;
 
 		generator = Generators.GetOrAdd(razorPath, Load);
 		return generator is not null;
+	}
+
+	private static string? FindRazorCompilerInSdkDirectory()
+	{
+		try
+		{
+			if (!MSBuildLocator.IsRegistered)
+				return null;
+
+			string msbuildPath = MSBuildLocator.QueryVisualStudioInstances().FirstOrDefault()?.MSBuildPath ?? string.Empty;
+
+			string[] candidates =
+			[
+				System.IO.Path.Combine(msbuildPath, "Sdks", "Microsoft.NET.Sdk.Razor", "source-generators", RazorCompilerFileName),
+				System.IO.Path.Combine(msbuildPath, "Sdks", "Microsoft.NET.Sdk.Razor", "tools", RazorCompilerFileName),
+				System.IO.Path.Combine(msbuildPath, "..", "..", "Sdks", "Microsoft.NET.Sdk.Razor", "source-generators", RazorCompilerFileName),
+				System.IO.Path.Combine(msbuildPath, "..", "..", "Sdks", "Microsoft.NET.Sdk.Razor", "tools", RazorCompilerFileName),
+			];
+
+			foreach (string candidate in candidates)
+			{
+				string fullPath = System.IO.Path.GetFullPath(candidate);
+				if (File.Exists(fullPath))
+					return fullPath;
+			}
+
+			string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+			string sdkRoot = System.IO.Path.Combine(programFiles, "dotnet", "sdk");
+			if (Directory.Exists(sdkRoot))
+			{
+				foreach (string versionDir in Directory.EnumerateDirectories(sdkRoot))
+				{
+					string path = System.IO.Path.Combine(versionDir, "Sdks", "Microsoft.NET.Sdk.Razor", "source-generators", RazorCompilerFileName);
+					if (File.Exists(path))
+						return path;
+				}
+			}
+		}
+		catch (Exception)
+		{
+		}
+
+		return null;
 	}
 
 	private static IIncrementalGenerator? Load(string razorPath)
