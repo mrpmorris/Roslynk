@@ -11,7 +11,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $root 'Source\Morris.Roslynk.Mcp\Morris.Roslynk.Mcp.csproj'
+$project = Join-Path $root 'Source\App\Morris.Roslynk.Mcp\Morris.Roslynk.Mcp.csproj'
 $output = Join-Path $PSScriptRoot 'publish'
 
 if (Test-Path $output) { Remove-Item -Recurse -Force $output }

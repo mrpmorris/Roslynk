@@ -16,15 +16,17 @@ See [Requirements.md](Requirements.md) for the full design.
 
 ```
 Source/
-  Morris.Roslynk/        Features/ (vertical slices) + Infrastructure/ (shared engine)
-  Morris.Roslynk.Mcp/    Windows service host (bootstrap only)
-  Morris.Roslynk.Tests/
-  Morris.Roslynk.McpTests/
+  App/
+    Morris.Roslynk/        Features/ (vertical slices) + Infrastructure/ (shared engine)
+    Morris.Roslynk.Mcp/    Windows service host (bootstrap only)
+    Morris.Roslynk.Tests/
+    Morris.Roslynk.McpTests/
+  TestFixtures/
 ```
 
 ## Build
 
 ```
-dotnet build Source/Morris.Roslynk.slnx
-dotnet test  Source/Morris.Roslynk.slnx
+dotnet build Source/App/Morris.Roslynk.slnx
+dotnet test  Source/App/Morris.Roslynk.slnx
 ```
