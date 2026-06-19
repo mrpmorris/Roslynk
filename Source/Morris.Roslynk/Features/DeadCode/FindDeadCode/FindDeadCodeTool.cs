@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Features.Conditionals.FindDeadConditionals;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -59,7 +60,9 @@ public sealed class FindDeadCodeTool
 		Finds symbols (types, methods, properties, fields, events) with no references, conservatively filtered
 		to avoid false positives: it excludes interface implementations, virtual/override chains, test members,
 		generated code, and DI/reflection-activated members, and (unless includePublic is true) the public API
-		surface. {OutlineDescriptions.TextNotJson} Candidates nest file -> namespace -> type -> member:
+		surface.
+		Also use {FindDeadConditionalsTool.FindDeadConditionalsName}.
+		{OutlineDescriptions.TextNotJson} Candidates nest file -> namespace -> type -> member:
 
 		  <project>
 		  \t<relative/forward-slash/folder>
