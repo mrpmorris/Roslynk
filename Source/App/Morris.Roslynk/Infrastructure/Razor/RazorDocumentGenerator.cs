@@ -1,9 +1,11 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Reflection;
 using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.Razor;
 
@@ -36,7 +38,7 @@ public static class RazorDocumentGenerator
 	private static readonly ConcurrentDictionary<string, IIncrementalGenerator?> Generators = new(StringComparer.OrdinalIgnoreCase);
 
 	/// <summary>Adds the generated Razor documents for every Razor project in the solution, returning the augmented solution.</summary>
-	public static async Task<Solution> AugmentAsync(Solution solution, CancellationToken cancellationToken = default)
+	public static async Task<Solution> AugmentAsync(Solution solution, ImmutableDictionary<ProjectId, ProjectModel> projectModels, CancellationToken cancellationToken = default)
 	{
 		if (solution is null)
 			throw new ArgumentNullException(nameof(solution));
@@ -45,15 +47,15 @@ public static class RazorDocumentGenerator
 		{
 			cancellationToken.ThrowIfCancellationRequested();
 			if (solution.GetProject(projectId) is Project project)
-				solution = await AugmentProjectAsync(solution, project, cancellationToken);
+				solution = await AugmentProjectAsync(solution, project, projectModels, cancellationToken);
 		}
 
 		return solution;
 	}
 
-	private static async Task<Solution> AugmentProjectAsync(Solution solution, Project project, CancellationToken cancellationToken)
+	private static async Task<Solution> AugmentProjectAsync(Solution solution, Project project, ImmutableDictionary<ProjectId, ProjectModel> projectModels, CancellationToken cancellationToken)
 	{
-		string? generatedDir = GetRazorGeneratedDirectory(project);
+		string? generatedDir = GetRazorGeneratedDirectory(project, projectModels.GetValueOrDefault(project.Id));
 		bool hasPreGeneratedFiles = generatedDir is not null && Directory.Exists(generatedDir);
 
 		if (hasPreGeneratedFiles)
@@ -137,7 +139,7 @@ public static class RazorDocumentGenerator
 		return solution;
 	}
 
-	private static string? GetRazorGeneratedDirectory(Project project)
+	private static string? GetRazorGeneratedDirectory(Project project, ProjectModel? projectModel)
 	{
 		if (project.FilePath is not string projectFilePath || project.OutputFilePath is not string outputFilePath)
 			return null;
@@ -147,6 +149,21 @@ public static class RazorDocumentGenerator
 
 		if (outputDir is null)
 			return null;
+
+		// If EmitCompilerGeneratedFiles is explicitly false, skip scanning — no files exist.
+		if (projectModel?.CapturedProperties.TryGetValue("EmitCompilerGeneratedFiles", out string? emit) == true
+			&& !string.Equals(emit, "true", StringComparison.OrdinalIgnoreCase))
+			return null;
+
+		// Respect a custom CompilerGeneratedFilesOutputPath if set.
+		if (projectModel?.CapturedProperties.TryGetValue("CompilerGeneratedFilesOutputPath", out string? customPath) == true
+			&& !string.IsNullOrWhiteSpace(customPath))
+		{
+			string resolved = System.IO.Path.GetFullPath(System.IO.Path.Combine(projectDir, customPath));
+			string candidate = System.IO.Path.Combine(resolved, "Microsoft.CodeAnalysis.Razor.Compiler");
+			if (Directory.Exists(candidate))
+				return candidate;
+		}
 
 		string relativeOutput = System.IO.Path.GetRelativePath(projectDir, outputDir);
 		string[] parts = relativeOutput.Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);

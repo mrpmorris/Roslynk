@@ -250,7 +250,7 @@ public sealed class RoslynInstance : IDisposable
 				Volatile.Write(ref WorkspaceField, workspace);
 				BuildNeededField = true;
 				Volatile.Write(ref DiagnosticsCacheField, null);
-				Swap(SolutionModel.Ready(workspace.Solution));
+				Swap(SolutionModel.Ready(workspace.Solution, workspace.ProjectModels));
 				onReady(this);
 			}
 			catch (Exception exception)
@@ -291,7 +291,7 @@ public sealed class RoslynInstance : IDisposable
 				SolutionWorkspace workspace = await loader(tracker);
 				SolutionWorkspace? previous = Volatile.Read(ref WorkspaceField);
 				Volatile.Write(ref WorkspaceField, workspace);
-				Swap(SolutionModel.Ready(workspace.Solution));
+				Swap(SolutionModel.Ready(workspace.Solution, workspace.ProjectModels));
 				onReady(this);
 				previous?.Dispose();
 			}

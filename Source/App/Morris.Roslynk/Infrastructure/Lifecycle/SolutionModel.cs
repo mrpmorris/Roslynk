@@ -1,4 +1,6 @@
+using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.Lifecycle;
 
@@ -12,6 +14,7 @@ public sealed class SolutionModel
 	public required SolutionStatus Status { get; init; }
 	public Solution? Solution { get; init; }
 	public string? FaultMessage { get; init; }
+	public ImmutableDictionary<ProjectId, ProjectModel> ProjectModels { get; init; } = ImmutableDictionary<ProjectId, ProjectModel>.Empty;
 
 	/// <summary>A load or rebuild in flight, optionally still serving the previous <paramref name="solution"/>.</summary>
 	public static SolutionModel Loading(Solution? solution) =>
@@ -24,6 +27,10 @@ public sealed class SolutionModel
 	/// <summary>A published snapshot ready to be read.</summary>
 	public static SolutionModel Ready(Solution solution) =>
 		new() { Status = SolutionStatus.Ready, Solution = solution };
+
+	/// <summary>A published snapshot with per-project MSBuild properties captured at load time.</summary>
+	public static SolutionModel Ready(Solution solution, ImmutableDictionary<ProjectId, ProjectModel> projectModels) =>
+		new() { Status = SolutionStatus.Ready, Solution = solution, ProjectModels = projectModels };
 
 	/// <summary>A load that failed; <paramref name="faultMessage"/> explains why and no snapshot is served.</summary>
 	public static SolutionModel Faulted(string faultMessage) =>

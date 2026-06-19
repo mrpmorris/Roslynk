@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -10,24 +12,27 @@ using Morris.Roslynk.Infrastructure.Razor;
 
 namespace Morris.Roslynk.Infrastructure.Workspaces;
 
-/// <summary>
-/// Owns an <see cref="MSBuildWorkspace"/> and the immutable <see cref="Solution"/> snapshot loaded from
-/// a <c>.sln</c> / <c>.slnx</c>. Lifecycle, sessions, and the single-writer lock are layered on top of
-/// this by the instance registry; this type is just the load + snapshot.
-/// </summary>
 public sealed class SolutionWorkspace : IDisposable
 {
+	private static readonly string[] RelevantProperties = ["EmitCompilerGeneratedFiles", "CompilerGeneratedFilesOutputPath"];
+
 	private readonly MSBuildWorkspace Workspace;
 
 	public Solution Solution { get; }
 
-	/// <summary>Partial-load failures reported by MSBuild while opening the solution.</summary>
+	public ImmutableDictionary<ProjectId, ProjectModel> ProjectModels { get; }
+
 	public IReadOnlyList<string> LoadDiagnostics { get; }
 
-	private SolutionWorkspace(MSBuildWorkspace workspace, Solution solution, IReadOnlyList<string> loadDiagnostics)
+	private SolutionWorkspace(
+		MSBuildWorkspace workspace,
+		Solution solution,
+		ImmutableDictionary<ProjectId, ProjectModel> projectModels,
+		IReadOnlyList<string> loadDiagnostics)
 	{
 		Workspace = workspace;
 		Solution = solution;
+		ProjectModels = projectModels;
 		LoadDiagnostics = loadDiagnostics;
 	}
 
@@ -51,12 +56,70 @@ public sealed class SolutionWorkspace : IDisposable
 			using (workspace.RegisterWorkspaceFailedHandler(e => loadDiagnostics.Add(e.Diagnostic.Message)))
 			{
 				Solution solution = await workspace.OpenSolutionAsync(solutionPath, progress, cancellationToken);
-				solution = await RazorDocumentGenerator.AugmentAsync(solution, cancellationToken);
+
+				ImmutableDictionary<ProjectId, ProjectModel> immutableModels = CaptureProjectProperties(solution, workspace.Properties);
+
+				solution = await RazorDocumentGenerator.AugmentAsync(solution, immutableModels, cancellationToken);
 				solution = await ExpandMultiTargetProjectsAsync(solution, cancellationToken);
 				activity?.SetTag("roslynk.project.count", solution.Projects.Count());
-				return new SolutionWorkspace(workspace, solution, loadDiagnostics.ToArray());
+				return new SolutionWorkspace(workspace, solution, immutableModels, loadDiagnostics.ToArray());
 			}
 		}
+	}
+
+	private static ImmutableDictionary<ProjectId, ProjectModel> CaptureProjectProperties(
+		Solution solution,
+		ImmutableDictionary<string, string> workspaceProperties)
+	{
+		var result = new Dictionary<ProjectId, ProjectModel>();
+
+		Type? projectInstanceType = GetProjectInstanceType();
+		ConstructorInfo? ctor = projectInstanceType?.GetConstructor([
+			typeof(string), typeof(IDictionary<string, string>), typeof(object)]);
+		MethodInfo? getProp = projectInstanceType?.GetMethod("GetPropertyValue", [typeof(string)]);
+
+		if (ctor is null || getProp is null)
+			return result.ToImmutableDictionary();
+
+		foreach (Project project in solution.Projects)
+		{
+			if (project.FilePath is not string path)
+				continue;
+
+			var props = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+			try
+			{
+				object instance = ctor.Invoke([path, workspaceProperties.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase), null]);
+
+				foreach (string name in RelevantProperties)
+				{
+					string? value = (string?)getProp.Invoke(instance, [name]);
+					if (!string.IsNullOrEmpty(value))
+						props[name] = value;
+				}
+			}
+			catch
+			{
+			}
+
+			result[project.Id] = new ProjectModel(project.Id, path, props.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase));
+		}
+
+		return result.ToImmutableDictionary();
+	}
+
+	private static Type? GetProjectInstanceType()
+	{
+		foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+		{
+			if (assembly.GetName().Name == "Microsoft.Build")
+			{
+				try { return assembly.GetType("Microsoft.Build.Execution.ProjectInstance"); }
+				catch { }
+			}
+		}
+		return null;
 	}
 
 	private static async Task<Solution> ExpandMultiTargetProjectsAsync(Solution solution, CancellationToken ct)
