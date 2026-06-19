@@ -5,6 +5,8 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Features.Conditionals.FindDeadConditionals;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Projections;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -66,7 +68,7 @@ public sealed class FindDeadCodeTool
 
 		  <project>
 		  \t<relative/forward-slash/folder>
-		  \t\t<file.cs>
+		  \t\t<file.cs|file.razor>
 		  \t\t\t<namespace>
 		  \t\t\t\t<typeKind>,<typeName>
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc>,<confidence> <reason>
@@ -181,7 +183,7 @@ public sealed class FindDeadCodeTool
 				: ("No references found", "High");
 
 		SyntaxReference? reference = symbol.DeclaringSyntaxReferences.FirstOrDefault();
-		FileLinePositionSpan? span = reference?.SyntaxTree.GetLineSpan(reference.Span);
+		FileLinePositionSpan? span = reference?.SyntaxTree.GetDisplaySpan(reference.Span);
 
 		string file = span is { } located
 			? SolutionRelativePath.Of(solutionDirectory, located.Path)!

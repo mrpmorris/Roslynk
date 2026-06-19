@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Infrastructure.Documentation;
@@ -200,7 +201,7 @@ public static partial class DocumentationReader
 	private static DocumentationInheritedFrom Describe(ISymbol symbol)
 	{
 		Location? location = symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
-		string? sourcePath = location?.GetLineSpan().Path;
+		string? sourcePath = location?.GetDisplaySpan().Path;
 		string? assembly = location is null ? symbol.ContainingAssembly?.Name : null;
 		return new DocumentationInheritedFrom(SymbolResolver.FullyQualifiedName(symbol), sourcePath, assembly);
 	}

@@ -6,6 +6,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -100,7 +101,7 @@ public sealed class GetSymbolTool
 		if (reference is null)
 			return MetadataLean(symbol);
 
-		FileLinePositionSpan span = reference.SyntaxTree.GetLineSpan(reference.Span);
+		FileLinePositionSpan span = reference.SyntaxTree.GetDisplaySpan(reference.Span);
 		SourceText text = await reference.SyntaxTree.GetTextAsync(cancellationToken);
 		SyntaxNode node = await reference.GetSyntaxAsync(cancellationToken);
 

@@ -4,6 +4,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -89,7 +90,7 @@ public sealed class FindDefinitionTool
 			return builder.ToString();
 		}
 
-		FileLinePositionSpan span = location.GetLineSpan();
+		FileLinePositionSpan span = location.GetDisplaySpan();
 		if (ProjectName.Of(resolvedSolution, location.SourceTree!) is string project)
 			builder.Header("project", project);
 		builder.Header("path", SolutionRelativePath.Of(solutionDirectory, span.Path)!);

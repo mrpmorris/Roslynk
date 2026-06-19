@@ -4,6 +4,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
@@ -43,7 +44,7 @@ public sealed class GetDiagnosticsTool
 
 		  <project>
 		  \t<relative/forward-slash/folder>
-		  \t\t<file.cs>
+		  \t\t<file.cs|file.razor>
 		  \t\t\t<severity>
 		  \t\t\t\t<id>,<line:col>,<message>
 		where severity is the plural group errors|warnings|infos|hidden and the free-text message is last. Errors are always
@@ -120,8 +121,8 @@ public sealed class GetDiagnosticsTool
 					builder.Line(severityDepth, SeverityLabel(severity.Key));
 
 					IEnumerable<Diagnostic> ordered = severity
-						.OrderBy(diagnostic => diagnostic.Location.GetLineSpan().StartLinePosition.Line)
-						.ThenBy(diagnostic => diagnostic.Location.GetLineSpan().StartLinePosition.Character);
+						.OrderBy(diagnostic => diagnostic.Location.GetDisplaySpan().StartLinePosition.Line)
+						.ThenBy(diagnostic => diagnostic.Location.GetDisplaySpan().StartLinePosition.Character);
 
 					foreach (Diagnostic diagnostic in ordered)
 						builder.Line(severityDepth + 1, EntryText(diagnostic));
@@ -137,7 +138,7 @@ public sealed class GetDiagnosticsTool
 
 	private static string FileOf(Diagnostic diagnostic, string? solutionDirectory) =>
 		diagnostic.Location.IsInSource
-			? SolutionRelativePath.Of(solutionDirectory, diagnostic.Location.GetLineSpan().Path)!
+			? SolutionRelativePath.Of(solutionDirectory, diagnostic.Location.GetDisplaySpan().Path)!
 			: NoLocationBucket;
 
 	private static string SeverityLabel(DiagnosticSeverity severity) =>
@@ -156,7 +157,7 @@ public sealed class GetDiagnosticsTool
 		if (!diagnostic.Location.IsInSource)
 			return $"{diagnostic.Id},{message}";
 
-		FileLinePositionSpan span = diagnostic.Location.GetLineSpan();
+		FileLinePositionSpan span = diagnostic.Location.GetDisplaySpan();
 		int line = span.StartLinePosition.Line + 1;
 		int column = span.StartLinePosition.Character + 1;
 		return $"{diagnostic.Id},{line}:{column},{message}";

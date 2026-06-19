@@ -43,7 +43,7 @@ public sealed class GetCallersTool
 
 		  <project>
 		  \t<relative/forward-slash/folder>
-		  \t\t<file.cs>
+		  \t\t<file.cs|file.razor>
 		  \t\t\t<namespace>
 		  \t\t\t\t<typeKind>,<typeName>
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc>

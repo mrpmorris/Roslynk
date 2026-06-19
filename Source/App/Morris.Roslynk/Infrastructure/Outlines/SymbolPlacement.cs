@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
@@ -39,7 +40,7 @@ public static class SymbolPlacement
 
 		if (location is not null)
 		{
-			FileLinePositionSpan span = location.GetLineSpan();
+			FileLinePositionSpan span = location.GetDisplaySpan();
 			leaf.AddLocation(
 				span.StartLinePosition.Line + 1,
 				span.StartLinePosition.Character + 1,

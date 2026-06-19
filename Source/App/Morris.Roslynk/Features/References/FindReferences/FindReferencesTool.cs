@@ -5,6 +5,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -43,7 +44,7 @@ public sealed class FindReferencesTool
 
 		  <project>
 		  \t<relative/forward-slash/folder>
-		  \t\t<file.cs>
+		  \t\t<file.cs|file.razor>
 		  \t\t\t<namespace, or "<global>">
 		  \t\t\t\t<typeKind>,<typeName>,<loc|loc|...>   (locations present only when the type declaration itself references the symbol)
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc|loc|...>
@@ -102,7 +103,7 @@ public sealed class FindReferencesTool
 					if (!reference.Location.IsInSource)
 						continue;
 
-					FileLinePositionSpan referenceSpan = reference.Location.GetLineSpan();
+					FileLinePositionSpan referenceSpan = reference.Location.GetDisplaySpan();
 					string key = $"{referenceSpan.Path}|{referenceSpan.StartLinePosition}-{referenceSpan.EndLinePosition}";
 					if (seen.Add(key))
 						hits.Add((reference.Location, projectionSymbol.Projection.Solution));
@@ -117,7 +118,7 @@ public sealed class FindReferencesTool
 		foreach ((Location location, Solution locationSolution) in page)
 		{
 			EnclosingPath enclosing = await EnclosingDeclaration.ResolveAsync(locationSolution, location, cancellationToken);
-			FileLinePositionSpan span = location.GetLineSpan();
+			FileLinePositionSpan span = location.GetDisplaySpan();
 
 			SymbolNode fileParent = location.SourceTree is SyntaxTree tree && ProjectName.Of(locationSolution, tree) is string project
 				? root.Child(project)

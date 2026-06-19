@@ -43,7 +43,7 @@ public sealed class FindImplementationsTool
 
 		  <project>
 		  \t<relative/forward-slash/folder>
-		  \t\t<file.cs>
+		  \t\t<file.cs|file.razor>
 		  \t\t\t<namespace>
 		  \t\t\t\t<typeKind>,<typeName>,<loc>
 		{OutlineDescriptions.ListFieldQuoting} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to find implementors; it walks the

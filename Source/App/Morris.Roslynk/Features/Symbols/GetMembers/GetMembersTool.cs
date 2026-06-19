@@ -4,6 +4,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -44,13 +45,13 @@ public sealed class GetMembersTool
 
 		  <project>
 		  \t<relative/forward-slash/folder>
-		  \t\t<file.cs>
+		  \t\t<file.cs|file.razor>
 		  \t\t\t<memberKind>,<name>,<loc>,<paramType|paramType|...>
 		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; the loc is empty for a metadata member; the trailing signature is a pipe-delimited list of minimally-qualified parameter types, present only for methods that take parameters. To read a member's
 		body, resolve its path against the solution folder and read startLine through endLine. Private and
 		inherited members are excluded unless requested; narrow a large type with nameFilter (a trailing '*'
 		matches by prefix, otherwise a case-insensitive substring) and the include* kind toggles.
-		{OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading the .cs file; it is the compiler's view,
+		{OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading the .cs or .razor file; it is the compiler's view,
 		correct across partial classes and (with includeInherited) base types.
 		""")]
 	public async Task<string> GetMembers(
@@ -166,7 +167,7 @@ public sealed class GetMembersTool
 	private static (string? Project, string File, int Order, string Line) Render(ISymbol member, Solution solution, string? solutionDirectory)
 	{
 		SyntaxReference? reference = member.DeclaringSyntaxReferences.FirstOrDefault();
-		FileLinePositionSpan? span = reference?.SyntaxTree.GetLineSpan(reference.Span);
+		FileLinePositionSpan? span = reference?.SyntaxTree.GetDisplaySpan(reference.Span);
 
 		string file = span is { } located
 			? SolutionRelativePath.Of(solutionDirectory, located.Path)!

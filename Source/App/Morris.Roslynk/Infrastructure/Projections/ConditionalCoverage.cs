@@ -2,6 +2,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
+using Morris.Roslynk.Infrastructure.Razor;
 
 namespace Morris.Roslynk.Infrastructure.Projections;
 
@@ -77,7 +78,7 @@ public sealed class ConditionalCoverage
 
 						if (!branches.ContainsKey(key))
 						{
-							FileLinePositionSpan span = trivia.SyntaxTree!.GetLineSpan(trivia.Span);
+							FileLinePositionSpan span = trivia.SyntaxTree!.GetDisplaySpan(trivia.Span);
 							branches[key] = new DeadConditional(
 								path,
 								span.StartLinePosition.Line + 1,
