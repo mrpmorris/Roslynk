@@ -73,13 +73,12 @@ public sealed class SolutionWorkspace : IDisposable
 	{
 		var result = new Dictionary<ProjectId, ProjectModel>();
 
-		Type? projectInstanceType = GetProjectInstanceType();
-		ConstructorInfo? ctor = projectInstanceType?.GetConstructor([
-			typeof(string), typeof(IDictionary<string, string>), typeof(object)]);
-		MethodInfo? getProp = projectInstanceType?.GetMethod("GetPropertyValue", [typeof(string)]);
-
-		if (ctor is null || getProp is null)
+		(Type type, ConstructorInfo ctor, MethodInfo getProp)? found = FindProjectInstanceApi();
+		if (found is null)
 			return result.ToImmutableDictionary();
+
+		var (projectInstanceType, ctor, getProp) = found.Value;
+		int ctorParamCount = ctor.GetParameters().Length;
 
 		foreach (Project project in solution.Projects)
 		{
@@ -90,7 +89,12 @@ public sealed class SolutionWorkspace : IDisposable
 
 			try
 			{
-				object instance = ctor.Invoke([path, workspaceProperties.ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase), null]);
+				IDictionary<string, string> globalProps = workspaceProperties.ToDictionary(
+					kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
+
+				object instance = ctorParamCount == 2
+					? ctor.Invoke([path, globalProps])
+					: ctor.Invoke([path, globalProps, null]);
 
 				foreach (string name in RelevantProperties)
 				{
@@ -109,17 +113,34 @@ public sealed class SolutionWorkspace : IDisposable
 		return result.ToImmutableDictionary();
 	}
 
-	private static Type? GetProjectInstanceType()
+	private static (Type, ConstructorInfo, MethodInfo)? FindProjectInstanceApi()
 	{
-		foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
-		{
-			if (assembly.GetName().Name == "Microsoft.Build")
+		Assembly? buildAssembly = AppDomain.CurrentDomain.GetAssemblies()
+			.FirstOrDefault(a => a.GetName().Name == "Microsoft.Build");
+
+		if (buildAssembly is null) return null;
+
+		Type? type;
+		try { type = buildAssembly.GetType("Microsoft.Build.Execution.ProjectInstance"); }
+		catch { return null; }
+
+		if (type is null) return null;
+
+		MethodInfo? getProp = type.GetMethod("GetPropertyValue", [typeof(string)]);
+		if (getProp is null) return null;
+
+		ConstructorInfo? ctor = type.GetConstructors()
+			.FirstOrDefault(c =>
 			{
-				try { return assembly.GetType("Microsoft.Build.Execution.ProjectInstance"); }
-				catch { }
-			}
-		}
-		return null;
+				ParameterInfo[] p = c.GetParameters();
+				return p.Length >= 2 &&
+					p[0].ParameterType == typeof(string) &&
+					p[1].ParameterType == typeof(IDictionary<string, string>);
+			});
+
+		if (ctor is null) return null;
+
+		return (type, ctor, getProp);
 	}
 
 	private static async Task<Solution> ExpandMultiTargetProjectsAsync(Solution solution, CancellationToken ct)
