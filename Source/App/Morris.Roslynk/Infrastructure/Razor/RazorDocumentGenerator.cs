@@ -16,6 +16,16 @@ namespace Morris.Roslynk.Infrastructure.Razor;
 /// and runs), drive it ourselves, and add the generated sources to the solution as documents so the partials
 /// are in the compilation for every tool. Best-effort: if the generator cannot be loaded or run, the project
 /// is returned unchanged.
+///
+/// Two fallback paths handle projects where the SDK's design-time build never registers the generator DLL as an
+/// analyzer reference (most <c>Microsoft.NET.Sdk.Web</c> projects):
+///
+///   - The DLL is searched for in the dotnet SDK directory via <c>MSBuildLocator</c>.
+///   - Pre-generated <c>.g.cs</c> files from a previous <c>dotnet build</c> are loaded from
+///     <c>obj/{config}/{tfm}/generated/Microsoft.CodeAnalysis.Razor.Compiler/</c>.
+///
+/// When pre-generated files exist on disk they take precedence and the in-process generator is skipped, avoiding
+/// duplicate partial-class definitions in the compilation.
 /// </summary>
 public static class RazorDocumentGenerator
 {
@@ -43,13 +53,20 @@ public static class RazorDocumentGenerator
 
 	private static async Task<Solution> AugmentProjectAsync(Solution solution, Project project, CancellationToken cancellationToken)
 	{
-		bool hasGenerator = TryGetGenerator(project, out IIncrementalGenerator? generator);
-		bool hasRazorInputs = HasRazorInputs(project);
+		string? generatedDir = GetRazorGeneratedDirectory(project);
+		bool hasPreGeneratedFiles = generatedDir is not null && Directory.Exists(generatedDir);
 
-		if (hasGenerator && hasRazorInputs)
-			solution = await RunGeneratorAsync(solution, project, generator!, cancellationToken);
-
-		solution = await AddPreGeneratedFilesAsync(solution, project, cancellationToken);
+		if (hasPreGeneratedFiles)
+		{
+			solution = await AddPreGeneratedFilesAsync(solution, project, generatedDir!, cancellationToken);
+		}
+		else
+		{
+			bool hasGenerator = TryGetGenerator(project, out IIncrementalGenerator? generator);
+			bool hasRazorInputs = HasRazorInputs(project) || HasRazorFilesOnDisk(project);
+			if (hasGenerator && hasRazorInputs)
+				solution = await RunGeneratorAsync(solution, project, generator!, cancellationToken);
+		}
 
 		return solution;
 	}
@@ -95,15 +112,8 @@ public static class RazorDocumentGenerator
 		}
 	}
 
-	private static async Task<Solution> AddPreGeneratedFilesAsync(Solution solution, Project project, CancellationToken cancellationToken)
+	private static async Task<Solution> AddPreGeneratedFilesAsync(Solution solution, Project project, string generatedDir, CancellationToken cancellationToken)
 	{
-		if (project.FilePath is not string projectFilePath || project.OutputFilePath is not string outputFilePath)
-			return solution;
-
-		string? generatedDir = GetRazorGeneratedDirectory(projectFilePath, outputFilePath);
-		if (generatedDir is null || !Directory.Exists(generatedDir))
-			return solution;
-
 		try
 		{
 			foreach (string file in Directory.EnumerateFiles(generatedDir, "*.g.cs", SearchOption.AllDirectories))
@@ -127,8 +137,11 @@ public static class RazorDocumentGenerator
 		return solution;
 	}
 
-	private static string? GetRazorGeneratedDirectory(string projectFilePath, string outputFilePath)
+	private static string? GetRazorGeneratedDirectory(Project project)
 	{
+		if (project.FilePath is not string projectFilePath || project.OutputFilePath is not string outputFilePath)
+			return null;
+
 		string projectDir = System.IO.Path.GetDirectoryName(projectFilePath)!;
 		string? outputDir = System.IO.Path.GetDirectoryName(outputFilePath);
 
@@ -136,21 +149,57 @@ public static class RazorDocumentGenerator
 			return null;
 
 		string relativeOutput = System.IO.Path.GetRelativePath(projectDir, outputDir);
-		string[] parts = relativeOutput.Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar);
+		string[] parts = relativeOutput.Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
 
-		if (parts.Length < 2 || !string.Equals(parts[0], "bin", StringComparison.OrdinalIgnoreCase))
-			return null;
+		if (parts.Length >= 2 && string.Equals(parts[0], "bin", StringComparison.OrdinalIgnoreCase))
+		{
+			string configuration = parts[1];
+			string targetFramework = parts.Length > 2 ? parts[2] : "";
+			string path = System.IO.Path.Combine(projectDir, "obj", configuration, targetFramework, "generated", "Microsoft.CodeAnalysis.Razor.Compiler");
+			if (Directory.Exists(path))
+				return path;
+		}
 
-		string configuration = parts[1];
-		string targetFramework = parts.Length > 2 ? parts[2] : "";
+		if (parts.Length >= 1)
+		{
+			string configuration = parts[0];
+			string path = System.IO.Path.Combine(projectDir, "obj", configuration, "generated", "Microsoft.CodeAnalysis.Razor.Compiler");
+			if (Directory.Exists(path))
+				return path;
+		}
 
-		return System.IO.Path.Combine(projectDir, "obj", configuration, targetFramework, "generated", "Microsoft.CodeAnalysis.Razor.Compiler");
+		string objDir = System.IO.Path.Combine(projectDir, "obj");
+		if (Directory.Exists(objDir))
+		{
+			var candidates = Directory.EnumerateDirectories(objDir, "Microsoft.CodeAnalysis.Razor.Compiler", SearchOption.AllDirectories).ToArray();
+			if (candidates.Length > 0)
+				return System.IO.Path.GetDirectoryName(candidates[0]);
+		}
+
+		return null;
 	}
 
 	private static bool HasRazorInputs(Project project) =>
 		project.AdditionalDocuments.Any(document =>
 			document.FilePath is string path
 			&& (path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase)));
+
+	private static bool HasRazorFilesOnDisk(Project project)
+	{
+		if (project.FilePath is not string projectFilePath)
+			return false;
+
+		string projectDir = System.IO.Path.GetDirectoryName(projectFilePath)!;
+		try
+		{
+			return Directory.EnumerateFiles(projectDir, "*.razor", SearchOption.AllDirectories).Any()
+				|| Directory.EnumerateFiles(projectDir, "*.cshtml", SearchOption.AllDirectories).Any();
+		}
+		catch
+		{
+			return false;
+		}
+	}
 
 	private static bool TryGetGenerator(Project project, out IIncrementalGenerator? generator)
 	{
