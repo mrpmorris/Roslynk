@@ -3,9 +3,10 @@ using Microsoft.CodeAnalysis;
 namespace Morris.Roslynk.Infrastructure.Workspaces;
 
 /// <summary>
-/// Reads a project's target framework. MSBuildWorkspace loads a multi-targeted project as one
-/// <see cref="Project"/> per framework and names them <c>Name(tfm)</c> (e.g. <c>MultiLib(net8.0)</c>);
-/// a single-targeted project has no suffix, so its framework is reported as null.
+/// Reads a project's target framework from its name. <see cref="SolutionWorkspace"/>
+/// expands multi-targeted projects by creating additional <see cref="Project"/> instances
+/// with a <c>Name(tfm)</c> suffix (e.g. <c>MultiLib(net8.0)</c>); a project with no suffix
+/// is either single-target or the default-TFM instance, so its framework is reported as null.
 /// </summary>
 public static class ProjectFramework
 {
