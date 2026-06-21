@@ -42,12 +42,20 @@ public sealed class InstanceRegistry : IDisposable
 	/// <summary>
 	/// Returns the instance for <paramref name="solutionPath"/>, creating it and starting its background
 	/// load if needed, but without awaiting the load; the caller reads <see cref="RoslynInstance.CurrentModel"/>
-	/// and gets <see cref="SolutionStatus.Building"/> until the first snapshot is ready.
+	/// and gets <see cref="SolutionStatus.Building"/> until the first snapshot is ready. A dirty instance, one a
+	/// build-file or additional-document edit invalidated, is rebuilt in the background here: the stale snapshot
+	/// keeps being served as <see cref="SolutionStatus.Building"/> until the fresh one swaps in, so this stays
+	/// non-blocking and the caller's next request sees the reloaded snapshot.
 	/// </summary>
 	public RoslynInstance GetOrBegin(string solutionPath)
 	{
 		SolutionKey key = SolutionKey.For(solutionPath);
 		RoslynInstance instance = GetOrCreate(key);
+
+		// BeginRebuild clears the dirty flag immediately, so concurrent or repeat reads queue at most one reload.
+		if (instance.IsDirty && instance.CurrentModel.Solution is not null)
+			instance.BeginRebuild(progress => SolutionWorkspace.LoadAsync(key.FilePath, progress), AttachWatcher);
+
 		instance.Touch();
 		return instance;
 	}

@@ -45,10 +45,15 @@ public sealed class SolutionFileSync
 	/// <summary>Whether each project file uses default compile globs, so a new .cs can be folded in vs reloaded.</summary>
 	private readonly ConcurrentDictionary<string, bool> UsesDefaultCompileItemsCache = new(StringComparer.OrdinalIgnoreCase);
 
+	/// <summary>The paths that are additional documents (the "C# analyzer additional file" build action) at load,
+	/// so a <c>.cs</c> among them is routed to a reload instead of being folded in as a compiled source file.</summary>
+	private readonly HashSet<string> AdditionalFilePaths;
+
 	public SolutionFileSync(RoslynInstance instance)
 	{
 		Instance = instance ?? throw new ArgumentNullException(nameof(instance));
 		BuildFileBaseline = CaptureBuildFileHashes(instance.CurrentSolution);
+		AdditionalFilePaths = CaptureAdditionalFilePaths(instance.CurrentSolution);
 	}
 
 	/// <summary>
@@ -117,6 +122,17 @@ public sealed class SolutionFileSync
 
 	private async Task OnSourceFileChangedAsync(string path, CancellationToken cancellationToken)
 	{
+		// A .cs file can carry the "C# analyzer additional file" build action, making it an AdditionalDocument
+		// rather than a Document. It must not be folded in as compiled source; a reload re-runs the source
+		// generators that consume it via AnalyzerOptions.AdditionalFiles. (Non-.cs additional files already
+		// reach MarkDirty through the catch-all in OnFileChangedAsync, and a build-action change edits the
+		// .csproj, which is a build file and likewise reloads.)
+		if (AdditionalFilePaths.Contains(path))
+		{
+			Instance.MarkDirty();
+			return;
+		}
+
 		Solution current = Instance.CurrentSolution;
 		bool known = !current.GetDocumentIdsWithFilePath(path).IsEmpty;
 
@@ -331,6 +347,21 @@ public sealed class SolutionFileSync
 		}
 
 		return map;
+	}
+
+	private static HashSet<string> CaptureAdditionalFilePaths(Solution solution)
+	{
+		var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		foreach (Project project in solution.Projects)
+		{
+			foreach (TextDocument document in project.AdditionalDocuments)
+			{
+				if (document.FilePath is not null)
+					paths.Add(document.FilePath);
+			}
+		}
+
+		return paths;
 	}
 
 	private static void TrackAncestorBuildFiles(string startDir, string? stopDir, Action<string?> track)

@@ -165,6 +165,80 @@ public class SolutionFileSyncTests
 
 		Assert.True(instance.IsDirty);
 	}
+
+	[Fact]
+	public async Task WhenACsAnalyzerAdditionalFileIsModified_ThenTheInstanceIsMarkedDirty()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string additional = await AddAnalyzerAdditionalFileAsync(
+			solutionPath, "Extra.cs", "namespace SimpleLibrary; public class Extra { }", removeFromCompile: true);
+
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		await File.WriteAllTextAsync(additional, "namespace SimpleLibrary; public class Extra { /* changed */ }");
+		await subject.OnFileChangedAsync(additional);
+
+		Assert.True(instance.IsDirty);
+	}
+
+	[Fact]
+	public async Task WhenACsFileThatIsBothCompiledAndAnAnalyzerAdditionalFileIsModified_ThenTheInstanceIsMarkedDirty()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string additional = await AddAnalyzerAdditionalFileAsync(
+			solutionPath, "Shared.cs", "namespace SimpleLibrary; public class Shared { }", removeFromCompile: false);
+
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		// The file is an additional document, so its change must reload (re-running the generators that read
+		// it) rather than be folded in as compiled source, even though it is also a compiled document here.
+		await File.WriteAllTextAsync(additional, "namespace SimpleLibrary; public class Shared { /* changed */ }");
+		await subject.OnFileChangedAsync(additional);
+
+		Assert.True(instance.IsDirty);
+	}
+
+	[Fact]
+	public async Task WhenACsAnalyzerAdditionalFileIsDeleted_ThenTheInstanceIsMarkedDirty()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string additional = await AddAnalyzerAdditionalFileAsync(
+			solutionPath, "Extra.cs", "namespace SimpleLibrary; public class Extra { }", removeFromCompile: true);
+
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		File.Delete(additional);
+		await subject.OnFileChangedAsync(additional);
+
+		Assert.True(instance.IsDirty);
+	}
+
+	/// <summary>
+	/// Writes a file into the single project and gives it the "C# analyzer additional file" build action by
+	/// adding an <c>&lt;AdditionalFiles&gt;</c> item, optionally removing it from compilation (the canonical
+	/// build-action change), and returns its full path.
+	/// </summary>
+	private static async Task<string> AddAnalyzerAdditionalFileAsync(string solutionPath, string fileName, string content, bool removeFromCompile)
+	{
+		string projectFile = FindFile(solutionPath, "*.csproj");
+		string projectDir = Path.GetDirectoryName(projectFile)!;
+		string filePath = Path.Combine(projectDir, fileName);
+		await File.WriteAllTextAsync(filePath, content);
+
+		string compileRemove = removeFromCompile ? $"    <Compile Remove=\"{fileName}\" />\n" : "";
+		string itemGroup = $"  <ItemGroup>\n{compileRemove}    <AdditionalFiles Include=\"{fileName}\" />\n  </ItemGroup>\n";
+		string edited = (await File.ReadAllTextAsync(projectFile)).Replace("</Project>", itemGroup + "</Project>");
+		await File.WriteAllTextAsync(projectFile, edited);
+
+		return filePath;
+	}
+
 	private static async Task<string> ReadDocumentTextAsync(Solution solution, string path)
 	{
 		DocumentId id = solution.GetDocumentIdsWithFilePath(path).First();
