@@ -71,9 +71,9 @@ public sealed class FindDeadCodeTool
 		  \t\t<file.cs|file.razor>
 		  \t\t\t<namespace>
 		  \t\t\t\t<typeKind>,<typeName>
-		  \t\t\t\t\t<memberKind>,<memberName>,<loc>,<confidence> <reason>
+		  \t\t\t\t\t<memberKind>,<memberName>,<loc>,<confidence>,<reason>
 		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; confidence is High or
-		Medium, and the free-text reason is last; a dead type is itself a leaf carrying its own loc. The loc is
+		Medium; the free-text reason is the next field; a dead type is itself a leaf carrying its own loc. The loc is
 		the full declaration span, ready to pass to apply_patch to remove the member. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
 		solutions with scope. {OutlineDescriptions.TruncationFlag} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock}
 		""")]
@@ -194,8 +194,8 @@ public sealed class FindDeadCodeTool
 
 		string head = $"{SymbolKindText.Of(symbol)},{OutlineBuilder.Field(symbol.Name)}";
 		string leaf = span is { } range
-			? $"{head},{FormatRange(range)},{confidence} {reason}"
-			: $"{head},{confidence} {reason}";
+			? $"{head},{FormatRange(range)},{confidence},{reason}"
+			: $"{head},{confidence},{reason}";
 
 		return new Candidate(project, file, @namespace, containingTypes, leaf);
 	}
