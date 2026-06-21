@@ -35,6 +35,7 @@ public sealed class FindDeadConditionalsTool
 		typo'd or stale symbol, or intentionally-disabled code. {OutlineDescriptions.TextNotJson} Each condition is
 		evaluated against the configurations the solution actually builds (each project's symbols, and the same
 		set minus DEBUG), across all target frameworks; a branch taken by none is reported, grouped by file:
+		Also use {Morris.Roslynk.Features.DeadCode.FindDeadCode.FindDeadCodeTool.FindDeadCodeName} to find unreferenced symbols.
 		  #deadConditionals=<n>
 
 		  <relative/forward-slash/path.cs>

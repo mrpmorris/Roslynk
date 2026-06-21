@@ -2,7 +2,6 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Features.Conditionals.FindDeadConditionals;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
@@ -63,7 +62,7 @@ public sealed class FindDeadCodeTool
 		to avoid false positives: it excludes interface implementations, virtual/override chains, test members,
 		generated code, and DI/reflection-activated members, and (unless includePublic is true) the public API
 		surface.
-		Also use {FindDeadConditionalsTool.FindDeadConditionalsName}.
+		Also use {Morris.Roslynk.Features.Conditionals.FindDeadConditionals.FindDeadConditionalsTool.FindDeadConditionalsName}.
 		{OutlineDescriptions.TextNotJson} Candidates nest file -> namespace -> type -> member:
 
 		  <project>
