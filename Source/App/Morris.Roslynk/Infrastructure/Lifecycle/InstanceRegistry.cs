@@ -41,11 +41,11 @@ public sealed class InstanceRegistry : IDisposable
 
 	/// <summary>
 	/// Returns the instance for <paramref name="solutionPath"/>, creating it and starting its background
-	/// load if needed, but without awaiting the load; the caller reads <see cref="RoslynInstance.CurrentModel"/>
+	/// load if needed, but without awaiting anything; the caller reads <see cref="RoslynInstance.CurrentModel"/>
 	/// and gets <see cref="SolutionStatus.Building"/> until the first snapshot is ready. A dirty instance, one a
 	/// build-file or additional-document edit invalidated, is rebuilt in the background here: the stale snapshot
-	/// keeps being served as <see cref="SolutionStatus.Building"/> until the fresh one swaps in, so this stays
-	/// non-blocking and the caller's next request sees the reloaded snapshot.
+	/// keeps being served as <see cref="SolutionStatus.Building"/> until the fresh one swaps in. Used for the
+	/// non-blocking open path; data tools use <see cref="GetOrBeginAsync"/> so a single read sees fresh data.
 	/// </summary>
 	public RoslynInstance GetOrBegin(string solutionPath)
 	{
@@ -55,6 +55,24 @@ public sealed class InstanceRegistry : IDisposable
 		// BeginRebuild clears the dirty flag immediately, so concurrent or repeat reads queue at most one reload.
 		if (instance.IsDirty && instance.CurrentModel.Solution is not null)
 			instance.BeginRebuild(progress => SolutionWorkspace.LoadAsync(key.FilePath, progress), AttachWatcher);
+
+		instance.Touch();
+		return instance;
+	}
+
+	/// <summary>
+	/// Returns the instance for <paramref name="solutionPath"/>, creating it if needed, and — when a build-file
+	/// or additional-document edit has left it dirty — rebuilds it from disk and awaits that rebuild, so the
+	/// caller sees the reloaded snapshot in a single read (a <c>.mixin</c> or other source-generator input edit
+	/// is reflected without a second call). Does not block on the very first load: while no snapshot exists yet
+	/// it returns immediately with <see cref="SolutionStatus.Building"/>, preserving the non-blocking open path.
+	/// </summary>
+	public async Task<RoslynInstance> GetOrBeginAsync(string solutionPath)
+	{
+		SolutionKey key = SolutionKey.For(solutionPath);
+		RoslynInstance instance = GetOrCreate(key);
+
+		await instance.EnsureRebuiltAsync(progress => SolutionWorkspace.LoadAsync(key.FilePath, progress), AttachWatcher);
 
 		instance.Touch();
 		return instance;

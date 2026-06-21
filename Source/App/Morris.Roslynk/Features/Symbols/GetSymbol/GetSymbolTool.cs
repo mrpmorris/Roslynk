@@ -57,7 +57,7 @@ public sealed class GetSymbolTool
 		[Description("Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'.")] string symbolName,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);

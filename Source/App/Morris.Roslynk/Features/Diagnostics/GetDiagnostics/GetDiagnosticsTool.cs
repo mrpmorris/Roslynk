@@ -61,7 +61,7 @@ public sealed class GetDiagnosticsTool
 		[Description("Optional target framework (e.g. net8.0) to limit a multi-targeted project to one compilation.")] string? targetFramework = null,
 		[Description("Run the project's analyzers (NetAnalyzers / IDE rules) for a richer result. Default true; set false for a faster compiler-only pass.")] bool includeAnalyzers = true)
 	{
-		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
 
 		if (model.Solution is null)

@@ -31,6 +31,9 @@ public sealed class RoslynInstance : IDisposable
 	private readonly CancellationTokenSource Shutdown = new();
 	private readonly Task Consumer;
 
+	private readonly object RebuildGate = new();
+	private Task RebuildInFlight = Task.CompletedTask;
+
 	public SolutionKey Key { get; }
 
 	public RoslynInstance(SolutionKey key)
@@ -265,10 +268,11 @@ public sealed class RoslynInstance : IDisposable
 	}
 
 	/// <summary>
-	/// Rebuilds the solution in the background after a build-file change. The current snapshot keeps being
-	/// served but is marked <see cref="SolutionStatus.Building"/> so readers know it may be stale; when the
-	/// fresh workspace loads it is swapped in as <see cref="SolutionStatus.Ready"/> and the old one is
-	/// disposed. A failed rebuild flips the model to <see cref="SolutionStatus.Faulted"/>.
+	/// Rebuilds the solution in the background after a build-file or additional-document change. The current
+	/// snapshot keeps being served but is marked <see cref="SolutionStatus.Building"/> so readers know it may
+	/// be stale; when the fresh workspace loads it is swapped in as <see cref="SolutionStatus.Ready"/> and the
+	/// old one is disposed. A failed rebuild flips the model to <see cref="SolutionStatus.Faulted"/>. Does not
+	/// wait; callers that need the rebuilt snapshot in a single read use <see cref="EnsureRebuiltAsync"/>.
 	/// </summary>
 	public void BeginRebuild(Func<IProgress<ProjectLoadProgress>, Task<SolutionWorkspace>> loader, Action<RoslynInstance> onReady)
 	{
@@ -277,6 +281,42 @@ public sealed class RoslynInstance : IDisposable
 		if (onReady is null)
 			throw new ArgumentNullException(nameof(onReady));
 
+		lock (RebuildGate)
+		{
+			if (CurrentModel.Solution is not null)
+				_ = StartRebuildLocked(loader, onReady);
+		}
+	}
+
+	/// <summary>
+	/// Ensures the snapshot reflects the latest on-disk state and completes only once it is
+	/// <see cref="SolutionStatus.Ready"/> (or <see cref="SolutionStatus.Faulted"/>): if the instance is dirty
+	/// a rebuild is started; if a rebuild (started here or by a prior non-blocking <see cref="BeginRebuild"/>)
+	/// is already in flight it is joined; otherwise it completes immediately. Never blocks on the initial load
+	/// (while no snapshot exists yet), so a first read still returns <see cref="SolutionStatus.Building"/>.
+	/// Safe for many concurrent readers: at most one rebuild runs and all awaiters share it.
+	/// </summary>
+	public Task EnsureRebuiltAsync(Func<IProgress<ProjectLoadProgress>, Task<SolutionWorkspace>> loader, Action<RoslynInstance> onReady)
+	{
+		if (loader is null)
+			throw new ArgumentNullException(nameof(loader));
+		if (onReady is null)
+			throw new ArgumentNullException(nameof(onReady));
+
+		lock (RebuildGate)
+		{
+			if (DirtyField && CurrentModel.Solution is not null)
+				return StartRebuildLocked(loader, onReady);
+
+			return RebuildInFlight;
+		}
+	}
+
+	private Task StartRebuildLocked(Func<IProgress<ProjectLoadProgress>, Task<SolutionWorkspace>> loader, Action<RoslynInstance> onReady)
+	{
+		if (!RebuildInFlight.IsCompleted)
+			return RebuildInFlight; // A rebuild is already running; share it rather than starting a second.
+
 		DirtyField = false;
 		BuildNeededField = true;
 		Volatile.Write(ref DiagnosticsCacheField, null);
@@ -284,22 +324,78 @@ public sealed class RoslynInstance : IDisposable
 		Volatile.Write(ref LoadTrackerField, tracker);
 		Swap(SolutionModel.Loading(CurrentModel.Solution));
 
-		_ = Task.Run(async () =>
+		RebuildInFlight = Task.Run(async () =>
 		{
 			try
 			{
 				SolutionWorkspace workspace = await loader(tracker);
-				SolutionWorkspace? previous = Volatile.Read(ref WorkspaceField);
-				Volatile.Write(ref WorkspaceField, workspace);
-				Swap(SolutionModel.Ready(workspace.Solution, workspace.ProjectModels));
-				onReady(this);
-				previous?.Dispose();
+				await PublishRebuildAsync(workspace, onReady);
 			}
 			catch (Exception exception)
 			{
-				Swap(SolutionModel.Faulted(exception.Message));
+				try { await PublishFaultAsync(exception.Message); }
+				catch { /* The instance is shutting down; there is nothing left to publish to. */ }
 			}
 		});
+
+		return RebuildInFlight;
+	}
+
+	/// <summary>
+	/// Publishes a freshly rebuilt workspace as the new <see cref="SolutionStatus.Ready"/> snapshot, ordered on
+	/// the single-consumer write channel so any queued incremental folds drain and apply first and the
+	/// replacement is serialized with them rather than racing their swap (a fold that captured the pre-rebuild
+	/// solution could otherwise clobber the rebuild). The swap runs under the write lock, so a reader sees either
+	/// the old or the rebuilt snapshot, never a torn one; a fold enqueued after this re-reads disk against the
+	/// fresh snapshot.
+	/// </summary>
+	private Task PublishRebuildAsync(SolutionWorkspace workspace, Action<RoslynInstance> onReady)
+	{
+		var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var item = new WorkItem(
+			async () =>
+			{
+				using (await Lock.AcquireWriteAsync(Shutdown.Token))
+				{
+					SolutionWorkspace? previous = Volatile.Read(ref WorkspaceField);
+					Volatile.Write(ref WorkspaceField, workspace);
+					Swap(SolutionModel.Ready(workspace.Solution, workspace.ProjectModels));
+					BuildNeededField = true;
+					Volatile.Write(ref DiagnosticsCacheField, null);
+					onReady(this);
+					previous?.Dispose();
+				}
+				completion.TrySetResult();
+			},
+			exception => completion.TrySetException(exception));
+
+		if (!Work.Writer.TryWrite(item))
+		{
+			workspace.Dispose(); // The instance is disposed; the rebuilt workspace will never be installed.
+			completion.TrySetResult();
+		}
+
+		return completion.Task;
+	}
+
+	/// <summary>Publishes a rebuild failure as a <see cref="SolutionStatus.Faulted"/> snapshot, ordered on the
+	/// write channel like a successful publish so a draining fold cannot mask the fault.</summary>
+	private Task PublishFaultAsync(string message)
+	{
+		var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var item = new WorkItem(
+			async () =>
+			{
+				using (await Lock.AcquireWriteAsync(Shutdown.Token))
+					Swap(SolutionModel.Faulted(message));
+				completion.TrySetResult();
+			},
+			exception => completion.TrySetException(exception));
+
+		if (!Work.Writer.TryWrite(item))
+			completion.TrySetResult();
+
+		return completion.Task;
 	}
 
 	/// <summary>

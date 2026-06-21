@@ -57,7 +57,7 @@ public sealed class ChangeSignatureTool
 		[Description("Optional expression to pass at every call site as a named argument. If omitted, calls use the default.")] string? callSiteArgument = null,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false)
 	{
-		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);

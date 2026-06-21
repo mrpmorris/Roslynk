@@ -48,7 +48,7 @@ public sealed class FindDeadConditionalsTool
 	public async Task<string> FindDeadConditionals(
 		[Description("Solution handle returned by open_solution.")] string solutionId)
 	{
-		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
 
 		if (model.Solution is null)

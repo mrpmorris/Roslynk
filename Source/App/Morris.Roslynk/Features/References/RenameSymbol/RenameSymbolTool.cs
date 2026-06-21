@@ -55,7 +55,7 @@ public sealed class RenameSymbolTool
 		[Description("The new name (must be a valid C# identifier).")] string newName,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false)
 	{
-		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);

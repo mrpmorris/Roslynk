@@ -59,7 +59,7 @@ public sealed class FindReferencesTool
 		[Description("Maximum reference locations to return. Default 100.")] int maxResults = 100,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);

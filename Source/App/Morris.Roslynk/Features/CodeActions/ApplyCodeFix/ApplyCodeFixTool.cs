@@ -50,7 +50,7 @@ public sealed class ApplyCodeFixTool
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = instance.CurrentModel;
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);

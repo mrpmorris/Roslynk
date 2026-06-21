@@ -82,7 +82,7 @@ public sealed class FindDeadCodeTool
 		[Description("Include unreferenced public/protected members (the API surface). Default false.")] bool includePublic = false,
 		[Description("Maximum candidates to return. Default 50.")] int maxResults = 50)
 	{
-		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
 
 		if (model.Solution is null)

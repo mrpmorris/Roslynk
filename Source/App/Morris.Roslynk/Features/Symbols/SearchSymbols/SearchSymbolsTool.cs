@@ -53,7 +53,7 @@ public sealed class SearchSymbolsTool
 		[Description("Substring to match against symbol names (case-insensitive).")] string query,
 		[Description("Maximum results to return. Default 50.")] int maxResults = 50)
 	{
-		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
 
 		if (model.Solution is null)

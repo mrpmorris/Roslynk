@@ -66,7 +66,7 @@ public sealed class GetMembersTool
 		[Description("Include event members. Default true.")] bool includeEvents = true,
 		[Description("Include nested type members. Default true.")] bool includeNestedTypes = true)
 	{
-		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);

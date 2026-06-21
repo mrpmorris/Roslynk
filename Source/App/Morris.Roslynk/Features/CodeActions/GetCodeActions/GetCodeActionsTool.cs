@@ -48,7 +48,7 @@ public sealed class GetCodeActionsTool
 		[Description("Optional 1-based end column for a selection.")] int? endColumn = null,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
 
 		if (model.Solution is null)
