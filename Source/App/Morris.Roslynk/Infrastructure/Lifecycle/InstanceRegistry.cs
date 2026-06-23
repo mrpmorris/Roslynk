@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Watching;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
@@ -113,7 +114,7 @@ public sealed class InstanceRegistry : IDisposable
 
 	private static void AttachWatcher(RoslynInstance instance)
 	{
-		var sync = new SolutionFileSync(instance);
+		var sync = new SolutionFileSync(instance, new DiagnosticsService());
 		instance.AttachWatcher(new SolutionFileWatcher(sync));
 	}
 

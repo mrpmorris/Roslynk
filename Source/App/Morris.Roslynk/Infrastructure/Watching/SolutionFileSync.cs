@@ -1,67 +1,71 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
+using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Infrastructure.Watching;
 
 /// <summary>
-/// The freshness logic for one loaded solution: given a path that changed on disk, decide how to react.
-/// Anything under <c>obj</c>/<c>bin</c> is ignored as build noise. A <c>.cs</c> edit to a known document is
-/// folded into the snapshot incrementally via <see cref="Solution.WithDocumentText"/>; every other change
-/// outside <c>obj</c>/<c>bin</c> (a project / props / sln file, an additional document, or any other watched
-/// file) marks the instance dirty so the registry reloads it on next use. This is a freshness optimization,
-/// not a correctness mechanism; the apply pipeline's stale-write guard is what actually protects the user,
-/// so a missed event only costs a stale read until the next one.
-/// </summary>
-public sealed class SolutionFileSync
-{
-	private static readonly HashSet<string> BuildFileExtensions = new(StringComparer.OrdinalIgnoreCase)
-	{
-		".csproj",
-		".vbproj",
-		".fsproj",
-		".props",
-		".targets",
-		".sln",
-		".slnx",
-	};
-
-	private static readonly string[] AncestorBuildFileNames =
-	[
-		"Directory.Build.props",
-		"Directory.Build.targets",
-		"Directory.Packages.props",
-		".editorconfig",
-	];
-
-	private readonly RoslynInstance Instance;
-
-	/// <summary>The hash of each build file as it was on disk at load, so we can tell a real edit from a touch.</summary>
-	private readonly ConcurrentDictionary<string, string> BuildFileBaseline;
-
-	/// <summary>Whether each project file uses default compile globs, so a new .cs can be folded in vs reloaded.</summary>
-	private readonly ConcurrentDictionary<string, bool> UsesDefaultCompileItemsCache = new(StringComparer.OrdinalIgnoreCase);
-
-	/// <summary>The paths that are additional documents (the "C# analyzer additional file" build action) at load,
-	/// so a <c>.cs</c> among them is routed to a reload instead of being folded in as a compiled source file.</summary>
-	private readonly HashSet<string> AdditionalFilePaths;
-
-	public SolutionFileSync(RoslynInstance instance)
-	{
-		Instance = instance ?? throw new ArgumentNullException(nameof(instance));
-		BuildFileBaseline = CaptureBuildFileHashes(instance.CurrentSolution);
-		AdditionalFilePaths = CaptureAdditionalFilePaths(instance.CurrentSolution);
-	}
-
-	/// <summary>
-	/// The directories to watch: every project directory recursively (for new globbed files), plus the
-	/// distinct out-of-tree directories that host a linked document or an ancestor build file, watched
-	/// shallowly. Recomputed by the caller after each reload, since a project edit can change the set.
+	/// The freshness logic for one loaded solution: given a path that changed on disk, decide how to react.
+	/// Anything under <c>obj</c>/<c>bin</c> is ignored as build noise. A <c>.cs</c> edit to a known document is
+	/// folded into the snapshot incrementally via <see cref="Solution.WithDocumentText"/>; every other change
+	/// outside <c>obj</c>/<c>bin</c> (a project / props / sln file, an additional document, or any other watched
+	/// file) marks the instance dirty so the registry reloads it on next use. This is a freshness optimization,
+	/// not a correctness mechanism; the apply pipeline's stale-write guard is what actually protects the user,
+	/// so a missed event only costs a stale read until the next one.
 	/// </summary>
-	public IReadOnlyList<WatchTarget> WatchTargets()
+	public sealed class SolutionFileSync
+	{
+		private static readonly HashSet<string> BuildFileExtensions = new(StringComparer.OrdinalIgnoreCase)
+		{
+			".csproj",
+			".vbproj",
+			".fsproj",
+			".props",
+			".targets",
+			".sln",
+			".slnx",
+		};
+
+		private static readonly string[] AncestorBuildFileNames =
+		[
+			"Directory.Build.props",
+			"Directory.Build.targets",
+			"Directory.Packages.props",
+			".editorconfig",
+		];
+
+		private readonly RoslynInstance Instance;
+		private readonly DiagnosticsService DiagnosticsService;
+
+		/// <summary>The hash of each build file as it was on disk at load, so we can tell a real edit from a touch.</summary>
+		private readonly ConcurrentDictionary<string, string> BuildFileBaseline;
+
+		/// <summary>Whether each project file uses default compile globs, so a new .cs can be folded in vs reloaded.</summary>
+		private readonly ConcurrentDictionary<string, bool> UsesDefaultCompileItemsCache = new(StringComparer.OrdinalIgnoreCase);
+
+		/// <summary>The paths that are additional documents (the "C# analyzer additional file" build action) at load,
+		/// so a <c>.cs</c> among them is routed to a reload instead of being folded in as a compiled source file.</summary>
+		private readonly HashSet<string> AdditionalFilePaths;
+
+public SolutionFileSync(RoslynInstance instance, DiagnosticsService? diagnosticsService = null)
+		{
+			Instance = instance ?? throw new ArgumentNullException(nameof(instance));
+			DiagnosticsService = diagnosticsService ?? new DiagnosticsService();
+			BuildFileBaseline = CaptureBuildFileHashes(instance.CurrentSolution);
+			AdditionalFilePaths = CaptureAdditionalFilePaths(instance.CurrentSolution);
+		}
+
+		/// <summary>
+		/// The directories to watch: every project directory recursively (for new globbed files), plus the
+		/// distinct out-of-tree directories that host a linked document or an ancestor build file, watched
+		/// shallowly. Recomputed by the caller after each reload, since a project edit can change the set.
+		/// </summary>
+		public IReadOnlyList<WatchTarget> WatchTargets()
 	{
 		Solution solution = Instance.CurrentSolution;
 
@@ -181,18 +185,21 @@ public sealed class SolutionFileSync
 		if (string.Equals(loaded, diskText, StringComparison.Ordinal))
 			return; // Our own write, an editor touch, or a save with identical bytes.
 
-		await Instance.EnqueueWriteAsync((current, token) =>
-		{
-			SourceText newText = SourceText.From(diskText);
-			Solution updated = current;
-			foreach (DocumentId id in current.GetDocumentIdsWithFilePath(path))
+		await Instance.EnqueueWriteWithAutoDiagnosticsAsync(
+			(current, token) =>
 			{
-				if (updated.GetDocument(id) is not null)
-					updated = updated.WithDocumentText(id, newText);
-			}
+				SourceText newText = SourceText.From(diskText);
+				Solution updated = current;
+				foreach (DocumentId id in current.GetDocumentIdsWithFilePath(path))
+				{
+					if (updated.GetDocument(id) is not null)
+						updated = updated.WithDocumentText(id, newText);
+				}
 
-			return Task.FromResult(new WriteResult(updated, []));
-		}, cancellationToken);
+				return Task.FromResult(new WriteResult(updated, []));
+			},
+			async (solution, token) => await DiagnosticsService.GetAllDiagnosticsAsync(solution, targetFramework: null, includeAnalyzers: false, token),
+			cancellationToken);
 	}
 
 	private async Task FoldRemoveAsync(string path, CancellationToken cancellationToken)

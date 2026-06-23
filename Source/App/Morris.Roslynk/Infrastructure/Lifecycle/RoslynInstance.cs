@@ -121,6 +121,34 @@ public sealed class RoslynInstance : IDisposable
 	}
 
 	/// <summary>
+	/// Enqueues a write and automatically triggers background diagnostics computation after the write completes.
+	/// This provides Visual Studio-like behavior where editing a file immediately updates diagnostics in the background.
+	/// </summary>
+	public async Task<IReadOnlyList<string>> EnqueueWriteWithAutoDiagnosticsAsync(Func<Solution, CancellationToken, Task<WriteResult>> transform, Func<Solution, CancellationToken, Task<IReadOnlyList<Diagnostic>>> diagnosticsCompute, CancellationToken cancellationToken = default)
+	{
+		if (transform is null)
+			throw new ArgumentNullException(nameof(transform));
+		if (diagnosticsCompute is null)
+			throw new ArgumentNullException(nameof(diagnosticsCompute));
+
+		IReadOnlyList<string> changedPaths = await EnqueueWriteAsync(transform, cancellationToken);
+
+		_ = Task.Run(async () =>
+		{
+			try
+			{
+				await RequestDiagnosticsAsync("auto", diagnosticsCompute, cancellationToken);
+			}
+			catch
+			{
+				// Background diagnostics failed silently diagnostics will be recomputed on next explicit request
+			}
+		});
+
+		return changedPaths;
+	}
+
+	/// <summary>
 	/// Enqueues a diagnostics build. Ordered after pending writes (so they drain first); returns a cached
 	/// result when nothing changed since the last build with the same <paramref name="cacheKey"/>. The compile
 	/// runs without holding the read side, so other reads continue on the uncompiled snapshot meanwhile.
