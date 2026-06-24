@@ -13,4 +13,10 @@ public static class ActivityTags
 	/// <summary>Returns <paramref name="value"/> capped at <see cref="MaxValueLength"/> characters.</summary>
 	public static string? Truncate(string? value) =>
 		value is null || value.Length <= MaxValueLength ? value : value[..MaxValueLength];
+
+	public const string SolutionPathTag = "roslynk.solution.path";
+	public const string ProjectCountTag = "roslynk.project.count";
+	public const string TargetFrameworkTag = "roslynk.target.framework";
+	public const string ConfigurationTag = "roslynk.configuration";
+	public const string ResultTag = "roslynk.result";
 }

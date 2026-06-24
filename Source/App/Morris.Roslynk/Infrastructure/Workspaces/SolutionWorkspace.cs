@@ -44,24 +44,85 @@ public sealed class SolutionWorkspace : IDisposable
 		if (solutionPath is null)
 			throw new ArgumentNullException(nameof(solutionPath));
 
-		MsBuildRegistrar.EnsureRegistered();
-
 		var loadDiagnostics = new ConcurrentBag<string>();
-		MSBuildWorkspace workspace = MSBuildWorkspace.Create();
 
-		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("load_solution"))
+		using (Activity? loadActivity = RoslynkActivitySource.Instance.StartActivity("load_solution"))
 		{
-			activity?.SetTag("roslynk.solution.path", ActivityTags.Truncate(solutionPath));
+			loadActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
+
+			using (Activity? msbuildActivity = RoslynkActivitySource.Instance.StartActivity("msbuild_register"))
+			{
+				MsBuildRegistrar.EnsureRegistered();
+			}
+
+			MSBuildWorkspace workspace = MSBuildWorkspace.Create();
+			Solution solution;
 
 			using (workspace.RegisterWorkspaceFailedHandler(e => loadDiagnostics.Add(e.Diagnostic.Message)))
 			{
-				Solution solution = await workspace.OpenSolutionAsync(solutionPath, progress, cancellationToken);
+				using (Activity? openActivity = RoslynkActivitySource.Instance.StartActivity("open_solution_async"))
+				{
+					openActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
 
-				ImmutableDictionary<ProjectId, ProjectModel> immutableModels = CaptureProjectProperties(solution, workspace.Properties);
+					var projectSpans = new Dictionary<string, Activity>();
+					Stopwatch loadSw = Stopwatch.StartNew();
+					TimeSpan previousElapsed = TimeSpan.Zero;
 
-				solution = await RazorDocumentGenerator.AugmentAsync(solution, immutableModels, cancellationToken);
-				solution = await ExpandMultiTargetProjectsAsync(solution, cancellationToken);
-				activity?.SetTag("roslynk.project.count", solution.Projects.Count());
+					var trackingProgress = new Progress<ProjectLoadProgress>(p =>
+					{
+						string key = string.Concat(p.FilePath, "|", p.TargetFramework ?? "");
+						TimeSpan currentElapsed = p.ElapsedTime;
+						double durationSeconds = (currentElapsed - previousElapsed).TotalSeconds;
+						previousElapsed = currentElapsed;
+
+						if (projectSpans.TryGetValue(key, out Activity? prev))
+						{
+							prev.SetEndTime(loadSw.Elapsed);
+							prev.Dispose();
+						}
+
+						Activity projectActivity = RoslynkActivitySource.Instance.StartActivity("project_loaded", ActivityKind.Internal, new ActivityContext(Activity.Current?.TraceId ?? default, Activity.Current?.SpanId ?? default, ActivityTraceFlags.None))!;
+						projectActivity.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(p.FilePath));
+						projectActivity.SetTag(ActivityTags.TargetFrameworkTag, p.TargetFramework ?? "");
+						projectActivity.SetTag("roslynk.load.elapsed", currentElapsed.TotalSeconds);
+						projectActivity.SetTag("roslynk.load.duration", durationSeconds);
+						projectSpans[key] = projectActivity;
+
+						progress?.Report(p);
+					});
+
+					solution = await workspace.OpenSolutionAsync(solutionPath, trackingProgress, cancellationToken);
+
+					foreach (Activity a in projectSpans.Values)
+					{
+						a.SetEndTime(loadSw.Elapsed);
+						a.Dispose();
+					}
+
+					openActivity?.SetTag(ActivityTags.ProjectCountTag, solution.Projects.Count());
+				}
+
+				ImmutableDictionary<ProjectId, ProjectModel> immutableModels;
+				using (Activity? propsActivity = RoslynkActivitySource.Instance.StartActivity("capture_project_properties"))
+				{
+					propsActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
+					immutableModels = CaptureProjectProperties(solution, workspace.Properties);
+					propsActivity?.SetTag(ActivityTags.ProjectCountTag, immutableModels.Count);
+				}
+
+				using (Activity? razorActivity = RoslynkActivitySource.Instance.StartActivity("razor_augment"))
+				{
+					razorActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
+					solution = await RazorDocumentGenerator.AugmentAsync(solution, immutableModels, cancellationToken);
+				}
+
+				using (Activity? mttActivity = RoslynkActivitySource.Instance.StartActivity("expand_multi_target"))
+				{
+					mttActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
+					solution = await ExpandMultiTargetProjectsAsync(solution, cancellationToken);
+				}
+
+				loadActivity?.SetTag(ActivityTags.ProjectCountTag, solution.Projects.Count());
 				return new SolutionWorkspace(workspace, solution, immutableModels, loadDiagnostics.ToArray());
 			}
 		}
@@ -160,40 +221,50 @@ public sealed class SolutionWorkspace : IDisposable
 				if (string.Equals(tfm, activeTfm, StringComparison.OrdinalIgnoreCase))
 					continue;
 
-				var properties = new Dictionary<string, string>
+				using (Activity? tfmActivity = RoslynkActivitySource.Instance.StartActivity("expand_tfm"))
 				{
-					["TargetFramework"] = tfm
-				};
+					tfmActivity?.SetTag(ActivityTags.TargetFrameworkTag, tfm);
+					tfmActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(project.FilePath));
 
-				using MSBuildWorkspace subWorkspace = MSBuildWorkspace.Create(properties);
-				Project subProject = await subWorkspace.OpenProjectAsync(project.FilePath, cancellationToken: ct);
+					var properties = new Dictionary<string, string>
+					{
+						["TargetFramework"] = tfm
+					};
 
-				ProjectId newProjectId = ProjectId.CreateNewId();
-				ProjectInfo projectInfo = ProjectInfo.Create(
-					newProjectId,
-					VersionStamp.Create(),
-					$"{project.Name}({tfm})",
-					subProject.AssemblyName,
-					subProject.Language,
-					filePath: subProject.FilePath,
-					outputFilePath: subProject.OutputFilePath,
-					compilationOptions: subProject.CompilationOptions,
-					parseOptions: subProject.ParseOptions,
-					metadataReferences: subProject.MetadataReferences,
-					projectReferences: [],
-					analyzerReferences: subProject.AnalyzerReferences);
+					using MSBuildWorkspace subWorkspace = MSBuildWorkspace.Create(properties);
+					Project subProject = await subWorkspace.OpenProjectAsync(project.FilePath, cancellationToken: ct);
 
-				solution = solution.AddProject(projectInfo);
+					ProjectId newProjectId = ProjectId.CreateNewId();
+					ProjectInfo projectInfo = ProjectInfo.Create(
+						newProjectId,
+						VersionStamp.Create(),
+						$"{project.Name}({tfm})",
+						subProject.AssemblyName,
+						subProject.Language,
+						filePath: subProject.FilePath,
+						outputFilePath: subProject.OutputFilePath,
+						compilationOptions: subProject.CompilationOptions,
+						parseOptions: subProject.ParseOptions,
+						metadataReferences: subProject.MetadataReferences,
+						projectReferences: [],
+						analyzerReferences: subProject.AnalyzerReferences);
 
-				foreach (Document doc in subProject.Documents)
-				{
-					SourceText text = await doc.GetTextAsync(ct);
-					solution = solution.AddDocument(
-						DocumentId.CreateNewId(newProjectId),
-						doc.Name,
-						text,
-						doc.Folders,
-						doc.FilePath);
+					solution = solution.AddProject(projectInfo);
+
+					int docCount = 0;
+					foreach (Document doc in subProject.Documents)
+					{
+						SourceText text = await doc.GetTextAsync(ct);
+						solution = solution.AddDocument(
+							DocumentId.CreateNewId(newProjectId),
+							doc.Name,
+							text,
+							doc.Folders,
+							doc.FilePath);
+						docCount++;
+					}
+
+					tfmActivity?.SetTag(ActivityTags.ProjectCountTag, docCount);
 				}
 			}
 		}

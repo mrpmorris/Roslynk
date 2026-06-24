@@ -1,6 +1,8 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
+using Morris.Roslynk.Infrastructure.Observability;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.Lifecycle;
@@ -275,13 +277,23 @@ public sealed class RoslynInstance : IDisposable
 
 		_ = Task.Run(async () =>
 		{
+			Stopwatch sw = Stopwatch.StartNew();
+			bool success = false;
 			try
 			{
-				SolutionWorkspace workspace = await loader(tracker);
-				Volatile.Write(ref WorkspaceField, workspace);
-				BuildNeededField = true;
-				Volatile.Write(ref DiagnosticsCacheField, null);
-				Swap(SolutionModel.Ready(workspace.Solution, workspace.ProjectModels));
+				using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("begin_initial_load"))
+				{
+					activity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(Key.FilePath));
+
+					SolutionWorkspace workspace = await loader(tracker);
+					Volatile.Write(ref WorkspaceField, workspace);
+					BuildNeededField = true;
+					Volatile.Write(ref DiagnosticsCacheField, null);
+					Swap(SolutionModel.Ready(workspace.Solution, workspace.ProjectModels));
+					activity?.SetTag(ActivityTags.ProjectCountTag, workspace.Solution.Projects.Count());
+				}
+
+				success = true;
 				onReady(this);
 			}
 			catch (Exception exception)
@@ -290,6 +302,8 @@ public sealed class RoslynInstance : IDisposable
 			}
 			finally
 			{
+				sw.Stop();
+				RoslynkMeter.RecordLoadDuration(Key.FilePath, sw.Elapsed, success);
 				ReadySignal.TrySetResult();
 			}
 		});
