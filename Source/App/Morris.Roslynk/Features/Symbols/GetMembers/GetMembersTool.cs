@@ -58,7 +58,6 @@ public sealed class GetMembersTool
 	public async Task<string> GetMembers(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the type, e.g. 'MyNamespace.MyType'.")] string typeName,
-		[Description("Include private members. Default false.")] bool includePrivate = false,
 		[Description("Include members inherited from base types. Default false.")] bool includeInherited = false,
 		[Description("Optional case-insensitive filter on member name: a trailing '*' matches by prefix (e.g. 'Search*'), otherwise it is a substring match. Default null (no name filtering).")] string? nameFilter = null,
 		[Description("Include method members. Default true.")] bool includeMethods = true,
@@ -127,7 +126,6 @@ public sealed class GetMembersTool
 		{
 			foreach (ISymbol member in Collect(typeInstance, includeInherited)
 				.Where(member => !member.IsImplicitlyDeclared)
-				.Where(member => includePrivate || member.DeclaredAccessibility != Accessibility.Private)
 				.Where(KindIncluded)
 				.Where(member => NameMatches(member.Name)))
 			{
