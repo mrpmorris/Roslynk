@@ -8,14 +8,22 @@ namespace Morris.Roslynk.Infrastructure.Writing;
 /// </summary>
 public static class AtomicFileWriter
 {
+	/// <summary>The suffix of the temp sibling a write is staged to before the swap. Staging files live
+	/// next to the target inside watched directories, so the file watcher must treat this suffix (and
+	/// <see cref="BackupFileSuffix"/>) as the server's own write activity, never a user edit.</summary>
+	public const string TempFileSuffix = ".roslynk.tmp";
+
+	/// <summary>The suffix of the backup sibling the previous content is parked at during the swap.</summary>
+	public const string BackupFileSuffix = ".roslynk.bak";
+
 	public static async Task WriteAllAsync(IReadOnlyList<PendingWrite> writes, CancellationToken cancellationToken = default)
 	{
 		var staged = new List<StagedFile>();
 		foreach (PendingWrite write in writes)
 		{
-			string tempPath = write.FilePath + ".roslynk.tmp";
+			string tempPath = write.FilePath + TempFileSuffix;
 			await File.WriteAllTextAsync(tempPath, write.Text, cancellationToken);
-			staged.Add(new StagedFile(write.FilePath, tempPath, write.FilePath + ".roslynk.bak"));
+			staged.Add(new StagedFile(write.FilePath, tempPath, write.FilePath + BackupFileSuffix));
 		}
 
 		Commit(staged);

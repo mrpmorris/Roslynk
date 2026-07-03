@@ -1,6 +1,8 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Watching;
+using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Watching;
 
@@ -107,6 +109,95 @@ public class SolutionFileSyncTests
 
 		Assert.False(instance.IsDirty);
 		Assert.Same(before, instance.CurrentSolution);
+	}
+
+	[Fact]
+	public async Task WhenTheServersOwnStagingFileEventsArrive_ThenTheyAreIgnored()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+		Solution before = instance.CurrentSolution;
+
+		// A staging temp still on disk (the event raced the commit) and a backup already cleaned up
+		// (the usual case: the debounced flush runs after the swap deleted it) must both be ignored.
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		string stagedTemp = greeter + ".roslynk.tmp";
+		await File.WriteAllTextAsync(stagedTemp, "// staged content");
+
+		await subject.OnFileChangedAsync(stagedTemp);
+		await subject.OnFileChangedAsync(greeter + ".roslynk.bak");
+
+		Assert.False(instance.IsDirty);
+		Assert.Same(before, instance.CurrentSolution);
+	}
+
+	[Fact]
+	public async Task WhenApplyPipelineWritesADocument_ThenTheResultingWatcherEventsDoNotMarkTheInstanceDirty()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		await ApplyEditThroughPipelineAsync(instance, greeter, "// applied through the pipeline");
+		Solution afterApply = instance.CurrentSolution;
+
+		// Replay the events a committed atomic write raises: the staging siblings and the target itself.
+		await subject.OnFileChangedAsync(greeter + ".roslynk.tmp");
+		await subject.OnFileChangedAsync(greeter + ".roslynk.bak");
+		await subject.OnFileChangedAsync(greeter);
+
+		Assert.False(instance.IsDirty);
+		Assert.Same(afterApply, instance.CurrentSolution);
+	}
+
+	[Fact]
+	public async Task WhenAnExternalEditFollowsAnApplyPipelineWrite_ThenTheInstanceIsStillMarkedDirty()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		await ApplyEditThroughPipelineAsync(instance, greeter, "// applied through the pipeline");
+		await subject.OnFileChangedAsync(greeter + ".roslynk.tmp");
+		await subject.OnFileChangedAsync(greeter + ".roslynk.bak");
+		await subject.OnFileChangedAsync(greeter);
+		Assert.False(instance.IsDirty);
+
+		string projectFile = FindFile(solutionPath, "*.csproj");
+		string edited = (await File.ReadAllTextAsync(projectFile)).Replace("</Project>", "  <!-- external edit -->\n</Project>");
+		await File.WriteAllTextAsync(projectFile, edited);
+
+		await subject.OnFileChangedAsync(projectFile);
+
+		Assert.True(instance.IsDirty);
+	}
+
+	[Fact]
+	public async Task WhenAnExternalSourceEditFollowsAnApplyPipelineWrite_ThenItIsStillFoldedIn()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		await ApplyEditThroughPipelineAsync(instance, greeter, "// applied through the pipeline");
+		await subject.OnFileChangedAsync(greeter);
+
+		string external = (await File.ReadAllTextAsync(greeter)) + "\n// external edit\n";
+		await File.WriteAllTextAsync(greeter, external);
+
+		await subject.OnFileChangedAsync(greeter);
+
+		Assert.False(instance.IsDirty);
+		string snapshotText = await ReadDocumentTextAsync(instance.CurrentSolution, greeter);
+		Assert.Contains("external edit", snapshotText);
 	}
 
 	[Fact]
@@ -237,6 +328,22 @@ public class SolutionFileSyncTests
 		await File.WriteAllTextAsync(projectFile, edited);
 
 		return filePath;
+	}
+
+	/// <summary>Appends a comment to the document via <see cref="ApplyPipeline"/>, the same route every
+	/// mutating tool uses, so disk carries the atomic-writer artifacts and the snapshot is already advanced.</summary>
+	private static async Task ApplyEditThroughPipelineAsync(RoslynInstance instance, string filePath, string appendedComment)
+	{
+		Solution solution = instance.CurrentSolution;
+		Solution updated = solution;
+		foreach (DocumentId id in solution.GetDocumentIdsWithFilePath(filePath))
+		{
+			Document document = updated.GetDocument(id)!;
+			string text = (await document.GetTextAsync()).ToString();
+			updated = updated.WithDocumentText(id, SourceText.From(text + "\n" + appendedComment + "\n"));
+		}
+
+		await new ApplyPipeline().ApplyAsync(instance, updated);
 	}
 
 	private static async Task<string> ReadDocumentTextAsync(Solution solution, string path)

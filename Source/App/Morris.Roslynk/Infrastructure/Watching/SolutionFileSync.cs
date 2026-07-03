@@ -11,12 +11,16 @@ namespace Morris.Roslynk.Infrastructure.Watching;
 
 /// <summary>
 	/// The freshness logic for one loaded solution: given a path that changed on disk, decide how to react.
-	/// Anything under <c>obj</c>/<c>bin</c> is ignored as build noise. A <c>.cs</c> edit to a known document is
-	/// folded into the snapshot incrementally via <see cref="Solution.WithDocumentText"/>; every other change
-	/// outside <c>obj</c>/<c>bin</c> (a project / props / sln file, an additional document, or any other watched
-	/// file) marks the instance dirty so the registry reloads it on next use. This is a freshness optimization,
-	/// not a correctness mechanism; the apply pipeline's stale-write guard is what actually protects the user,
-	/// so a missed event only costs a stale read until the next one.
+	/// Anything under <c>obj</c>/<c>bin</c> is ignored as build noise, as are the staging siblings
+	/// <see cref="AtomicFileWriter"/> creates during the server's own writes (they land inside watched source
+	/// directories, so without this every applied edit would dirty the instance and force a full reload; the
+	/// rewritten target file itself is harmless because its fold compares content and finds the snapshot
+	/// already matches). A <c>.cs</c> edit to a known document is folded into the snapshot incrementally via
+	/// <see cref="Solution.WithDocumentText"/>; every other change outside <c>obj</c>/<c>bin</c> (a project /
+	/// props / sln file, an additional document, or any other watched file) marks the instance dirty so the
+	/// registry reloads it on next use. This is a freshness optimization, not a correctness mechanism; the
+	/// apply pipeline's stale-write guard is what actually protects the user, so a missed event only costs a
+	/// stale read until the next one.
 	/// </summary>
 	public sealed class SolutionFileSync
 	{
@@ -395,6 +399,9 @@ public SolutionFileSync(RoslynInstance instance, DiagnosticsService? diagnostics
 
 	private static bool IsIgnored(string path)
 	{
+		if (IsAtomicWriteArtifact(path))
+			return true;
+
 		foreach (string segment in path.Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar))
 		{
 			if (segment.Equals("obj", StringComparison.OrdinalIgnoreCase) || segment.Equals("bin", StringComparison.OrdinalIgnoreCase))
@@ -403,6 +410,13 @@ public SolutionFileSync(RoslynInstance instance, DiagnosticsService? diagnostics
 
 		return false;
 	}
+
+	/// <summary>A staging sibling of an <see cref="AtomicFileWriter"/> commit: the server's own write
+	/// activity, never a user edit. Suppressed here rather than in the watcher so every event route
+	/// (including a direct call) agrees.</summary>
+	private static bool IsAtomicWriteArtifact(string path) =>
+		path.EndsWith(AtomicFileWriter.TempFileSuffix, StringComparison.OrdinalIgnoreCase)
+		|| path.EndsWith(AtomicFileWriter.BackupFileSuffix, StringComparison.OrdinalIgnoreCase);
 
 	private static bool IsUnder(string child, string ancestor) =>
 		string.Equals(child, ancestor, StringComparison.OrdinalIgnoreCase)
