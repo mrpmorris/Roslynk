@@ -31,9 +31,34 @@ dotnet build Source/Morris.Roslynk.slnx
 dotnet test  Source/Morris.Roslynk.slnx
 ```
 
-## Run (Linux / WSL / macOS)
+## Connect an MCP client (all platforms)
 
-Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download) on `PATH`.
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download) on `PATH`. The `stdio` verb is a
+self-launching bridge: the MCP client spawns it, it starts the shared HTTP daemon on
+`localhost:6502` if one isn't already running, and pipes the session through. Nothing to launch or
+babysit by hand.
+
+From the published NuGet package (no clone, no build):
+
+```bash
+claude mcp add roslynk -- dnx Roslynk --yes -- stdio
+```
+
+From a source checkout:
+
+```bash
+claude mcp add roslynk -- dotnet run --project /path/to/Roslynk/Source/App/Morris.Roslynk.Mcp -- stdio
+```
+
+(With a published build, use `Morris.Roslynk.Mcp stdio` as the command instead — it starts faster.)
+
+The daemon outlives individual sessions so Roslyn workspaces stay warm across clients. Its console
+output goes to `Roslynk/daemon.log` under the local application-data folder (`~/.local/share` on
+Linux, `~/Library/Application Support` on macOS, `%LOCALAPPDATA%` on Windows).
+
+## Run the daemon manually (Linux / WSL / macOS)
+
+For a foreground daemon with visible logs:
 
 ```bash
 ./installer/run.sh
