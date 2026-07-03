@@ -37,8 +37,9 @@ public sealed class FindImplementationsTool
 	[Description(
 		$"""
 		Finds the implementations or overrides of an interface, interface member, or abstract member, resolved
-		by fully-qualified name. {OutlineDescriptions.TextNotJson} Implementors are grouped file -> namespace,
-		each as '<typeKind>,<typeName>,<loc>' where {OutlineDescriptions.Loc}:
+		by fully-qualified name.
+		{OutlineDescriptions.CommonMethodInstructions}
+		Implementors are grouped file -> namespace, each as '<typeKind>,<typeName>,<loc>' where {OutlineDescriptions.Loc}:
 		  #resolvedSymbol=<fully-qualified name>
 
 		  <project>

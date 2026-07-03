@@ -36,7 +36,8 @@ public sealed class GetCallersTool
 		OpenWorld = false)]
 	[Description(
 		$"""
-		Finds the methods that call the resolved method (by fully-qualified name). {OutlineDescriptions.TextNotJson}
+		Finds the methods that call the resolved method (by fully-qualified name).
+		{OutlineDescriptions.CommonMethodInstructions}
 		Callers are grouped file -> namespace -> containing type -> calling member, each leaf showing the
 		caller's declaration location:
 		  #resolvedSymbol=<fully-qualified name>

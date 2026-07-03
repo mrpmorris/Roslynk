@@ -33,11 +33,23 @@ internal static class OutlineDescriptions
 		"a type or member name that itself contains a comma (a generic type with several type arguments, e.g. "
 		+ "Dictionary<string, int>) is wrapped in single quotes so the comma is not read as a field separator";
 
-	/// <summary>The common output preamble: a text block, not JSON.</summary>
-	public const string TextNotJson =
+	/// <summary>
+	/// The freshness contract: results are a point-in-time snapshot of a solution that is edited live, so a
+	/// prior response may already be stale. Interpolated into every tool's description — directly, or via
+	/// <see cref="CommonMethodInstructions"/> for the outline-shaped tools.
+	/// </summary>
+	public const string Freshness =
+		"Results reflect the solution's state at the moment of the call. The solution is edited live, so a "
+		+ "prior response may be out of date; always re-query rather than reuse an earlier result.";
+
+	/// <summary>
+	/// The common preamble for outline-shaped tools: the output shape (a text block, not JSON) plus the
+	/// freshness contract.
+	/// </summary>
+	public const string CommonMethodInstructions =
 		"Returns a compact text outline, not JSON: '#'-prefixed header lines, a blank line, then a "
 		+ "tab-indented body. Newlines are '\\n'; booleans are Y or N. A #status header is present only when the solution is not "
-		+ "Ready (Building or Faulted); its absence means Ready.";
+		+ "Ready (Building or Faulted); its absence means Ready. " + Freshness;
 
 	/// <summary>How a capped (paginated) result announces that it dropped rows, when the total is known.</summary>
 	public const string Truncation =

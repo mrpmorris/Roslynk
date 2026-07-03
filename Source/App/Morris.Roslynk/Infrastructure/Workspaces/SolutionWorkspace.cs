@@ -65,8 +65,9 @@ public sealed class SolutionWorkspace : IDisposable
 					openActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
 
 					var projectSpans = new Dictionary<string, Activity>();
-					Stopwatch loadSw = Stopwatch.StartNew();
-					TimeSpan previousElapsed = TimeSpan.Zero;
+					var loadStart = DateTime.UtcNow;
+					var loadSw = Stopwatch.StartNew();
+					var previousElapsed = TimeSpan.Zero;
 
 					var trackingProgress = new Progress<ProjectLoadProgress>(p =>
 					{
@@ -77,7 +78,7 @@ public sealed class SolutionWorkspace : IDisposable
 
 						if (projectSpans.TryGetValue(key, out Activity? prev))
 						{
-							prev.SetEndTime(loadSw.Elapsed);
+							prev.SetEndTime(loadStart + loadSw.Elapsed);
 							prev.Dispose();
 						}
 
@@ -95,7 +96,7 @@ public sealed class SolutionWorkspace : IDisposable
 
 					foreach (Activity a in projectSpans.Values)
 					{
-						a.SetEndTime(loadSw.Elapsed);
+						a.SetEndTime(loadStart + loadSw.Elapsed);
 						a.Dispose();
 					}
 
@@ -226,8 +227,7 @@ public sealed class SolutionWorkspace : IDisposable
 					tfmActivity?.SetTag(ActivityTags.TargetFrameworkTag, tfm);
 					tfmActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(project.FilePath));
 
-					var properties = new Dictionary<string, string>
-					{
+					var properties = new Dictionary<string, string> {
 						["TargetFramework"] = tfm
 					};
 

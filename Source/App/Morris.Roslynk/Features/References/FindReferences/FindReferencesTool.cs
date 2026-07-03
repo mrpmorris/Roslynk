@@ -38,8 +38,9 @@ public sealed class FindReferencesTool
 	[Description(
 		$"""
 		Finds all references to a symbol across the solution, resolved by fully-qualified name (e.g.
-		'Namespace.Type' or 'Namespace.Type.Member'). {OutlineDescriptions.TextNotJson} The body groups every
-		reference under file -> namespace -> type(s) -> member, so a shared declaration is printed once:
+		'Namespace.Type' or 'Namespace.Type.Member').
+		{OutlineDescriptions.CommonMethodInstructions}
+		The body groups every reference under file -> namespace -> type(s) -> member, so a shared declaration is printed once:
 		  #resolvedSymbol=<fully-qualified name>
 
 		  <project>

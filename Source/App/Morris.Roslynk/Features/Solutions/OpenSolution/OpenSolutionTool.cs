@@ -28,14 +28,14 @@ public sealed class OpenSolutionTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		"""
+		$"""
 		Loads a C# solution (.sln or .slnx) into Roslynk so its projects and code can be queried. Returns a
 		compact text result, not JSON: a '#solutionId', '#status', '#projects', '#loadDiagnostics'
 		header, a blank line, then one '<projectPath>,<documentCount>' line per project. Returns immediately:
 		the solution loads in the background, so status is Building (and the body empty) until it is Ready; poll
 		get_solution_status every 1 second and report project-loading progress, or call open_solution again.
 		Idempotent: opening the same solution again returns the same instance. A load failure is returned as a
-		Faulted #error.
+		Faulted #error. {OutlineDescriptions.Freshness}
 		""")]
 	public string OpenSolution(
 		[Description("Absolute path to the .sln or .slnx file to open.")] string solutionPath)

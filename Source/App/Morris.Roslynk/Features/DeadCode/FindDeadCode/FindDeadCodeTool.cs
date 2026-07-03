@@ -63,8 +63,8 @@ public sealed class FindDeadCodeTool
 		generated code, and DI/reflection-activated members, and (unless includePublic is true) the public API
 		surface.
 		Also use {Morris.Roslynk.Features.Conditionals.FindDeadConditionals.FindDeadConditionalsTool.FindDeadConditionalsName}.
-		{OutlineDescriptions.TextNotJson} Candidates nest file -> namespace -> type -> member:
-
+		{OutlineDescriptions.CommonMethodInstructions}
+		Candidates nest file -> namespace -> type -> member:
 		  <project>
 		  \t<relative/forward-slash/folder>
 		  \t\t<file.cs|file.razor>

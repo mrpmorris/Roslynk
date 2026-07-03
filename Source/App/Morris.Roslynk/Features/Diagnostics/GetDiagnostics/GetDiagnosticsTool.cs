@@ -35,8 +35,9 @@ public sealed class GetDiagnosticsTool
 		OpenWorld = false)]
 	[Description(
 		$"""
-		Returns diagnostics for an opened solution. {OutlineDescriptions.TextNotJson} Per-severity counts are
-		always in the header so filtering is never silent; diagnostics nest file -> severity:
+		Returns diagnostics for an opened solution.
+		{OutlineDescriptions.CommonMethodInstructions}
+		Per-severity counts are always in the header so filtering is never silent; diagnostics nest file -> severity:
 		  #errors=<n>
 		  #warnings=<n>
 		  #infos=<n>

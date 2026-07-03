@@ -36,8 +36,10 @@ public sealed class GetTypeHierarchyTool
 	[Description(
 		$"""
 		Returns a type's base-type chain, implemented interfaces, and known derived types, resolved by
-		fully-qualified name. {OutlineDescriptions.TextNotJson} The body has up to three sections (base,
-		interfaces, derived); an empty section is omitted, and each entry is a '<typeKind>,<fully-qualified name>':
+		fully-qualified name.
+		{OutlineDescriptions.CommonMethodInstructions}
+		The body has up to three sections (base, interfaces, derived); an empty section is omitted, and
+		each entry is a '<typeKind>,<fully-qualified name>':
 		  #resolvedType=<fully-qualified type>
 
 		  base
