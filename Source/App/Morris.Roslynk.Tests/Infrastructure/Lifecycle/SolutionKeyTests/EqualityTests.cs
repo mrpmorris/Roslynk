@@ -5,13 +5,19 @@ namespace Morris.Roslynk.Tests.Infrastructure.Lifecycle.SolutionKeyTests;
 public class EqualityTests
 {
 	[Fact]
-	public void WhenPathsDifferOnlyInCase_ThenKeysAreEqual()
+	public void WhenPathsDifferOnlyInCase_ThenEqualityFollowsThePlatformCasePolicy()
 	{
-		SolutionKey first = SolutionKey.For(@"C:\Solutions\App\App.slnx");
-		SolutionKey second = SolutionKey.For(@"C:\solutions\app\APP.SLNX");
+		string firstPath = OperatingSystem.IsWindows() ? @"C:\Solutions\App\App.slnx" : "/Solutions/App/App.slnx";
+		string secondPath = OperatingSystem.IsWindows() ? @"C:\solutions\app\APP.SLNX" : "/solutions/app/APP.SLNX";
 
-		Assert.Equal(first, second);
-		Assert.Equal(first.GetHashCode(), second.GetHashCode());
+		SolutionKey first = SolutionKey.For(firstPath);
+		SolutionKey second = SolutionKey.For(secondPath);
+
+		bool expectEqual = OperatingSystem.IsWindows() || OperatingSystem.IsMacOS();
+
+		Assert.Equal(expectEqual, first.Equals(second));
+		if (expectEqual)
+			Assert.Equal(first.GetHashCode(), second.GetHashCode());
 	}
 
 	[Fact]

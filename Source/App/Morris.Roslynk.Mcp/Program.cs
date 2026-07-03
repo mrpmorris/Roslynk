@@ -6,6 +6,8 @@ using Morris.Roslynk.Mcp.Observability;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
+// Safe on every OS: AddWindowsService only takes effect when the process is launched by the
+// Windows Service Control Manager; otherwise it registers nothing.
 builder.Services.AddWindowsService(options => options.ServiceName = "Roslynk");
 
 builder.AddLoopbackOnlyKestrel();
