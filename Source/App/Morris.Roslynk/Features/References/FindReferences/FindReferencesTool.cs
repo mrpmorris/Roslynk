@@ -41,7 +41,7 @@ public sealed class FindReferencesTool
 		'Namespace.Type' or 'Namespace.Type.Member').
 		{OutlineDescriptions.CommonMethodInstructions}
 		The body groups every reference under file -> namespace -> type(s) -> member, so a shared declaration is printed once:
-		  #resolvedSymbol=<fully-qualified name>
+		  resolvedSymbol=<fully-qualified name>
 
 		  <project>
 		  \t<relative/forward-slash/folder>

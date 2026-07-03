@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Callers.GetCallers;
+﻿using Morris.Roslynk.Features.Callers.GetCallers;
 using Morris.Roslynk.Features.Symbols.FindDefinition;
 using Morris.Roslynk.Features.Symbols.FindImplementations;
 using Morris.Roslynk.Features.Symbols.GetMembers;
@@ -87,7 +87,7 @@ public class ConditionalBranchCoverageTests
 
 		string result = await subject.GetSymbol(TestSolutions.Conditional, "ConditionalLib.ReleaseWidget");
 
-		Assert.DoesNotContain("#error=NotFound", result);
+		Assert.DoesNotContain("error=NotFound", result);
 		Assert.Contains("ReleaseWidget", result);
 	}
 
@@ -103,6 +103,6 @@ public class ConditionalBranchCoverageTests
 		// Line 10 is the #else 'return new Target();'; column 15 lands inside 'Target'.
 		string result = await subject.FindDefinition(TestSolutions.Conditional, navigation, 10, 15);
 
-		Assert.Contains("#fullName=ConditionalLib.Target", result);
+		Assert.Contains("fullName=ConditionalLib.Target", result);
 	}
 }

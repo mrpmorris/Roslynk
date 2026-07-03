@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Usings.RemoveUnusedUsings;
+﻿using Morris.Roslynk.Features.Usings.RemoveUnusedUsings;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Writing;
 
@@ -19,8 +19,8 @@ public class RemoveUnusedUsingsTests
 
 		string result = await subject.RemoveUnusedUsings(solutionPath);
 
-		Assert.Contains("#applied=Y", result);
-		Assert.DoesNotContain("#removedCount=0", result);
+		Assert.Contains("applied=Y", result);
+		Assert.DoesNotContain("removedCount=0", result);
 		Assert.DoesNotContain("using System.Text;", await File.ReadAllTextAsync(greeter));
 	}
 
@@ -38,7 +38,7 @@ public class RemoveUnusedUsingsTests
 
 		string result = await subject.RemoveUnusedUsings(solutionPath, documentPath: null, checkOnly: true);
 
-		Assert.Contains("#applied=N", result);
+		Assert.Contains("applied=N", result);
 		Assert.Contains("Greeter.cs", result);
 		Assert.Equal(withUnused, await File.ReadAllTextAsync(greeter));
 	}
@@ -52,8 +52,8 @@ public class RemoveUnusedUsingsTests
 
 		string result = await subject.RemoveUnusedUsings(TestSolutions.Simple);
 
-		Assert.Contains("#applied=N", result);
-		Assert.Contains("#removedCount=0", result);
+		Assert.Contains("applied=N", result);
+		Assert.Contains("removedCount=0", result);
 	}
 
 	[Fact]
@@ -64,8 +64,8 @@ public class RemoveUnusedUsingsTests
 
 		string result = await subject.RemoveUnusedUsings(TestSolutions.Simple);
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

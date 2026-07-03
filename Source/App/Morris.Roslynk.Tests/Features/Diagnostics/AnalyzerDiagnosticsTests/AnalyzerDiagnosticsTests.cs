@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
+﻿using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 
@@ -16,7 +16,7 @@ public class AnalyzerDiagnosticsTests
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Simple, includeWarnings: true, includeInfo: true, includeHidden: true, includeAnalyzers: true);
 
-		Assert.DoesNotContain("#error=", result);
+		Assert.DoesNotContain("error=", result);
 		Assert.Contains(DiagnosticIds(result), id => !id.StartsWith("CS", StringComparison.Ordinal));
 	}
 
@@ -30,7 +30,7 @@ public class AnalyzerDiagnosticsTests
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Simple, includeWarnings: true, includeInfo: true, includeHidden: true, includeAnalyzers: false);
 
-		Assert.DoesNotContain("#error=", result);
+		Assert.DoesNotContain("error=", result);
 		Assert.All(DiagnosticIds(result), id => Assert.StartsWith("CS", id));
 	}
 
@@ -42,8 +42,8 @@ public class AnalyzerDiagnosticsTests
 
 		string result = await subject.GetDiagnostics(TestSolutions.Simple);
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

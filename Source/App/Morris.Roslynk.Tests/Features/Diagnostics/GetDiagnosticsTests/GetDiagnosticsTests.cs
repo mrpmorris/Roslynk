@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
+﻿using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 
@@ -15,8 +15,8 @@ public class GetDiagnosticsTests
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken);
 
-		Assert.DoesNotContain("#error=", result);
-		Assert.DoesNotContain("#errors=0", result);
+		Assert.DoesNotContain("error=", result);
+		Assert.DoesNotContain("errors=0", result);
 		Assert.Contains(result.Split('\n'), line => line == "BrokenLibrary");
 		Assert.Contains("\terrors\n", result);
 		Assert.Contains("CS0029,9:27,", result);
@@ -32,7 +32,7 @@ public class GetDiagnosticsTests
 		string result = await subject.GetDiagnostics(TestSolutions.Broken);
 
 		// Counts are always in the header; body only shows errors.
-		Assert.Contains("#warnings=0", result);
+		Assert.Contains("warnings=0", result);
 		Assert.DoesNotContain("\twarnings", result);
 	}
 
@@ -46,7 +46,7 @@ public class GetDiagnosticsTests
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeWarnings: true);
 
 		// The fixture has zero warnings, so only errors appear in the body.
-		Assert.Contains("#warnings=0", result);
+		Assert.Contains("warnings=0", result);
 		Assert.Contains("\terrors\n", result);
 	}
 
@@ -58,8 +58,8 @@ public class GetDiagnosticsTests
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken);
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Broken);
 	}

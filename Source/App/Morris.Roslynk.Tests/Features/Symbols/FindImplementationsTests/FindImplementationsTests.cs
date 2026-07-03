@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Symbols.FindImplementations;
+﻿using Morris.Roslynk.Features.Symbols.FindImplementations;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -16,8 +16,8 @@ public class FindImplementationsTests
 
 		string result = await subject.FindImplementations(TestSolutions.Simple, "SimpleLibrary.IGreeter");
 
-		Assert.Contains("#resolvedSymbol=SimpleLibrary.IGreeter", result);
-		Assert.DoesNotContain("#error=", result);
+		Assert.Contains("resolvedSymbol=SimpleLibrary.IGreeter", result);
+		Assert.DoesNotContain("error=", result);
 		Assert.Contains("\tSimpleLibrary\n", result);
 		Assert.Contains("class,Greeter,", result);
 	}
@@ -30,8 +30,8 @@ public class FindImplementationsTests
 
 		string result = await subject.FindImplementations(TestSolutions.Simple, "SimpleLibrary.IGreeter");
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

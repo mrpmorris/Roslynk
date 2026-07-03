@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
+﻿using Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
 using Morris.Roslynk.Features.CodeActions.GetCodeActions;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -21,7 +21,7 @@ public class ApplyCodeActionTests
 
 		string result = await subject.ApplyCodeAction(solutionPath, actionId);
 
-		Assert.Contains("#applied=Y", result);
+		Assert.Contains("applied=Y", result);
 		Assert.DoesNotContain("int unused", await File.ReadAllTextAsync(greeter));
 	}
 
@@ -38,7 +38,7 @@ public class ApplyCodeActionTests
 
 		string result = await subject.ApplyCodeAction(solutionPath, actionId, checkOnly: true);
 
-		Assert.Contains("#applied=N", result);
+		Assert.Contains("applied=N", result);
 		Assert.Equal(before, await File.ReadAllTextAsync(greeter));
 	}
 
@@ -51,7 +51,7 @@ public class ApplyCodeActionTests
 
 		string result = await subject.ApplyCodeAction(TestSolutions.Simple, "not-a-valid-id");
 
-		Assert.Contains("#error=Invalid", result);
+		Assert.Contains("error=Invalid", result);
 	}
 
 	[Fact]
@@ -62,8 +62,8 @@ public class ApplyCodeActionTests
 
 		string result = await subject.ApplyCodeAction(TestSolutions.Simple, "anything");
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

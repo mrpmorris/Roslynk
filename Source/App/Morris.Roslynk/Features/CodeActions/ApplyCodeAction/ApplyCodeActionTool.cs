@@ -36,7 +36,7 @@ public sealed class ApplyCodeActionTool
 	[Description(
 		$"""
 		Applies a code action discovered by get_code_actions, identified by its actionId. Returns a text
-		result, not JSON: '#applied', '#action', '#status' header, a blank line, then one
+		result, not JSON: 'applied', 'action', 'status' header, a blank line, then one
 		solution-relative changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} The action is re-resolved at the same position (nothing is
 		held between calls), then written atomically through the same safe write path as the other tools. Pass
 		checkOnly to preview the changed files without writing. Prefer applying Roslyn's action over

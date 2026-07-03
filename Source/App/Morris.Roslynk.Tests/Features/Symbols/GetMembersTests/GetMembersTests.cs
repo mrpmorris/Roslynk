@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Symbols.GetMembers;
+﻿using Morris.Roslynk.Features.Symbols.GetMembers;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -12,8 +12,8 @@ public class GetMembersTests
 	{
 		string result = await RunAsync("SimpleLibrary.Greeter");
 
-		Assert.Contains("#resolvedType=SimpleLibrary.Greeter", result);
-		Assert.DoesNotContain("#error=", result);
+		Assert.Contains("resolvedType=SimpleLibrary.Greeter", result);
+		Assert.DoesNotContain("error=", result);
 		Assert.Contains("method,Greet", result);
 	}
 
@@ -22,7 +22,7 @@ public class GetMembersTests
 	{
 		string result = await RunAsync("System.String");
 
-		Assert.Contains("#resolvedType=System.String", result);
+		Assert.Contains("resolvedType=System.String", result);
 		Assert.Contains("<metadata>", result);
 		Assert.Contains("method,Substring", result);
 	}
@@ -35,8 +35,8 @@ public class GetMembersTests
 
 		string result = await subject.GetMembers(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

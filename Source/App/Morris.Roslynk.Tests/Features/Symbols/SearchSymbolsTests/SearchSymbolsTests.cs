@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Symbols.SearchSymbols;
+﻿using Morris.Roslynk.Features.Symbols.SearchSymbols;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 
@@ -15,7 +15,7 @@ public class SearchSymbolsTests
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet");
 
-		Assert.DoesNotContain("#error=", result);
+		Assert.DoesNotContain("error=", result);
 		Assert.Contains("\tSimpleLibrary\n", result);
 		Assert.Contains("class,Greeter", result);
 	}
@@ -40,8 +40,8 @@ public class SearchSymbolsTests
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet");
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

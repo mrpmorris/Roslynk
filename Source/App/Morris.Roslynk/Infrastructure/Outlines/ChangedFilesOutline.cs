@@ -6,7 +6,7 @@ namespace Morris.Roslynk.Infrastructure.Outlines;
 /// <summary>
 /// Writes the body shared by the write tools (rename, change_signature, remove_unused_usings, apply_code_*):
 /// the blank separator then the changed files, de-duplicated and sorted, each nested under its owning project
-/// file (name.ext). The caller writes the '#applied' and tool-specific headers first; this only renders the
+/// file (name.ext). The caller writes the 'applied' and tool-specific headers first; this only renders the
 /// grouped file list.
 /// </summary>
 public static class ChangedFilesOutline

@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Conditionals.FindDeadConditionals;
+﻿using Morris.Roslynk.Features.Conditionals.FindDeadConditionals;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 
@@ -16,7 +16,7 @@ public class FindDeadConditionalsTests
 		string result = await subject.FindDeadConditionals(TestSolutions.Conditional);
 
 		Assert.Contains("NEVERDEFINED", result);
-		Assert.Contains("#deadConditionals=1", result);
+		Assert.Contains("deadConditionals=1", result);
 	}
 
 	[Fact]

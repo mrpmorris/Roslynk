@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Symbols.FindDefinition;
+﻿using Morris.Roslynk.Features.Symbols.FindDefinition;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -20,12 +20,12 @@ public class FindDefinitionTests
 
 		string result = await subject.FindDefinition(TestSolutions.Simple, callerPath, line, column);
 
-		Assert.DoesNotContain("#error=", result);
-		Assert.Contains("#fullName=SimpleLibrary.Greeter", result);
-		Assert.Contains("#project=SimpleLibrary\n", result);
-		Assert.Contains("#path=", result);
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("fullName=SimpleLibrary.Greeter", result);
+		Assert.Contains("project=SimpleLibrary\n", result);
+		Assert.Contains("path=", result);
 		Assert.Contains("Greeter.cs", result);
-		Assert.Contains("#loc=", result);
+		Assert.Contains("loc=", result);
 	}
 
 	[Fact]
@@ -43,7 +43,7 @@ public class FindDefinitionTests
 
 		string result = await subject.FindDefinition(TestSolutions.Simple, relativePath, line, column);
 
-		Assert.DoesNotContain("#error=", result);
+		Assert.DoesNotContain("error=", result);
 		Assert.Contains("Greeter", result);
 	}
 
@@ -57,8 +57,8 @@ public class FindDefinitionTests
 
 		string result = await subject.FindDefinition(TestSolutions.Simple, callerPath, 1, 1);
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

@@ -32,13 +32,13 @@ public sealed class ApplyPatchTool
 	[Description(
 		$"""
 		Applies a git unified diff to solution-compiled .cs files, located by content (not line numbers) and
-		written atomically. Returns a header-only text result, not JSON: '#applied=<Y|N>' (and '#status' only when not Ready)
+		written atomically. Returns a header-only text result, not JSON: 'applied=<Y|N>' (and 'status' only when not Ready)
 		on success (applied is N for a checkOnly preview). {OutlineDescriptions.Freshness} Prefer this over the host's raw file
 		edit for .cs so the in-memory model stays in sync. Hunk headers may omit line numbers (a bare '@@'); a
 		content-anchored hunk must match exactly one place, so include enough surrounding context that it is
 		unambiguous. Edits existing files only; creation/deletion and non-.cs targets are rejected as
-		'#error=NotSupported' with '#rejected=<path>' lines. Pass baseVersions (the documentVersion each file
-		was read at) to be told if a file moved since (returned as '#error=Stale' with '#stale=<path>' lines);
+		'error=NotSupported' with 'rejected=<path>' lines. Pass baseVersions (the documentVersion each file
+		was read at) to be told if a file moved since (returned as 'error=Stale' with 'stale=<path>' lines);
 		pass checkOnly to validate without writing.
 		""")]
 	public async Task<string> ApplyPatch(

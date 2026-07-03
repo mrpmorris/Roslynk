@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Morris.Roslynk.Features.DeadCode.FindDeadCode;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 
@@ -11,7 +11,7 @@ public class FindDeadCodeTests
 	{
 		string result = await RunAsync();
 
-		Assert.DoesNotContain("#error=", result);
+		Assert.DoesNotContain("error=", result);
 		Assert.Contains("SimpleLibrary.Widget.Unused", DeadLeaves(result));
 		// The leaf carries the declaration range then the confidence: 'method,Unused,<loc>,High ...'.
 		Assert.Matches(new Regex(@"method,Unused,\d+:\d+-\d+:\d+,High"), result);
@@ -71,8 +71,8 @@ public class FindDeadCodeTests
 
 		string result = await subject.FindDeadCode(TestSolutions.Simple);
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

@@ -42,7 +42,7 @@ public sealed class GetMembersTool
 		fully-qualified name.
 		{OutlineDescriptions.CommonMethodInstructions}
 		Members are grouped by the file that declares them (or '<metadata>' for a referenced assembly), each as:
-		  #resolvedType=<fully-qualified type>
+		  resolvedType=<fully-qualified type>
 
 		  <project>
 		  \t<relative/forward-slash/folder>

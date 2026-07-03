@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Morris.Roslynk.Features.Patching.ApplyPatch;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 
@@ -22,7 +22,7 @@ public class ApplyPatchTests
 
 		string result = await subject.ApplyPatch(solutionPath, patch);
 
-		Assert.Contains("#applied=Y", result);
+		Assert.Contains("applied=Y", result);
 		Assert.Contains("// patched", await File.ReadAllTextAsync(greeter));
 		Assert.Contains("// patched", await ReadSnapshotTextAsync(instance, greeter));
 	}
@@ -41,7 +41,7 @@ public class ApplyPatchTests
 
 		string result = await subject.ApplyPatch(solutionPath, patch, baseVersions: null, checkOnly: true);
 
-		Assert.Contains("#applied=N", result);
+		Assert.Contains("applied=N", result);
 		Assert.Equal(original, await File.ReadAllTextAsync(greeter));
 	}
 
@@ -60,8 +60,8 @@ public class ApplyPatchTests
 
 		string result = await subject.ApplyPatch(solutionPath, patch, staleVersions);
 
-		Assert.Contains("#error=Stale", result);
-		Assert.Contains("#stale=", result);
+		Assert.Contains("error=Stale", result);
+		Assert.Contains("stale=", result);
 		Assert.Equal(original, await File.ReadAllTextAsync(greeter));
 	}
 
@@ -77,8 +77,8 @@ public class ApplyPatchTests
 
 		string result = await subject.ApplyPatch(solutionPath, patch);
 
-		Assert.Contains("#error=NotSupported", result);
-		Assert.Contains("#rejected=", result);
+		Assert.Contains("error=NotSupported", result);
+		Assert.Contains("rejected=", result);
 	}
 
 	[Fact]
@@ -100,7 +100,7 @@ public class ApplyPatchTests
 
 		string result = await subject.ApplyPatch(solutionPath, patch);
 
-		Assert.Contains("#error=Conflict", result);
+		Assert.Contains("error=Conflict", result);
 		Assert.Equal(original, await File.ReadAllTextAsync(greeter));
 	}
 
@@ -114,8 +114,8 @@ public class ApplyPatchTests
 			TestSolutions.Simple,
 			$"--- a/{GreeterRelativePath}\n+++ b/{GreeterRelativePath}\n@@ -1,1 +1,1 @@\n-a\n+b\n");
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
@@ -134,7 +134,7 @@ public class ApplyPatchTests
 
 		string result = await subject.ApplyPatch(solutionPath, patch);
 
-		Assert.Contains("#applied=Y", result);
+		Assert.Contains("applied=Y", result);
 		Assert.Contains("// patched", await File.ReadAllTextAsync(greeter));
 	}
 
@@ -152,7 +152,7 @@ public class ApplyPatchTests
 
 		string result = await subject.ApplyPatch(solutionPath, patch);
 
-		Assert.Contains("#error=Invalid", result);
+		Assert.Contains("error=Invalid", result);
 		Assert.Equal(original, await File.ReadAllTextAsync(greeter));
 	}
 

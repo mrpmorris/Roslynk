@@ -38,10 +38,10 @@ public sealed class GetDiagnosticsTool
 		Returns diagnostics for an opened solution.
 		{OutlineDescriptions.CommonMethodInstructions}
 		Per-severity counts are always in the header so filtering is never silent; diagnostics nest file -> severity:
-		  #errors=<n>
-		  #warnings=<n>
-		  #infos=<n>
-		  #hidden=<n>
+		  errors=<n>
+		  warnings=<n>
+		  infos=<n>
+		  hidden=<n>
 
 		  <project>
 		  \t<relative/forward-slash/folder>

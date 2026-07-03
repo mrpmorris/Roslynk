@@ -82,12 +82,17 @@ public sealed class SolutionWorkspace : IDisposable
 							prev.Dispose();
 						}
 
-						Activity projectActivity = RoslynkActivitySource.Instance.StartActivity("project_loaded", ActivityKind.Internal, new ActivityContext(Activity.Current?.TraceId ?? default, Activity.Current?.SpanId ?? default, ActivityTraceFlags.None))!;
-						projectActivity.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(p.FilePath));
-						projectActivity.SetTag(ActivityTags.TargetFrameworkTag, p.TargetFramework ?? "");
-						projectActivity.SetTag("roslynk.load.elapsed", currentElapsed.TotalSeconds);
-						projectActivity.SetTag("roslynk.load.duration", durationSeconds);
-						projectSpans[key] = projectActivity;
+						// StartActivity returns null when no ActivityListener is sampling (e.g. no OTEL exporter
+						// wired up, as in tests); skip the span in that case rather than dereferencing null.
+						Activity? projectActivity = RoslynkActivitySource.Instance.StartActivity("project_loaded", ActivityKind.Internal, new ActivityContext(Activity.Current?.TraceId ?? default, Activity.Current?.SpanId ?? default, ActivityTraceFlags.None));
+						if (projectActivity is not null)
+						{
+							projectActivity.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(p.FilePath));
+							projectActivity.SetTag(ActivityTags.TargetFrameworkTag, p.TargetFramework ?? "");
+							projectActivity.SetTag("roslynk.load.elapsed", currentElapsed.TotalSeconds);
+							projectActivity.SetTag("roslynk.load.duration", durationSeconds);
+							projectSpans[key] = projectActivity;
+						}
 
 						progress?.Report(p);
 					});

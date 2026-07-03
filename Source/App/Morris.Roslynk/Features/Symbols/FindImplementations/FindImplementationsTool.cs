@@ -40,7 +40,7 @@ public sealed class FindImplementationsTool
 		by fully-qualified name.
 		{OutlineDescriptions.CommonMethodInstructions}
 		Implementors are grouped file -> namespace, each as '<typeKind>,<typeName>,<loc>' where {OutlineDescriptions.Loc}:
-		  #resolvedSymbol=<fully-qualified name>
+		  resolvedSymbol=<fully-qualified name>
 
 		  <project>
 		  \t<relative/forward-slash/folder>

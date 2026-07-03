@@ -4,9 +4,9 @@ using Morris.Roslynk.Infrastructure.Results;
 namespace Morris.Roslynk.Infrastructure.Outlines;
 
 /// <summary>
-/// The one failure shape shared by every tool: a header-only block of '#error', '#errorMessage' (newline
-/// sanitized), zero or more repeatable '#candidate' (name suggestions or ambiguous matches) and '#stale'
-/// (files that moved on disk), then '#status'. Tools call this instead of hand-writing the error path, so
+/// The one failure shape shared by every tool: a header-only block of 'error', 'errorMessage' (newline
+/// sanitized), zero or more repeatable 'candidate' (name suggestions or ambiguous matches) and 'stale'
+/// (files that moved on disk), then 'status'. Tools call this instead of hand-writing the error path, so
 /// the format never drifts between them.
 /// </summary>
 public static class OutlineError

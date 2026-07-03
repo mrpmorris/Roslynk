@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using Morris.Roslynk.Features.References.RenameSymbol;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
@@ -20,7 +20,7 @@ public class ConditionalRenameTests
 
 		string result = await subject.RenameSymbol(scratch, "ConditionalLib.Target.Ping", "Pong");
 
-		Assert.Contains("#applied=Y", result);
+		Assert.Contains("applied=Y", result);
 
 		string caller = await File.ReadAllTextAsync(Path.Combine(Path.GetDirectoryName(scratch)!, "ConditionalLib", "Caller.cs"));
 		// Single-projection rename would leave the #else call as 'Ping' (1 occurrence); multi-projection rewrites both.

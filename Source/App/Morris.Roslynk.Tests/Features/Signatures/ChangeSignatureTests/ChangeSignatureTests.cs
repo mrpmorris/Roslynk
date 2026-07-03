@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Signatures.ChangeSignature;
+﻿using Morris.Roslynk.Features.Signatures.ChangeSignature;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Writing;
@@ -18,8 +18,8 @@ public class ChangeSignatureTests
 		string result = await subject.ChangeSignature(
 			solutionPath, "SimpleLibrary.Widget.Compute", "int", "factor", "1", callSiteArgument: "1");
 
-		Assert.Contains("#applied=Y", result);
-		Assert.Contains("#updatedCallSites=1", result);
+		Assert.Contains("applied=Y", result);
+		Assert.Contains("updatedCallSites=1", result);
 		string text = await File.ReadAllTextAsync(FindFile(solutionPath, "Widget.cs"));
 		Assert.Contains("int factor = 1", text);
 		Assert.Contains("factor: 1", text);
@@ -38,7 +38,7 @@ public class ChangeSignatureTests
 		string result = await subject.ChangeSignature(
 			solutionPath, "SimpleLibrary.Widget.Compute", "int", "factor", "1", callSiteArgument: "1", checkOnly: true);
 
-		Assert.Contains("#applied=N", result);
+		Assert.Contains("applied=N", result);
 		Assert.Contains("Widget.cs", result);
 		Assert.Equal(before, await File.ReadAllTextAsync(widget));
 	}
@@ -53,7 +53,7 @@ public class ChangeSignatureTests
 		string result = await subject.ChangeSignature(
 			TestSolutions.Simple, "SimpleLibrary.Greeter.Greet", "int", "times", "1");
 
-		Assert.Contains("#error=NotSupported", result);
+		Assert.Contains("error=NotSupported", result);
 		Assert.Contains("interface", result, StringComparison.OrdinalIgnoreCase);
 	}
 
@@ -67,7 +67,7 @@ public class ChangeSignatureTests
 		string result = await subject.ChangeSignature(
 			TestSolutions.Simple, "SimpleLibrary.Widget.Compute", "int", "factor", "");
 
-		Assert.Contains("#error=Invalid", result);
+		Assert.Contains("error=Invalid", result);
 		Assert.Contains("default", result, StringComparison.OrdinalIgnoreCase);
 	}
 
@@ -81,7 +81,7 @@ public class ChangeSignatureTests
 		string result = await subject.ChangeSignature(
 			TestSolutions.Simple, "SimpleLibrary.DoesNotExist", "int", "factor", "1");
 
-		Assert.Contains("#error=NotFound", result);
+		Assert.Contains("error=NotFound", result);
 	}
 
 	[Fact]
@@ -93,8 +93,8 @@ public class ChangeSignatureTests
 		string result = await subject.ChangeSignature(
 			TestSolutions.Simple, "SimpleLibrary.Widget.Compute", "int", "factor", "1");
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

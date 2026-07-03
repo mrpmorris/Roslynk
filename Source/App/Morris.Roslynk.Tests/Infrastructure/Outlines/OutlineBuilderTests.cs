@@ -1,4 +1,4 @@
-using Morris.Roslynk.Infrastructure.Lifecycle;
+﻿using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Outlines;
@@ -16,7 +16,7 @@ public class OutlineBuilderTests
 		subject.Line(0, "first");
 		subject.Line(1, "child");
 
-		Assert.Equal("#count=2\n\nfirst\n\tchild\n", subject.ToString());
+		Assert.Equal("count=2\n\nfirst\n\tchild\n", subject.ToString());
 	}
 
 	[Fact]
@@ -36,7 +36,7 @@ public class OutlineBuilderTests
 
 		subject.Status(SolutionStatus.Building);
 
-		Assert.Equal("#status=Building\n", subject.ToString());
+		Assert.Equal("status=Building\n", subject.ToString());
 	}
 
 	[Fact]
@@ -49,7 +49,7 @@ public class OutlineBuilderTests
 		subject.BeginBody();
 		subject.Line(0, "x");
 
-		Assert.Equal("#a=b\n\nx\n", subject.ToString());
+		Assert.Equal("a=b\n\nx\n", subject.ToString());
 	}
 
 	[Fact]
@@ -60,7 +60,7 @@ public class OutlineBuilderTests
 		subject.Header("truncated", true);
 		subject.Header("applied", false);
 
-		Assert.Equal("#truncated=Y\n#applied=N\n", subject.ToString());
+		Assert.Equal("truncated=Y\napplied=N\n", subject.ToString());
 	}
 
 	[Theory]
@@ -79,7 +79,7 @@ public class OutlineBuilderTests
 
 		subject.Header("errorMessage", "line one\nline two");
 
-		Assert.Equal("#errorMessage=line one line two\n", subject.ToString());
+		Assert.Equal("errorMessage=line one line two\n", subject.ToString());
 	}
 
 	[Fact]

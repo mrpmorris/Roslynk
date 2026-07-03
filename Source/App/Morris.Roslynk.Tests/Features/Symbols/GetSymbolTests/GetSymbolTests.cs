@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Symbols.GetSymbol;
+﻿using Morris.Roslynk.Features.Symbols.GetSymbol;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -12,13 +12,13 @@ public class GetSymbolTests
 	{
 		string result = await RunAsync("SimpleLibrary.Greeter");
 
-		Assert.Contains("#project=SimpleLibrary\n", result);
-		Assert.Contains("#path=SimpleLibrary/Greeter.cs", result);
-		Assert.Contains("#loc=", result);
+		Assert.Contains("project=SimpleLibrary\n", result);
+		Assert.Contains("path=SimpleLibrary/Greeter.cs", result);
+		Assert.Contains("loc=", result);
 		Assert.Contains("public class Greeter : IGreeter", result);
-		Assert.DoesNotContain("#status=", result);
+		Assert.DoesNotContain("status=", result);
 		// A source symbol omits #source (it is the implied common case).
-		Assert.DoesNotContain("#source=", result);
+		Assert.DoesNotContain("source=", result);
 	}
 
 	[Fact]
@@ -61,12 +61,12 @@ public class GetSymbolTests
 	{
 		string result = await RunAsync("System.String");
 
-		Assert.Contains("#source=metadata", result);
-		Assert.Contains("#kind=class", result);
-		Assert.Contains("#signature=", result);
-		Assert.Contains("#assembly=", result);
-		Assert.DoesNotContain("#path=", result);
-		Assert.DoesNotContain("#project=", result);
+		Assert.Contains("source=metadata", result);
+		Assert.Contains("kind=class", result);
+		Assert.Contains("signature=", result);
+		Assert.Contains("assembly=", result);
+		Assert.DoesNotContain("path=", result);
+		Assert.DoesNotContain("project=", result);
 	}
 
 	[Fact]
@@ -74,7 +74,7 @@ public class GetSymbolTests
 	{
 		string result = await RunAsync("SimpleLibrary.DoesNotExist");
 
-		Assert.Contains("#error=NotFound", result);
+		Assert.Contains("error=NotFound", result);
 	}
 
 	[Fact]
@@ -82,8 +82,8 @@ public class GetSymbolTests
 	{
 		string result = await RunAsync("SimpleLibrary.Greet");
 
-		Assert.Contains("#error=NotFound", result);
-		Assert.Contains("#candidate=SimpleLibrary.Greeter", result);
+		Assert.Contains("error=NotFound", result);
+		Assert.Contains("candidate=SimpleLibrary.Greeter", result);
 	}
 
 	[Fact]
@@ -94,8 +94,8 @@ public class GetSymbolTests
 
 		string result = await subject.GetSymbol(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

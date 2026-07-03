@@ -1,4 +1,4 @@
-using Morris.Roslynk.Infrastructure.Lifecycle;
+﻿using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
 
@@ -14,7 +14,7 @@ public class OutlineErrorTests
 			SolutionStatus.Ready);
 
 		Assert.Equal(
-			"#error=Ambiguous\n#errorMessage='X' matched several symbols.\n#candidate=N.A\n#candidate=N.B\n",
+			"error=Ambiguous\nerrorMessage='X' matched several symbols.\ncandidate=N.A\ncandidate=N.B\n",
 			result);
 	}
 
@@ -26,7 +26,7 @@ public class OutlineErrorTests
 			SolutionStatus.Ready);
 
 		Assert.Equal(
-			"#error=Stale\n#errorMessage=Files moved on disk.\n#stale=src/A.cs\n#stale=src/B.cs\n",
+			"error=Stale\nerrorMessage=Files moved on disk.\nstale=src/A.cs\nstale=src/B.cs\n",
 			result);
 	}
 
@@ -38,6 +38,6 @@ public class OutlineErrorTests
 			SolutionStatus.Building);
 
 		Assert.DoesNotContain("\r", result);
-		Assert.Contains("#errorMessage=first  second\n", result);
+		Assert.Contains("errorMessage=first  second\n", result);
 	}
 }

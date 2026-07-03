@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Solutions.ReloadSolution;
+﻿using Morris.Roslynk.Features.Solutions.ReloadSolution;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 
 namespace Morris.Roslynk.Tests.Features.Solutions.ReloadSolutionTests;
@@ -14,8 +14,8 @@ public class ReloadSolutionTests
 
 		string result = subject.ReloadSolution(TestSolutions.Simple);
 
-		Assert.Contains("#status=Building", result);
-		Assert.DoesNotContain("#projects=0", result);
+		Assert.Contains("status=Building", result);
+		Assert.DoesNotContain("projects=0", result);
 
 		await WaitForReadyAsync(registry, TestSolutions.Simple);
 	}

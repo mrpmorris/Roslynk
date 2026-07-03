@@ -40,7 +40,7 @@ public sealed class GetCallersTool
 		{OutlineDescriptions.CommonMethodInstructions}
 		Callers are grouped file -> namespace -> containing type -> calling member, each leaf showing the
 		caller's declaration location:
-		  #resolvedSymbol=<fully-qualified name>
+		  resolvedSymbol=<fully-qualified name>
 
 		  <project>
 		  \t<relative/forward-slash/folder>

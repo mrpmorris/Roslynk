@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Symbols.GetTypeHierarchy;
+﻿using Morris.Roslynk.Features.Symbols.GetTypeHierarchy;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -16,7 +16,7 @@ public class GetTypeHierarchyTests
 
 		string result = await subject.GetTypeHierarchy(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
-		Assert.Contains("#resolvedType=SimpleLibrary.Greeter", result);
+		Assert.Contains("resolvedType=SimpleLibrary.Greeter", result);
 		Assert.Contains("interfaces\n", result);
 		Assert.Contains("interface,SimpleLibrary.IGreeter", result);
 	}
@@ -43,7 +43,7 @@ public class GetTypeHierarchyTests
 
 		string result = await subject.GetTypeHierarchy(TestSolutions.Simple, "SimpleLibrary.DoesNotExist");
 
-		Assert.Contains("#error=NotFound", result);
+		Assert.Contains("error=NotFound", result);
 	}
 
 	[Fact]
@@ -54,8 +54,8 @@ public class GetTypeHierarchyTests
 
 		string result = await subject.GetTypeHierarchy(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

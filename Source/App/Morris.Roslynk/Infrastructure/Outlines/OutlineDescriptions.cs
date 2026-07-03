@@ -47,13 +47,14 @@ internal static class OutlineDescriptions
 	/// freshness contract.
 	/// </summary>
 	public const string CommonMethodInstructions =
-		"Returns a compact text outline, not JSON: '#'-prefixed header lines, a blank line, then a "
-		+ "tab-indented body. Newlines are '\\n'; booleans are Y or N. A #status header is present only when the solution is not "
-		+ "Ready (Building or Faulted); its absence means Ready. " + Freshness;
+		"Returns a compact text outline, not JSON: 'key=value' header lines, a blank line, then a "
+		+ "tab-indented body. Headers are the lines before the blank line; the body follows it; a result with no "
+		+ "blank line is all headers. Newlines are '\\n'; booleans are Y or N. A status header is present only when "
+		+ "the solution is not Ready (Building or Faulted); its absence means Ready. " + Freshness;
 
 	/// <summary>How a capped (paginated) result announces that it dropped rows, when the total is known.</summary>
 	public const string Truncation =
-		"If the result is capped at maxResults, a #count=<total available> and #truncated=Y header precede the "
+		"If the result is capped at maxResults, a count=<total available> and truncated=Y header precede the "
 		+ "body; both are absent when nothing was dropped, so the body is then the complete set.";
 
 	/// <summary>
@@ -61,10 +62,10 @@ internal static class OutlineDescriptions
 	/// early-exits), so only the flag is emitted.
 	/// </summary>
 	public const string TruncationFlag =
-		"A #truncated=Y header is present only when more results exist beyond maxResults; it is absent otherwise.";
+		"A truncated=Y header is present only when more results exist beyond maxResults; it is absent otherwise.";
 
 	/// <summary>The shared failure shape every tool falls back to.</summary>
 	public const string ErrorBlock =
-		"On failure the result is header only: #error=<Indexing|NotFound|Ambiguous|...>, #errorMessage=..., "
-		+ "and zero or more #candidate=<fqn>.";
+		"On failure the result is header only: error=<Indexing|NotFound|Ambiguous|...>, errorMessage=..., "
+		+ "and zero or more candidate=<fqn>.";
 }

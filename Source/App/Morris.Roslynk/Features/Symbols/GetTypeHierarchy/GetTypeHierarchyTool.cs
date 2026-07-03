@@ -40,7 +40,7 @@ public sealed class GetTypeHierarchyTool
 		{OutlineDescriptions.CommonMethodInstructions}
 		The body has up to three sections (base, interfaces, derived); an empty section is omitted, and
 		each entry is a '<typeKind>,<fully-qualified name>':
-		  #resolvedType=<fully-qualified type>
+		  resolvedType=<fully-qualified type>
 
 		  base
 		  \t<typeKind>,<fully-qualified name>

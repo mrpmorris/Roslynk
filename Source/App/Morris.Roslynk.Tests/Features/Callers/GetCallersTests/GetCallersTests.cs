@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Callers.GetCallers;
+﻿using Morris.Roslynk.Features.Callers.GetCallers;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -16,8 +16,8 @@ public class GetCallersTests
 
 		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Greeter.Greet");
 
-		Assert.Contains("#resolvedSymbol=SimpleLibrary.Greeter.Greet", result);
-		Assert.DoesNotContain("#error=", result);
+		Assert.Contains("resolvedSymbol=SimpleLibrary.Greeter.Greet", result);
+		Assert.DoesNotContain("error=", result);
 		Assert.Contains("class,Caller\n", result);
 		Assert.Contains("method,Run,", result);
 	}
@@ -31,7 +31,7 @@ public class GetCallersTests
 
 		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.DoesNotExist");
 
-		Assert.Contains("#error=NotFound", result);
+		Assert.Contains("error=NotFound", result);
 	}
 
 	[Fact]
@@ -42,8 +42,8 @@ public class GetCallersTests
 
 		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Greeter.Greet");
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}

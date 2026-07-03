@@ -4,10 +4,11 @@ using Morris.Roslynk.Infrastructure.Lifecycle;
 namespace Morris.Roslynk.Infrastructure.Outlines;
 
 /// <summary>
-/// Builds a tool's compact text result: '#key=value' header lines, a blank line, then a tab-indented body.
-/// Newlines are always '\n' (never '\r'); a header or free-text value that could carry a line break is
-/// sanitized so one record always stays on one line. This is the shared shape behind every tool's output,
-/// replacing the per-tool JSON DTOs.
+/// Builds a tool's compact text result: 'key=value' header lines, a blank line, then a tab-indented body.
+/// Headers are every line before the blank line; the body is everything after it. A result with no blank
+/// line (an error or a non-Ready status) is entirely headers. Newlines are always '\n' (never '\r'); a
+/// header or free-text value that could carry a line break is sanitized so one record always stays on one
+/// line. This is the shared shape behind every tool's output, replacing the per-tool JSON DTOs.
 /// </summary>
 public sealed class OutlineBuilder
 {
@@ -19,25 +20,25 @@ public sealed class OutlineBuilder
 
 	public OutlineBuilder Header(string key, string? value)
 	{
-		Builder.Append('#').Append(key).Append('=').Append(Sanitize(value)).Append('\n');
+		Builder.Append(key).Append('=').Append(Sanitize(value)).Append('\n');
 		return this;
 	}
 
 	public OutlineBuilder Header(string key, int value)
 	{
-		Builder.Append('#').Append(key).Append('=').Append(value).Append('\n');
+		Builder.Append(key).Append('=').Append(value).Append('\n');
 		return this;
 	}
 
 	public OutlineBuilder Header(string key, bool value)
 	{
-		Builder.Append('#').Append(key).Append('=').Append(value ? "Y" : "N").Append('\n');
+		Builder.Append(key).Append('=').Append(value ? "Y" : "N").Append('\n');
 		return this;
 	}
 
 	/// <summary>
-	/// Writes the '#status' header only when the solution is not <see cref="SolutionStatus.Ready"/>; a Ready
-	/// solution is the common case, so its status is left implicit (an absent '#status' means Ready).
+	/// Writes the 'status' header only when the solution is not <see cref="SolutionStatus.Ready"/>; a Ready
+	/// solution is the common case, so its status is left implicit (an absent 'status' means Ready).
 	/// </summary>
 	public OutlineBuilder Status(SolutionStatus status) =>
 		status == SolutionStatus.Ready ? this : Header("status", status.ToString());

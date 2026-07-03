@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
+﻿using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 
@@ -15,7 +15,7 @@ public class MultiTargetDiagnosticsTests
 
 		string result = await subject.GetDiagnostics(TestSolutions.MultiTarget, targetFramework: "net8.0");
 
-		Assert.DoesNotContain("#error=", result);
+		Assert.DoesNotContain("error=", result);
 		Assert.Contains("CS0029", result);
 	}
 
@@ -28,7 +28,7 @@ public class MultiTargetDiagnosticsTests
 
 		string result = await subject.GetDiagnostics(TestSolutions.MultiTarget, targetFramework: "net10.0");
 
-		Assert.DoesNotContain("#error=", result);
+		Assert.DoesNotContain("error=", result);
 		Assert.DoesNotContain("CS0029", result);
 	}
 
@@ -40,8 +40,8 @@ public class MultiTargetDiagnosticsTests
 
 		string result = await subject.GetDiagnostics(TestSolutions.MultiTarget, targetFramework: "net8.0");
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
 	}

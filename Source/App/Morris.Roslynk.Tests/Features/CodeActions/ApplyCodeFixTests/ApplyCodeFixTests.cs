@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.CodeActions.ApplyCodeFix;
+﻿using Morris.Roslynk.Features.CodeActions.ApplyCodeFix;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Writing;
@@ -18,7 +18,7 @@ public class ApplyCodeFixTests
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS0219");
 
-		Assert.Contains("#applied=Y", result);
+		Assert.Contains("applied=Y", result);
 		Assert.DoesNotContain("int unused", await File.ReadAllTextAsync(greeter));
 	}
 
@@ -32,7 +32,7 @@ public class ApplyCodeFixTests
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS9999");
 
-		Assert.Contains("#error=NotFound", result);
+		Assert.Contains("error=NotFound", result);
 	}
 
 	[Fact]
@@ -43,8 +43,8 @@ public class ApplyCodeFixTests
 
 		string result = await subject.ApplyCodeFix(TestSolutions.Simple, "Widget.cs", "CS0219");
 
-		Assert.Contains("#error=Indexing", result);
-		Assert.Contains("#status=Building", result);
+		Assert.Contains("error=Indexing", result);
+		Assert.Contains("status=Building", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
