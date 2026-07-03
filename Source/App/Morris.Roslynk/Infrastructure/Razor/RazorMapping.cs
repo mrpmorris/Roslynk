@@ -21,11 +21,16 @@ public static class RazorMapping
 
 	public static bool IsRazorGeneratedPath(string filePath)
 	{
-		if (!filePath.EndsWith("_razor.g.cs", StringComparison.OrdinalIgnoreCase))
+		if (!filePath.EndsWith("_razor.g.cs", StringComparison.OrdinalIgnoreCase)
+			&& !filePath.EndsWith("_cshtml.g.cs", StringComparison.OrdinalIgnoreCase))
 			return false;
 
+		// Pre-generated files loaded from a prior dotnet build, or documents produced by the in-process
+		// generator run (RazorDocumentGenerator's obj/RoslynkRazorGenerated folder).
 		return filePath.Contains("generated" + System.IO.Path.DirectorySeparatorChar + "Microsoft.CodeAnalysis.Razor.Compiler", StringComparison.OrdinalIgnoreCase)
-			|| filePath.Contains("generated/Microsoft.CodeAnalysis.Razor.Compiler", StringComparison.OrdinalIgnoreCase);
+			|| filePath.Contains("generated/Microsoft.CodeAnalysis.Razor.Compiler", StringComparison.OrdinalIgnoreCase)
+			|| filePath.Contains("obj" + System.IO.Path.DirectorySeparatorChar + "RoslynkRazorGenerated", StringComparison.OrdinalIgnoreCase)
+			|| filePath.Contains("obj/RoslynkRazorGenerated", StringComparison.OrdinalIgnoreCase);
 	}
 
 	public static FileLinePositionSpan GetDisplaySpan(this Location location)

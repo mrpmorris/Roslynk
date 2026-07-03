@@ -7,9 +7,9 @@ namespace Morris.Roslynk.Infrastructure.Writing;
 
 /// <summary>
 /// Persists a changed <see cref="Solution"/> to disk under the instance's single-writer lock. For each
-/// changed document it re-hashes the file on disk against what was loaded (rejecting as stale if it
-/// moved), then hands the batch to <see cref="AtomicFileWriter"/> for an all-or-nothing commit before
-/// advancing the in-memory snapshot.
+/// changed document (regular or additional — .razor/.cshtml) it re-hashes the file on disk against what
+/// was loaded (rejecting as stale if it moved), then hands the batch to <see cref="AtomicFileWriter"/>
+/// for an all-or-nothing commit before advancing the in-memory snapshot.
 /// </summary>
 public sealed class ApplyPipeline
 {
@@ -45,6 +45,13 @@ public sealed class ApplyPipeline
 				if (path is not null && !IsGenerated(path) && seen.Add(path))
 					paths.Add(path);
 			}
+
+			foreach (DocumentId documentId in projectChanges.GetChangedAdditionalDocuments())
+			{
+				string? path = updated.GetAdditionalDocument(documentId)?.FilePath;
+				if (path is not null && seen.Add(path))
+					paths.Add(path);
+			}
 		}
 
 		return paths;
@@ -63,7 +70,6 @@ public sealed class ApplyPipeline
 			foreach (DocumentId documentId in projectChanges.GetChangedDocuments())
 			{
 				Document updatedDocument = updated.GetDocument(documentId)!;
-				Document currentDocument = current.GetDocument(documentId)!;
 
 				string? path = updatedDocument.FilePath;
 				if (path is null)
@@ -74,20 +80,36 @@ public sealed class ApplyPipeline
 				if (IsGenerated(path))
 					continue;
 
-				// A file shared across target-framework projects appears as several documents; write it once.
-				if (!seen.Add(path))
+				await AddWriteAsync(writes, seen, path, current.GetDocument(documentId)!, updatedDocument, cancellationToken);
+			}
+
+			// Additional documents (.razor/.cshtml edited via the Razor #line mapping) are real source files
+			// and get the same stale guard as regular documents.
+			foreach (DocumentId documentId in projectChanges.GetChangedAdditionalDocuments())
+			{
+				TextDocument updatedDocument = updated.GetAdditionalDocument(documentId)!;
+				if (updatedDocument.FilePath is not string path)
 					continue;
 
-				string loadedText = (await currentDocument.GetTextAsync(cancellationToken)).ToString();
-				string diskText = await File.ReadAllTextAsync(path, cancellationToken);
-				if (!string.Equals(FileHash.Of(loadedText), FileHash.Of(diskText), StringComparison.Ordinal))
-					throw new StaleWriteException(path);
-
-				string updatedText = (await updatedDocument.GetTextAsync(cancellationToken)).ToString();
-				writes.Add(new PendingWrite(path, updatedText));
+				await AddWriteAsync(writes, seen, path, current.GetAdditionalDocument(documentId)!, updatedDocument, cancellationToken);
 			}
 		}
 
 		return writes;
+	}
+
+	private static async Task AddWriteAsync(List<PendingWrite> writes, HashSet<string> seen, string path, TextDocument currentDocument, TextDocument updatedDocument, CancellationToken cancellationToken)
+	{
+		// A file shared across target-framework projects appears as several documents; write it once.
+		if (!seen.Add(path))
+			return;
+
+		string loadedText = (await currentDocument.GetTextAsync(cancellationToken)).ToString();
+		string diskText = await File.ReadAllTextAsync(path, cancellationToken);
+		if (!string.Equals(FileHash.Of(loadedText), FileHash.Of(diskText), StringComparison.Ordinal))
+			throw new StaleWriteException(path);
+
+		string updatedText = (await updatedDocument.GetTextAsync(cancellationToken)).ToString();
+		writes.Add(new PendingWrite(path, updatedText));
 	}
 }

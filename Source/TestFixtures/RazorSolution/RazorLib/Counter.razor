@@ -1,7 +1,19 @@
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+
 <button class="btn" @onclick="IncrementCount">Count: @CurrentCount</button>
+<p>Starting from @StartAt</p>
 
 @code {
 	private int CurrentCount;
+
+	[Parameter]
+	public int StartAt { get; set; }
+
+	protected override void OnInitialized()
+	{
+		CurrentCount = StartAt;
+	}
 
 	private void IncrementCount()
 	{

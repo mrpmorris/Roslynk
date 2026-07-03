@@ -80,6 +80,9 @@ internal static class TestSolutions
 	/// <summary>A writable scratch copy of the ConditionalSolution fixture, for tests that rename/edit it.</summary>
 	public static string CreateScratchConditionalSolution() => CreateScratch("ConditionalSolution", "ConditionalSolution.slnx");
 
+	/// <summary>A writable scratch copy of the RazorSolution fixture, for tests that rename/edit its .razor files.</summary>
+	public static string CreateScratchRazorSolution() => CreateScratch("RazorSolution", "RazorSolution.slnx");
+
 	private static string CreateScratch(string fixtureName, string solutionFile)
 	{
 		string sourceDir = Path.Combine(FindTestFixturesRoot(), fixtureName);

@@ -4,6 +4,7 @@ using System.Reflection;
 using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
@@ -55,6 +56,7 @@ public static class RazorDocumentGenerator
 
 	private static async Task<Solution> AugmentProjectAsync(Solution solution, Project project, ImmutableDictionary<ProjectId, ProjectModel> projectModels, CancellationToken cancellationToken)
 	{
+		Solution before = solution;
 		string? generatedDir = GetRazorGeneratedDirectory(project, projectModels.GetValueOrDefault(project.Id));
 		bool hasPreGeneratedFiles = generatedDir is not null && Directory.Exists(generatedDir);
 
@@ -68,6 +70,27 @@ public static class RazorDocumentGenerator
 			bool hasRazorInputs = HasRazorInputs(project) || HasRazorFilesOnDisk(project);
 			if (hasGenerator && hasRazorInputs)
 				solution = await RunGeneratorAsync(solution, project, generator!, cancellationToken);
+		}
+
+		// Once our documents own the generation, the SDK generator must not also run natively: newer
+		// Roslyn loads it where older versions refused, and its source-generated copy of every component
+		// partial would duplicate ours (CS0102/CS0111) with references binding to the immutable copy —
+		// breaking rename and diagnostics. Removing the analyzer reference suppresses the native run.
+		if (!ReferenceEquals(before, solution))
+			solution = RemoveNativeRazorGenerator(solution, project.Id);
+
+		return solution;
+	}
+
+	private static Solution RemoveNativeRazorGenerator(Solution solution, ProjectId projectId)
+	{
+		if (solution.GetProject(projectId) is not Project project)
+			return solution;
+
+		foreach (AnalyzerReference reference in project.AnalyzerReferences)
+		{
+			if (reference.FullPath is string path && path.EndsWith(RazorCompilerFileName, StringComparison.OrdinalIgnoreCase))
+				solution = solution.RemoveAnalyzerReference(projectId, reference);
 		}
 
 		return solution;

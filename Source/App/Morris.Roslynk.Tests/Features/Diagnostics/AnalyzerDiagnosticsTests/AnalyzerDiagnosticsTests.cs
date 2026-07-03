@@ -50,20 +50,31 @@ public class AnalyzerDiagnosticsTests
 
 	private static IReadOnlyList<string> DiagnosticIds(string text)
 	{
+		// An entry line is '<id>,<line:col>,<message>' (or '<id>,<message>' when there is no location) and sits
+		// exactly one tab deeper than its severity label (errors|warnings|infos|hidden). Structural lines can
+		// legitimately contain ',' or ' ' — e.g. the generated file obj/.../.NETCoreApp,Version=v8.0.AssemblyAttributes.cs —
+		// so depth relative to the severity label, not line content, decides what is an entry.
 		var ids = new List<string>();
+		int entryDepth = -1;
 		foreach (string raw in text.Split('\n'))
 		{
-			if (!raw.StartsWith('\t'))
-				continue;
-
-			// An entry is '<id>,<line:col> <message>' or '<id> <message>'; structural lines (project, file,
-			// severity label) have no comma or space, so skip them and take the leading id from the rest.
 			string content = raw.TrimStart('\t');
-			int cut = content.IndexOfAny([',', ' ']);
-			if (cut < 0)
-				continue;
+			int depth = raw.Length - content.Length;
 
-			ids.Add(content[..cut]);
+			if (depth > 0 && content is "errors" or "warnings" or "infos" or "hidden")
+			{
+				entryDepth = depth + 1;
+				continue;
+			}
+
+			if (depth == entryDepth)
+			{
+				ids.Add(content[..content.IndexOf(',')]);
+				continue;
+			}
+
+			if (depth < entryDepth)
+				entryDepth = -1;
 		}
 
 		return ids;
