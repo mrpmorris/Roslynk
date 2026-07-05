@@ -18,6 +18,14 @@ public class GetMembersTests
 	}
 
 	[Fact]
+	public async Task WhenATypeHasPrivateMembers_ThenTheyAreIncluded()
+	{
+		string result = await RunAsync("SimpleLibrary.Holder");
+
+		Assert.Contains("field,_ready", result);
+	}
+
+	[Fact]
 	public async Task WhenAMetadataTypesMembersAreRequested_ThenTheyResolveUnderTheMetadataBucket()
 	{
 		string result = await RunAsync("System.String");
@@ -142,7 +150,6 @@ public class GetMembersTests
 
 	private static async Task<string> RunAsync(
 		string typeName,
-		bool includePrivate = false,
 		bool includeInherited = false,
 		string? nameFilter = null,
 		bool includeMethods = true,
@@ -158,7 +165,6 @@ public class GetMembersTests
 		return await subject.GetMembers(
 			TestSolutions.Simple,
 			typeName,
-			includePrivate,
 			includeInherited,
 			nameFilter,
 			includeMethods,

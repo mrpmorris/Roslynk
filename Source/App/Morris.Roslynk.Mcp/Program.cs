@@ -4,8 +4,18 @@ using Morris.Roslynk.Mcp;
 using Morris.Roslynk.Mcp.Hosting;
 using Morris.Roslynk.Mcp.Observability;
 
+// `stdio` runs the client-launched bridge instead of the daemon: it starts the daemon if needed
+// and pipes one MCP session to it over HTTP.
+if (args is ["stdio", ..])
+{
+	await StdioBridge.RunAsync();
+	return;
+}
+
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
+// Safe on every OS: AddWindowsService only takes effect when the process is launched by the
+// Windows Service Control Manager; otherwise it registers nothing.
 builder.Services.AddWindowsService(options => options.ServiceName = "Roslynk");
 
 builder.AddLoopbackOnlyKestrel();
