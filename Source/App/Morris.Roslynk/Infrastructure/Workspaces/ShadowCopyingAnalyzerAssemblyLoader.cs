@@ -13,17 +13,31 @@ namespace Morris.Roslynk.Infrastructure.Workspaces;
 /// output and holds a file lock for the lifetime of the workspace. Because Roslynk keeps solutions
 /// loaded, that lock never releases and a concurrent build cannot overwrite a generator's output DLL.
 /// </para>
+/// <para>
+/// Every requested assembly gets its own <see cref="AssemblyLoadContext"/>, keyed by path and file stamp.
+/// A context can hold only one assembly per simple name, so a single shared context silently drops
+/// analyzers whenever two projects resolve the same assembly name from different package versions
+/// ("assembly with same name is already loaded") — and it can never observe a rebuilt generator, because
+/// the first copy loaded for a path is the only one it can ever hold. Per-assembly contexts make name
+/// collisions impossible, and stamp-keyed contexts let a solution reload pick up new bits after a rebuild.
+/// Dependencies resolve from the default context first (the host's own Roslyn and BCL always win over
+/// copies an analyzer package carries beside it), then the assembly's own directory, then locations
+/// registered via <see cref="AddDependencyLocation"/>.
+/// </para>
 /// </summary>
 internal sealed class ShadowCopyingAnalyzerAssemblyLoader : IAnalyzerAssemblyLoader
 {
 	private readonly string _shadowRoot;
-	private readonly AssemblyLoadContext _loadContext;
 
 	// Original dependency locations, keyed by simple assembly name, used to resolve transitive references.
 	private readonly ConcurrentDictionary<string, string> _dependencyPathsByName =
 		new(StringComparer.OrdinalIgnoreCase);
 
-	// Maps an original assembly path to the shadow copy that has already been made for it.
+	// One load context per stamped assembly path; see class remarks.
+	private readonly ConcurrentDictionary<string, AnalyzerLoadContext> _loadContexts =
+		new(StringComparer.OrdinalIgnoreCase);
+
+	// Maps a stamped original assembly path to the shadow copy that has already been made for it.
 	private readonly ConcurrentDictionary<string, string> _shadowCopies =
 		new(StringComparer.OrdinalIgnoreCase);
 
@@ -34,9 +48,6 @@ internal sealed class ShadowCopyingAnalyzerAssemblyLoader : IAnalyzerAssemblyLoa
 		// A unique per-instance subdirectory keeps copies from different workspace loads from colliding.
 		_shadowRoot = Path.Combine(shadowRoot, Guid.NewGuid().ToString("N"));
 		Directory.CreateDirectory(_shadowRoot);
-
-		_loadContext = new AssemblyLoadContext("Roslynk.AnalyzerShadowCopy", isCollectible: false);
-		_loadContext.Resolving += ResolveDependency;
 	}
 
 	public void AddDependencyLocation(string fullPath)
@@ -48,36 +59,45 @@ internal sealed class ShadowCopyingAnalyzerAssemblyLoader : IAnalyzerAssemblyLoa
 
 	public Assembly LoadFromPath(string fullPath)
 	{
-		string shadow = GetOrCreateShadowCopy(fullPath);
-		return _loadContext.LoadFromAssemblyPath(shadow);
+		AnalyzerLoadContext loadContext = _loadContexts.GetOrAdd(
+			StampedKey(fullPath),
+			_ => new AnalyzerLoadContext(this, Path.GetDirectoryName(fullPath) ?? ""));
+
+		return loadContext.LoadFromAssemblyPath(GetOrCreateShadowCopy(fullPath));
 	}
 
-	private Assembly? ResolveDependency(AssemblyLoadContext context, AssemblyName assemblyName)
+	// Identifies a specific version of a file: the same path rebuilt with new content gets a new key,
+	// and with it a new load context and shadow copy.
+	private static string StampedKey(string path)
 	{
-		if (assemblyName.Name is not string name)
-			return null;
+		try
+		{
+			var info = new FileInfo(path);
+			if (info.Exists)
+				return string.Concat(path, "|", info.LastWriteTimeUtc.Ticks.ToString(), "|", info.Length.ToString());
+		}
+		catch
+		{
+		}
 
-		if (!_dependencyPathsByName.TryGetValue(name, out string? originalPath))
-			return null;
-
-		string shadow = GetOrCreateShadowCopy(originalPath);
-		return context.LoadFromAssemblyPath(shadow);
+		return path;
 	}
 
 	private string GetOrCreateShadowCopy(string originalPath)
 	{
-		if (_shadowCopies.TryGetValue(originalPath, out string? existing))
+		string key = StampedKey(originalPath);
+		if (_shadowCopies.TryGetValue(key, out string? existing))
 			return existing;
 
 		lock (_copyLock)
 		{
-			if (_shadowCopies.TryGetValue(originalPath, out existing))
+			if (_shadowCopies.TryGetValue(key, out existing))
 				return existing;
 
 			if (!File.Exists(originalPath))
 			{
 				// Nothing to copy; fall back to the original so the loader still has a usable path.
-				_shadowCopies[originalPath] = originalPath;
+				_shadowCopies[key] = originalPath;
 				return originalPath;
 			}
 
@@ -93,8 +113,44 @@ internal sealed class ShadowCopyingAnalyzerAssemblyLoader : IAnalyzerAssemblyLoa
 			if (File.Exists(pdb))
 				File.Copy(pdb, Path.ChangeExtension(destPath, ".pdb"), overwrite: true);
 
-			_shadowCopies[originalPath] = destPath;
+			_shadowCopies[key] = destPath;
 			return destPath;
+		}
+	}
+
+	/// <summary>
+	/// The context one analyzer assembly (and its private dependencies) loads into. No <c>Load</c>
+	/// override: the default context gets first claim on every assembly name, so the host's Roslyn and
+	/// BCL always satisfy those references; only names the host cannot supply reach
+	/// <see cref="ResolveDependency"/>.
+	/// </summary>
+	private sealed class AnalyzerLoadContext : AssemblyLoadContext
+	{
+		private readonly ShadowCopyingAnalyzerAssemblyLoader _owner;
+		private readonly string _directory;
+
+		public AnalyzerLoadContext(ShadowCopyingAnalyzerAssemblyLoader owner, string directory)
+			: base("Roslynk.AnalyzerShadowCopy", isCollectible: false)
+		{
+			_owner = owner;
+			_directory = directory;
+			Resolving += ResolveDependency;
+		}
+
+		private Assembly? ResolveDependency(AssemblyLoadContext context, AssemblyName assemblyName)
+		{
+			if (assemblyName.Name is not string name)
+				return null;
+
+			// An analyzer package's own dependencies sit beside it in its directory.
+			string sameDirectory = Path.Combine(_directory, name + ".dll");
+			if (File.Exists(sameDirectory))
+				return context.LoadFromAssemblyPath(_owner.GetOrCreateShadowCopy(sameDirectory));
+
+			if (_owner._dependencyPathsByName.TryGetValue(name, out string? registeredPath))
+				return context.LoadFromAssemblyPath(_owner.GetOrCreateShadowCopy(registeredPath));
+
+			return null;
 		}
 	}
 }

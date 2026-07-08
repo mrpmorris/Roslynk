@@ -141,7 +141,7 @@ public sealed class SolutionWorkspace : IDisposable
 				using (Activity? shadowActivity = RoslynkActivitySource.Instance.StartActivity("shadow_copy_analyzers"))
 				{
 					shadowActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
-					solution = UseShadowCopyAnalyzerLoaders(solution);
+					solution = UseShadowCopyAnalyzerLoaders(solution, loadDiagnostics);
 				}
 
 				loadActivity?.SetTag(ActivityTags.ProjectCountTag, solution.Projects.Count());
@@ -226,8 +226,14 @@ public sealed class SolutionWorkspace : IDisposable
 		return (type, ctor, getProp);
 	}
 
-	private static Solution UseShadowCopyAnalyzerLoaders(Solution solution)
+	private static Solution UseShadowCopyAnalyzerLoaders(Solution solution, ConcurrentBag<string> loadDiagnostics)
 	{
+		// One reference per path per load: projects share analyzer paths heavily (SDK analyzers), and a
+		// shared instance avoids re-reflecting over the same assembly per project. Scoped to this load —
+		// not static — so a reload after a generator rebuild creates fresh references that observe the
+		// new bits through the stamp-keyed shadow loader.
+		var referencesByPath = new Dictionary<string, AnalyzerFileReference>(StringComparer.OrdinalIgnoreCase);
+
 		foreach (Project project in solution.Projects)
 		{
 			if (project.AnalyzerReferences.Count == 0)
@@ -240,7 +246,25 @@ public sealed class SolutionWorkspace : IDisposable
 			{
 				if (reference is AnalyzerFileReference fileReference)
 				{
-					remapped.Add(new AnalyzerFileReference(fileReference.FullPath, ShadowCopyAnalyzerLoader));
+					if (!referencesByPath.TryGetValue(fileReference.FullPath, out AnalyzerFileReference? shadowReference))
+					{
+						shadowReference = new AnalyzerFileReference(fileReference.FullPath, ShadowCopyAnalyzerLoader);
+
+						// A reference that fails to load otherwise vanishes silently: AnalyzerFileReference
+						// reports failures only through this event, and the compilation proceeds without
+						// the reference's analyzers and generators — phantom CS0246s with no visible cause.
+						shadowReference.AnalyzerLoadFailed += (_, e) =>
+							loadDiagnostics.Add($"Analyzer load failed for '{fileReference.FullPath}': {e.Message}");
+
+						// Force the load now so failures land in LoadDiagnostics before it is snapshotted;
+						// the first compilation would load these assemblies anyway.
+						_ = shadowReference.GetAnalyzers(project.Language);
+						_ = shadowReference.GetGenerators(project.Language);
+
+						referencesByPath[fileReference.FullPath] = shadowReference;
+					}
+
+					remapped.Add(shadowReference);
 					changed = true;
 				}
 				else
