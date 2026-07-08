@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Observability;
@@ -15,6 +16,15 @@ namespace Morris.Roslynk.Infrastructure.Workspaces;
 public sealed class SolutionWorkspace : IDisposable
 {
 	private static readonly string[] RelevantProperties = ["EmitCompilerGeneratedFiles", "CompilerGeneratedFilesOutputPath"];
+
+	// MSBuildWorkspace loads analyzer/source-generator assemblies directly from their build-output
+	// path and holds a file lock for the lifetime of the workspace. Because Roslynk keeps solutions
+	// loaded, that lock never releases and a concurrent `dotnet build` cannot overwrite the generator's
+	// output DLL. A shadow-copy loader copies each analyzer assembly to a temp directory and loads the
+	// copy, leaving the originals in bin/obj unlocked.
+	private static readonly IAnalyzerAssemblyLoader ShadowCopyAnalyzerLoader =
+		new ShadowCopyingAnalyzerAssemblyLoader(
+			Path.Combine(Path.GetTempPath(), "Roslynk", "AnalyzerShadowCopy"));
 
 	private readonly MSBuildWorkspace Workspace;
 
@@ -128,6 +138,12 @@ public sealed class SolutionWorkspace : IDisposable
 					solution = await ExpandMultiTargetProjectsAsync(solution, cancellationToken);
 				}
 
+				using (Activity? shadowActivity = RoslynkActivitySource.Instance.StartActivity("shadow_copy_analyzers"))
+				{
+					shadowActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
+					solution = UseShadowCopyAnalyzerLoaders(solution);
+				}
+
 				loadActivity?.SetTag(ActivityTags.ProjectCountTag, solution.Projects.Count());
 				return new SolutionWorkspace(workspace, solution, immutableModels, loadDiagnostics.ToArray());
 			}
@@ -208,6 +224,36 @@ public sealed class SolutionWorkspace : IDisposable
 		if (ctor is null) return null;
 
 		return (type, ctor, getProp);
+	}
+
+	private static Solution UseShadowCopyAnalyzerLoaders(Solution solution)
+	{
+		foreach (Project project in solution.Projects)
+		{
+			if (project.AnalyzerReferences.Count == 0)
+				continue;
+
+			var remapped = new List<AnalyzerReference>(project.AnalyzerReferences.Count);
+			bool changed = false;
+
+			foreach (AnalyzerReference reference in project.AnalyzerReferences)
+			{
+				if (reference is AnalyzerFileReference fileReference)
+				{
+					remapped.Add(new AnalyzerFileReference(fileReference.FullPath, ShadowCopyAnalyzerLoader));
+					changed = true;
+				}
+				else
+				{
+					remapped.Add(reference);
+				}
+			}
+
+			if (changed)
+				solution = solution.WithProjectAnalyzerReferences(project.Id, remapped);
+		}
+
+		return solution;
 	}
 
 	private static async Task<Solution> ExpandMultiTargetProjectsAsync(Solution solution, CancellationToken ct)
