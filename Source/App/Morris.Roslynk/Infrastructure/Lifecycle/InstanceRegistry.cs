@@ -27,19 +27,22 @@ public sealed class InstanceRegistry : IDisposable
 	/// </summary>
 	public async Task<RoslynInstance> GetOrAddAsync(string solutionPath)
 	{
-		SolutionKey key = SolutionKey.For(solutionPath);
-		RoslynInstance instance = GetOrCreate(key);
-		await instance.WaitUntilReadyAsync();
-
-		if (instance.IsDirty)
+		using (RoslynkActivitySource.Instance.StartActivity($"{nameof(InstanceRegistry)}.{nameof(InstanceRegistry.GetOrAddAsync)}"))
 		{
-			TryClose(key.FilePath);
-			instance = GetOrCreate(key);
+			SolutionKey key = SolutionKey.For(solutionPath);
+			RoslynInstance instance = GetOrCreate(key);
 			await instance.WaitUntilReadyAsync();
-		}
 
-		instance.Touch();
-		return instance;
+			if (instance.IsDirty)
+			{
+				TryClose(key.FilePath);
+				instance = GetOrCreate(key);
+				await instance.WaitUntilReadyAsync();
+			}
+
+			instance.Touch();
+			return instance;
+		}
 	}
 
 	/// <summary>
@@ -52,15 +55,18 @@ public sealed class InstanceRegistry : IDisposable
 	/// </summary>
 	public RoslynInstance GetOrBegin(string solutionPath)
 	{
-		SolutionKey key = SolutionKey.For(solutionPath);
-		RoslynInstance instance = GetOrCreate(key);
+		using (RoslynkActivitySource.Instance.StartActivity($"{nameof(InstanceRegistry)}.{nameof(InstanceRegistry.GetOrBegin)}"))
+		{
+			SolutionKey key = SolutionKey.For(solutionPath);
+			RoslynInstance instance = GetOrCreate(key);
 
-		// BeginRebuild clears the dirty flag immediately, so concurrent or repeat reads queue at most one reload.
-		if (instance.IsDirty && instance.CurrentModel.Solution is not null)
-			instance.BeginRebuild(progress => SolutionWorkspace.LoadAsync(key.FilePath, progress), AttachWatcher);
+			// BeginRebuild clears the dirty flag immediately, so concurrent or repeat reads queue at most one reload.
+			if (instance.IsDirty && instance.CurrentModel.Solution is not null)
+				instance.BeginRebuild(progress => SolutionWorkspace.LoadAsync(key.FilePath, progress), AttachWatcher);
 
-		instance.Touch();
-		return instance;
+			instance.Touch();
+			return instance;
+		}
 	}
 
 	/// <summary>
@@ -72,16 +78,19 @@ public sealed class InstanceRegistry : IDisposable
 	/// </summary>
 	public async Task<RoslynInstance> GetOrBeginAsync(string solutionPath)
 	{
-		SolutionKey key = SolutionKey.For(solutionPath);
-		RoslynInstance instance = GetOrCreate(key);
-
-		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity($"{nameof(RoslynInstance)}.{nameof(RoslynInstance.EnsureRebuiltAsync)}"))
+		using (RoslynkActivitySource.Instance.StartActivity($"{nameof(InstanceRegistry)}.{nameof(InstanceRegistry.GetOrBeginAsync)}"))
 		{
-			await instance.EnsureRebuiltAsync(progress => SolutionWorkspace.LoadAsync(key.FilePath, progress), AttachWatcher);
-		}
+			SolutionKey key = SolutionKey.For(solutionPath);
+			RoslynInstance instance = GetOrCreate(key);
 
-		instance.Touch();
-		return instance;
+			using (RoslynkActivitySource.Instance.StartActivity($"{nameof(RoslynInstance)}.{nameof(RoslynInstance.EnsureRebuiltAsync)}"))
+			{
+				await instance.EnsureRebuiltAsync(progress => SolutionWorkspace.LoadAsync(key.FilePath, progress), AttachWatcher);
+			}
+
+			instance.Touch();
+			return instance;
+		}
 	}
 
 	/// <summary>
@@ -90,14 +99,17 @@ public sealed class InstanceRegistry : IDisposable
 	/// </summary>
 	public int EvictIdle(TimeSpan idleFor, DateTime nowUtc)
 	{
-		int evicted = 0;
-		foreach (RoslynInstance instance in LoadedInstances())
+		using (RoslynkActivitySource.Instance.StartActivity($"{nameof(InstanceRegistry)}.{nameof(InstanceRegistry.EvictIdle)}"))
 		{
-			if (nowUtc - instance.LastAccessedUtc >= idleFor && TryClose(instance.Key.FilePath))
-				evicted++;
-		}
+			int evicted = 0;
+			foreach (RoslynInstance instance in LoadedInstances())
+			{
+				if (nowUtc - instance.LastAccessedUtc >= idleFor && TryClose(instance.Key.FilePath))
+					evicted++;
+			}
 
-		return evicted;
+			return evicted;
+		}
 	}
 
 	private RoslynInstance GetOrCreate(SolutionKey key)

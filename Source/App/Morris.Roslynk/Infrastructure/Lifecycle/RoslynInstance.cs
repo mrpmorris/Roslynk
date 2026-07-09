@@ -100,8 +100,11 @@ public sealed class RoslynInstance : IDisposable
 	/// </summary>
 	public async Task<SolutionModel> ReadModelAsync(CancellationToken cancellationToken = default)
 	{
-		using (await Lock.AcquireReadAsync(cancellationToken))
-			return CurrentModel;
+		using (RoslynkActivitySource.Instance.StartActivity($"{nameof(RoslynInstance)}.{nameof(RoslynInstance.ReadModelAsync)}"))
+		{
+			using (await Lock.AcquireReadAsync(cancellationToken))
+				return CurrentModel;
+		}
 	}
 
 	/// <summary>
@@ -111,15 +114,18 @@ public sealed class RoslynInstance : IDisposable
 	/// </summary>
 	public Task<IReadOnlyList<string>> EnqueueWriteAsync(Func<Solution, CancellationToken, Task<WriteResult>> transform, CancellationToken cancellationToken = default)
 	{
-		if (transform is null)
-			throw new ArgumentNullException(nameof(transform));
+		using (RoslynkActivitySource.Instance.StartActivity($"{nameof(RoslynInstance)}.{nameof(RoslynInstance.EnqueueWriteAsync)}"))
+		{
+			if (transform is null)
+				throw new ArgumentNullException(nameof(transform));
 
-		var completion = new TaskCompletionSource<IReadOnlyList<string>>(TaskCreationOptions.RunContinuationsAsynchronously);
-		var item = new WorkItem(() => RunWriteAsync(transform, completion, cancellationToken), exception => completion.TrySetException(exception));
-		if (!Work.Writer.TryWrite(item))
-			completion.TrySetException(new ObjectDisposedException(nameof(RoslynInstance)));
+			var completion = new TaskCompletionSource<IReadOnlyList<string>>(TaskCreationOptions.RunContinuationsAsynchronously);
+			var item = new WorkItem(() => RunWriteAsync(transform, completion, cancellationToken), exception => completion.TrySetException(exception));
+			if (!Work.Writer.TryWrite(item))
+				completion.TrySetException(new ObjectDisposedException(nameof(RoslynInstance)));
 
-		return completion.Task;
+			return completion.Task;
+		}
 	}
 
 	/// <summary>
@@ -128,26 +134,29 @@ public sealed class RoslynInstance : IDisposable
 	/// </summary>
 	public async Task<IReadOnlyList<string>> EnqueueWriteWithAutoDiagnosticsAsync(Func<Solution, CancellationToken, Task<WriteResult>> transform, Func<Solution, CancellationToken, Task<IReadOnlyList<Diagnostic>>> diagnosticsCompute, CancellationToken cancellationToken = default)
 	{
-		if (transform is null)
-			throw new ArgumentNullException(nameof(transform));
-		if (diagnosticsCompute is null)
-			throw new ArgumentNullException(nameof(diagnosticsCompute));
-
-		IReadOnlyList<string> changedPaths = await EnqueueWriteAsync(transform, cancellationToken);
-
-		_ = Task.Run(async () =>
+		using (RoslynkActivitySource.Instance.StartActivity($"{nameof(RoslynInstance)}.{nameof(RoslynInstance.EnqueueWriteWithAutoDiagnosticsAsync)}"))
 		{
-			try
-			{
-				await RequestDiagnosticsAsync("auto", diagnosticsCompute, cancellationToken);
-			}
-			catch
-			{
-				// Background diagnostics failed silently diagnostics will be recomputed on next explicit request
-			}
-		});
+			if (transform is null)
+				throw new ArgumentNullException(nameof(transform));
+			if (diagnosticsCompute is null)
+				throw new ArgumentNullException(nameof(diagnosticsCompute));
 
-		return changedPaths;
+			IReadOnlyList<string> changedPaths = await EnqueueWriteAsync(transform, cancellationToken);
+
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					await RequestDiagnosticsAsync("auto", diagnosticsCompute, cancellationToken);
+				}
+				catch
+				{
+					// Background diagnostics failed silently diagnostics will be recomputed on next explicit request
+				}
+			});
+
+			return changedPaths;
+		}
 	}
 
 	/// <summary>
@@ -157,17 +166,20 @@ public sealed class RoslynInstance : IDisposable
 	/// </summary>
 	public Task<DiagnosticsResult> RequestDiagnosticsAsync(string cacheKey, Func<Solution, CancellationToken, Task<IReadOnlyList<Diagnostic>>> compute, CancellationToken cancellationToken = default)
 	{
-		if (cacheKey is null)
-			throw new ArgumentNullException(nameof(cacheKey));
-		if (compute is null)
-			throw new ArgumentNullException(nameof(compute));
+		using (RoslynkActivitySource.Instance.StartActivity($"{nameof(RoslynInstance)}.{nameof(RoslynInstance.RequestDiagnosticsAsync)}"))
+		{
+			if (cacheKey is null)
+				throw new ArgumentNullException(nameof(cacheKey));
+			if (compute is null)
+				throw new ArgumentNullException(nameof(compute));
 
-		var completion = new TaskCompletionSource<DiagnosticsResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-		var item = new WorkItem(() => RunDiagnosticsAsync(cacheKey, compute, completion, cancellationToken), exception => completion.TrySetException(exception));
-		if (!Work.Writer.TryWrite(item))
-			completion.TrySetException(new ObjectDisposedException(nameof(RoslynInstance)));
+			var completion = new TaskCompletionSource<DiagnosticsResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+			var item = new WorkItem(() => RunDiagnosticsAsync(cacheKey, compute, completion, cancellationToken), exception => completion.TrySetException(exception));
+			if (!Work.Writer.TryWrite(item))
+				completion.TrySetException(new ObjectDisposedException(nameof(RoslynInstance)));
 
-		return completion.Task;
+			return completion.Task;
+		}
 	}
 
 	private async Task ConsumeAsync()

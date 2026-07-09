@@ -4,7 +4,6 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.CodeAnalysis.Text;
@@ -280,11 +279,25 @@ public sealed class SolutionWorkspace : IDisposable
 		return solution;
 	}
 
+	// MSBuildWorkspace.OpenSolutionAsync already expands a multi-targeted project into one Project per TFM,
+	// so this normally does nothing: a .csproj already represented by more than one loaded project has been
+	// natively expanded and is skipped. Manual expansion runs only as a fallback for the rare case where the
+	// workspace loaded a multi-TFM project as a single project.
 	private static async Task<Solution> ExpandMultiTargetProjectsAsync(Solution solution, CancellationToken ct)
 	{
+		var countByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+		foreach (Project project in solution.Projects)
+		{
+			if (project.FilePath is null) continue;
+			countByPath[project.FilePath] = countByPath.TryGetValue(project.FilePath, out int count) ? count + 1 : 1;
+		}
+
 		foreach (Project project in solution.Projects.ToArray())
 		{
 			if (project.FilePath is null) continue;
+
+			// Already expanded natively into per-TFM projects; nothing to add.
+			if (countByPath[project.FilePath] > 1) continue;
 
 			string[]? tfms = await ReadTargetFrameworksAsync(project.FilePath);
 			if (tfms is null || tfms.Length <= 1) continue;
@@ -347,23 +360,7 @@ public sealed class SolutionWorkspace : IDisposable
 		return solution;
 	}
 
-	private static string? DetectActiveTfm(Project project)
-	{
-		if (project.ParseOptions is CSharpParseOptions csharpOptions)
-		{
-			foreach (string symbol in csharpOptions.PreprocessorSymbolNames)
-			{
-				if (symbol.StartsWith("NET", StringComparison.Ordinal) &&
-					symbol.EndsWith("_0", StringComparison.Ordinal) &&
-					symbol.Length > 5)
-				{
-					string version = symbol[3..^2].ToLowerInvariant();
-					return $"net{version}.0";
-				}
-			}
-		}
-		return null;
-	}
+	private static string? DetectActiveTfm(Project project) => ProjectFramework.FromParseOptions(project);
 
 	private static async Task<string[]?> ReadTargetFrameworksAsync(string projectFilePath)
 	{
