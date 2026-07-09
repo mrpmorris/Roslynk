@@ -1,7 +1,9 @@
-using System.Collections.Concurrent;
 using Morris.Roslynk.Infrastructure.Diagnostics;
+using Morris.Roslynk.Infrastructure.Observability;
 using Morris.Roslynk.Infrastructure.Watching;
 using Morris.Roslynk.Infrastructure.Workspaces;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace Morris.Roslynk.Infrastructure.Lifecycle;
 
@@ -73,7 +75,10 @@ public sealed class InstanceRegistry : IDisposable
 		SolutionKey key = SolutionKey.For(solutionPath);
 		RoslynInstance instance = GetOrCreate(key);
 
-		await instance.EnsureRebuiltAsync(progress => SolutionWorkspace.LoadAsync(key.FilePath, progress), AttachWatcher);
+		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity($"{nameof(RoslynInstance)}.{nameof(RoslynInstance.EnsureRebuiltAsync)}"))
+		{
+			await instance.EnsureRebuiltAsync(progress => SolutionWorkspace.LoadAsync(key.FilePath, progress), AttachWatcher);
+		}
 
 		instance.Touch();
 		return instance;
