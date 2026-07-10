@@ -2,7 +2,6 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Reflection;
-using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.MSBuild;
@@ -279,108 +278,7 @@ public sealed class SolutionWorkspace : IDisposable
 		return solution;
 	}
 
-	// MSBuildWorkspace.OpenSolutionAsync already expands a multi-targeted project into one Project per TFM,
-	// so this normally does nothing: a .csproj already represented by more than one loaded project has been
-	// natively expanded and is skipped. Manual expansion runs only as a fallback for the rare case where the
-	// workspace loaded a multi-TFM project as a single project.
-	private static async Task<Solution> ExpandMultiTargetProjectsAsync(Solution solution, CancellationToken ct)
-	{
-		var countByPath = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-		foreach (Project project in solution.Projects)
-		{
-			if (project.FilePath is null) continue;
-			countByPath[project.FilePath] = countByPath.TryGetValue(project.FilePath, out int count) ? count + 1 : 1;
-		}
-
-		foreach (Project project in solution.Projects.ToArray())
-		{
-			if (project.FilePath is null) continue;
-
-			// Already expanded natively into per-TFM projects; nothing to add.
-			if (countByPath[project.FilePath] > 1) continue;
-
-			string[]? tfms = await ReadTargetFrameworksAsync(project.FilePath);
-			if (tfms is null || tfms.Length <= 1) continue;
-
-			string? activeTfm = DetectActiveTfm(project);
-			if (activeTfm is null) continue;
-
-			foreach (string tfm in tfms)
-			{
-				if (string.Equals(tfm, activeTfm, StringComparison.OrdinalIgnoreCase))
-					continue;
-
-				using (Activity? tfmActivity = RoslynkActivitySource.Instance.StartActivity("expand_tfm"))
-				{
-					tfmActivity?.SetTag(ActivityTags.TargetFrameworkTag, tfm);
-					tfmActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(project.FilePath));
-
-					var properties = new Dictionary<string, string> {
-						["TargetFramework"] = tfm
-					};
-
-					using MSBuildWorkspace subWorkspace = MSBuildWorkspace.Create(properties);
-					Project subProject = await subWorkspace.OpenProjectAsync(project.FilePath, cancellationToken: ct);
-
-					ProjectId newProjectId = ProjectId.CreateNewId();
-					ProjectInfo projectInfo = ProjectInfo.Create(
-						newProjectId,
-						VersionStamp.Create(),
-						$"{project.Name}({tfm})",
-						subProject.AssemblyName,
-						subProject.Language,
-						filePath: subProject.FilePath,
-						outputFilePath: subProject.OutputFilePath,
-						compilationOptions: subProject.CompilationOptions,
-						parseOptions: subProject.ParseOptions,
-						metadataReferences: subProject.MetadataReferences,
-						projectReferences: [],
-						analyzerReferences: subProject.AnalyzerReferences);
-
-					solution = solution.AddProject(projectInfo);
-
-					int docCount = 0;
-					foreach (Document doc in subProject.Documents)
-					{
-						SourceText text = await doc.GetTextAsync(ct);
-						solution = solution.AddDocument(
-							DocumentId.CreateNewId(newProjectId),
-							doc.Name,
-							text,
-							doc.Folders,
-							doc.FilePath);
-						docCount++;
-					}
-
-					tfmActivity?.SetTag(ActivityTags.ProjectCountTag, docCount);
-				}
-			}
-		}
-
-		return solution;
-	}
-
-	private static string? DetectActiveTfm(Project project) => ProjectFramework.FromParseOptions(project);
-
-	private static async Task<string[]?> ReadTargetFrameworksAsync(string projectFilePath)
-	{
-		try
-		{
-			string content = await File.ReadAllTextAsync(projectFilePath);
-			var match = Regex.Match(content,
-				@"<TargetFrameworks[^>]*>(.*?)</TargetFrameworks>",
-				RegexOptions.IgnoreCase | RegexOptions.Singleline);
-
-			if (!match.Success) return null;
-
-			return match.Groups[1].Value
-				.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-		}
-		catch
-		{
-			return null;
-		}
-	}
+	private static Task<Solution> ExpandMultiTargetProjectsAsync(Solution solution, CancellationToken ct) => Task.FromResult(solution);
 
 	public void Dispose() => Workspace.Dispose();
 }
