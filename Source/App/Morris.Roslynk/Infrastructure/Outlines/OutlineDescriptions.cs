@@ -47,10 +47,15 @@ internal static class OutlineDescriptions
 	/// freshness contract.
 	/// </summary>
 	public const string CommonMethodInstructions =
-		"Returns a compact text outline, not JSON: 'key=value' header lines, a blank line, then a "
-		+ "tab-indented body. Headers are the lines before the blank line; the body follows it; a result with no "
-		+ "blank line is all headers. Newlines are '\\n'; booleans are Y or N. A status header is present only when "
-		+ "the solution is not Ready (Building or Faulted); its absence means Ready. " + Freshness;
+		$"""
+		Returns a compact text outline, not JSON: 'key=value' header lines, a blank line, then a 
+		tab-indented body. Headers are the lines before the blank line; the body follows it; a result with no
+		blank line is all headers. Newlines are '\\n'; booleans are Y or N. A status header is present only when
+		the solution is not Ready (Building or Faulted); its absence means Ready.
+		When a parameter specifies a default value you should not pass a value to it unless you certainly need
+		the non-default behaviour.
+		{Freshness}
+		""";
 
 	/// <summary>How a capped (paginated) result announces that it dropped rows, when the total is known.</summary>
 	public const string Truncation =
