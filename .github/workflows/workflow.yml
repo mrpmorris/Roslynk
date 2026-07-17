@@ -1,14 +1,15 @@
 name: Publish to NuGet
 
-# Pushing a tag like v1.2.3 packs Roslynk at that version and publishes it to NuGet.org, after the
-# full test suite passes. Authentication is Trusted Publishing (GitHub OIDC, no stored API key):
-# NuGet/login exchanges this workflow's identity for a short-lived key. Requirements:
+# Pushing a tag like 1.0.0-beta.1 packs Roslynk at that version and publishes it to NuGet.org, after the
+# full test suite passes. Tag name is the package version (no "v" prefix). Authentication is Trusted
+# Publishing (GitHub OIDC, no stored API key): NuGet/login exchanges this workflow's identity for a
+# short-lived key. Requirements:
 #   - a Trusted Publishing policy on nuget.org for this repository and this workflow file
 #   - the NUGET_USER repository variable set to the nuget.org username that owns the policy
 on:
   push:
     tags:
-      - "v*"
+      - "[0-9]*"
 
 permissions:
   contents: read
@@ -25,7 +26,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Derive version from tag
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
 
       - name: Test
         run: dotnet test Source/Morris.Roslynk.slnx --configuration Release
