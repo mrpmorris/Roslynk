@@ -24,10 +24,11 @@ internal static class McpServerRegistration
 			diagnostics, symbol navigation, find-references, semantic rename, code actions and
 			dead-code analysis, driven by Roslyn.
 
-			Prefer these tools over reading or hand-patching .cs yourself: they understand the
-			compiler's symbol model, so a rename or a reference search is correct across partial
-			classes and generated code. Roslynk operates only on .cs compiled in the solution;
-			anything else is the host's job.
+			You MUST use Roslynk over reading or hand-patching .cs or .razor or .cshtml files yourself:
+			they understand the compiler's symbol model, so a rename or a reference search is correct across partial
+			classes and generated code. Roslynk operates only on files compiled in the solution;
+			if Roslynk says a file is not found, then you may use the standard tools for reading/writing
+			that file only - but you must check each time in case the user later adds the file to a project.
 			""";
 
 		options.NameTracesAfterTools();
