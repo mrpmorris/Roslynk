@@ -36,7 +36,7 @@ public static class RazorMapping
 	public static FileLinePositionSpan GetDisplaySpan(this Location location)
 	{
 		FileLinePositionSpan mapped = location.GetMappedLineSpan();
-		if (mapped.Path.Length > 0)
+		if (!string.IsNullOrEmpty(mapped.Path))
 			return mapped;
 		return location.GetLineSpan();
 	}
@@ -44,7 +44,7 @@ public static class RazorMapping
 	public static FileLinePositionSpan GetDisplaySpan(this SyntaxTree syntaxTree, TextSpan textSpan)
 	{
 		FileLinePositionSpan mapped = syntaxTree.GetMappedLineSpan(textSpan);
-		if (mapped.Path.Length > 0)
+		if (!string.IsNullOrEmpty(mapped.Path))
 			return mapped;
 		return syntaxTree.GetLineSpan(textSpan);
 	}

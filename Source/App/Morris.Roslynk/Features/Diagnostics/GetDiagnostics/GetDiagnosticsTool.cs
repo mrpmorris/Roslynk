@@ -124,8 +124,13 @@ public sealed class GetDiagnosticsTool
 					builder.Line(severityDepth, SeverityLabel(severity.Key));
 
 					IEnumerable<Diagnostic> ordered = severity
-						.OrderBy(diagnostic => diagnostic.Location.GetDisplaySpan().StartLinePosition.Line)
-						.ThenBy(diagnostic => diagnostic.Location.GetDisplaySpan().StartLinePosition.Character);
+						.OrderBy(diagnostic => diagnostic.Location.IsInSource ? 0 : 1)
+						.ThenBy(diagnostic => diagnostic.Location.IsInSource
+							? diagnostic.Location.GetDisplaySpan().StartLinePosition.Line
+							: int.MaxValue)
+						.ThenBy(diagnostic => diagnostic.Location.IsInSource
+							? diagnostic.Location.GetDisplaySpan().StartLinePosition.Character
+							: int.MaxValue);
 
 					foreach (Diagnostic diagnostic in ordered)
 						builder.Line(severityDepth + 1, EntryText(diagnostic));
