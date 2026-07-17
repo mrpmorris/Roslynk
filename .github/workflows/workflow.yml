@@ -1,10 +1,10 @@
-name: Publish to NuGet
+name: Publish to GitHub Packages
 
-# Pushing a tag like v1.2.3 packs Roslynk at that version and publishes it to NuGet.org, after the
-# full test suite passes. Authentication is Trusted Publishing (GitHub OIDC, no stored API key):
-# NuGet/login exchanges this workflow's identity for a short-lived key. Requirements:
-#   - a Trusted Publishing policy on nuget.org for this repository and this workflow file
-#   - the NUGET_USER repository variable set to the nuget.org username that owns the policy
+# Pushing a tag like v1.2.3 packs Roslynk at that version and publishes it to this repository's
+# GitHub Packages NuGet feed, after the full test suite passes.
+# Consumers add the feed:
+#   https://nuget.pkg.github.com/OWNER/index.json
+# and authenticate with a PAT (read:packages) or GITHUB_TOKEN that can read packages from this private repo.
 on:
   push:
     tags:
@@ -12,7 +12,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write
+  packages: write
 
 jobs:
   publish:
@@ -37,15 +37,18 @@ jobs:
           -p:Version=$VERSION
           --output ./nupkgs
 
-      - name: NuGet login (Trusted Publishing)
-        id: login
-        uses: NuGet/login@v1
-        with:
-          user: ${{ vars.NUGET_USER }}
+      - name: Add GitHub Packages source
+        run: >
+          dotnet nuget add source
+          "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+          --name github
+          --username ${{ github.actor }}
+          --password ${{ secrets.GITHUB_TOKEN }}
+          --store-password-in-clear-text
 
       - name: Push
         run: >
           dotnet nuget push ./nupkgs/*.nupkg
-          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
-          --source https://api.nuget.org/v3/index.json
+          --api-key ${{ secrets.GITHUB_TOKEN }}
+          --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
           --skip-duplicate
