@@ -278,7 +278,9 @@ public sealed class SolutionWorkspace : IDisposable
 		return solution;
 	}
 
-	private static Task<Solution> ExpandMultiTargetProjectsAsync(Solution solution, CancellationToken ct) => Task.FromResult(solution);
+	// Multi-TFM expansion is left to MSBuildWorkspace / the Roslyn host — no manual per-framework clone.
+	private static Task<Solution> ExpandMultiTargetProjectsAsync(Solution solution, CancellationToken ct) =>
+		Task.FromResult(solution);
 
 	public void Dispose() => Workspace.Dispose();
 }

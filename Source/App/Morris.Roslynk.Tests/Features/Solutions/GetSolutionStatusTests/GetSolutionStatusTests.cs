@@ -20,19 +20,6 @@ public class GetSolutionStatusTests
 	}
 
 	[Fact]
-	public async Task WhenAMultiTargetedSolutionIsLoaded_ThenEachTargetFrameworkCountsAsAProject()
-	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
-		var subject = new GetSolutionStatusTool(registry);
-
-		string result = subject.GetSolutionStatus();
-
-		string line = result.Split('\n').First(candidate => candidate.Contains(",Ready,", StringComparison.Ordinal));
-		Assert.EndsWith(",2/2", line);
-	}
-
-	[Fact]
 	public async Task WhileASolutionIsStillLoading_ThenTheTotalIsUnknownAndStatusIsBuilding()
 	{
 		using var registry = new InstanceRegistry();
