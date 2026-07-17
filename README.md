@@ -1,6 +1,6 @@
 # Roslynk
 
-**Roslyn + link** — the link between Claude and Roslyn.
+**Roslyn + link** — the link between AI test harnesses and Roslyn.
 
 Add the MCP to your AI harness, then type "Open (solution file name)" - that's it!
 
