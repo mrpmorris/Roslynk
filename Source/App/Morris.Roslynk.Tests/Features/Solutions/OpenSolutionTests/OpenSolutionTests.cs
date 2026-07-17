@@ -23,4 +23,18 @@ public class OpenSolutionTests
 		Assert.Contains("projects=1", ready);
 		Assert.Contains("SimpleLibrary.csproj,", ready);
 	}
+
+	[Fact]
+	public void WhenOpeningASolutionThatDoesNotExist_ThenItReturnsNotFoundImmediately()
+	{
+		using var registry = new InstanceRegistry();
+		var subject = new OpenSolutionTool(registry);
+
+		string nonexistentPath = Path.Combine(Path.GetTempPath(), "DoesNotExist", "Solution.slnx");
+		string result = subject.OpenSolution(nonexistentPath);
+
+		Assert.Contains("error=NotFound", result);
+		Assert.Contains("No solution file was found at", result);
+		Assert.Empty(registry.OpenSolutionPaths);
+	}
 }

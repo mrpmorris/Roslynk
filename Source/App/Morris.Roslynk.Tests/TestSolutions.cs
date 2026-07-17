@@ -14,6 +14,15 @@ internal static class TestSolutions
 	private static readonly Lazy<string> MultiTargetSolutionPath = new(() => Prepare("MultiTargetSolution", "MultiTargetSolution.slnx"));
 	private static readonly Lazy<string> ReferencesSolutionPath = new(() => Prepare("ReferencesSolution", "ReferencesSolution.slnx"));
 	private static readonly Lazy<string> ConditionalSolutionPath = new(() => Prepare("ConditionalSolution", "ConditionalSolution.slnx"));
+	private static readonly Lazy<string> GeneratorSolutionPath = new(() =>
+	{
+		string path = Prepare("GeneratorSolution", "GeneratorSolution.slnx");
+
+		// The consumer references the generator project as an analyzer only; the workspace's design-time
+		// build never compiles it, so the generator DLL must be built before the solution loads.
+		Build(Path.Combine(Path.GetDirectoryName(path)!, "GeneratorLib", "GeneratorLib.csproj"));
+		return path;
+	});
 
 	/// <summary>A clean single-project solution.</summary>
 	public static string Simple => SimpleSolution.Value;
@@ -32,6 +41,9 @@ internal static class TestSolutions
 
 	/// <summary>A single-project solution whose method is called in both the #if DEBUG and #else branches.</summary>
 	public static string Conditional => ConditionalSolutionPath.Value;
+
+	/// <summary>A consumer using a type emitted by a project-referenced source generator (built on first use).</summary>
+	public static string Generator => GeneratorSolutionPath.Value;
 
 	private static string Prepare(params string[] relativeParts)
 	{
@@ -54,9 +66,13 @@ internal static class TestSolutions
 		throw new DirectoryNotFoundException("Could not locate the TestFixtures folder above the test assembly.");
 	}
 
-	private static void Restore(string solutionPath)
+	private static void Restore(string solutionPath) => RunDotnet("restore", solutionPath);
+
+	private static void Build(string projectPath) => RunDotnet("build", projectPath);
+
+	private static void RunDotnet(string verb, string path)
 	{
-		var startInfo = new ProcessStartInfo("dotnet", $"restore \"{solutionPath}\"")
+		var startInfo = new ProcessStartInfo("dotnet", $"{verb} \"{path}\"")
 		{
 			RedirectStandardOutput = true,
 			RedirectStandardError = true,
@@ -64,11 +80,11 @@ internal static class TestSolutions
 		};
 
 		using Process process = Process.Start(startInfo)
-			?? throw new InvalidOperationException("Failed to start 'dotnet restore'.");
+			?? throw new InvalidOperationException($"Failed to start 'dotnet {verb}'.");
 		process.WaitForExit();
 
 		if (process.ExitCode != 0)
-			throw new InvalidOperationException($"Restoring '{solutionPath}' failed:\n{process.StandardError.ReadToEnd()}");
+			throw new InvalidOperationException($"'dotnet {verb}' on '{path}' failed:\n{process.StandardOutput.ReadToEnd()}\n{process.StandardError.ReadToEnd()}");
 	}
 
 	/// <summary>
@@ -82,6 +98,12 @@ internal static class TestSolutions
 
 	/// <summary>A writable scratch copy of the RazorSolution fixture, for tests that rename/edit its .razor files.</summary>
 	public static string CreateScratchRazorSolution() => CreateScratch("RazorSolution", "RazorSolution.slnx");
+
+	/// <summary>
+	/// A scratch copy of the GeneratorSolution fixture whose generator DLL has deliberately NOT been
+	/// built, for tests asserting how an unloadable analyzer reference is reported.
+	/// </summary>
+	public static string CreateScratchGeneratorSolutionWithoutBuiltGenerator() => CreateScratch("GeneratorSolution", "GeneratorSolution.slnx");
 
 	private static string CreateScratch(string fixtureName, string solutionFile)
 	{

@@ -48,14 +48,15 @@ public sealed class GetDiagnosticsTool
 		  \t\t<file.cs|file.razor>
 		  \t\t\t<severity>
 		  \t\t\t\t<id>,<line:col>,<message>
-		where severity is the plural group errors|warnings|infos|hidden and the free-text message is last. Errors are always
-		included; set includeWarnings, includeInfo, or includeHidden to widen (all default false). Analyzers
-		(NetAnalyzers / IDE rules) run by default; set includeAnalyzers false for a faster compiler-only pass.
+		where severity is the plural group errors|warnings|infos|hidden and the free-text message is last.
+		Set includeErrors, includeWarnings, includeInfo, or includeHidden to include the actual details (all default false).
+		Analyzers (NetAnalyzers / IDE rules) run by default; set includeAnalyzers false for a faster compiler-only pass.
 		{OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to hunt for problems, and over running
 		`dotnet build`; it returns the compiler's and analyzers' own diagnostics with exact locations.
 		""")]
 	public async Task<string> GetDiagnostics(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
+		[Description("Include error-severity diagnostics. Default false.")] bool includeErrors = false,
 		[Description("Include warning-severity diagnostics. Default false.")] bool includeWarnings = false,
 		[Description("Include info-severity diagnostics. Default false.")] bool includeInfo = false,
 		[Description("Include hidden-severity diagnostics. Default false.")] bool includeHidden = false,
@@ -79,7 +80,9 @@ public sealed class GetDiagnosticsTool
 
 		IReadOnlyList<Diagnostic> all = diagnostics.Diagnostics;
 
-		var wanted = new HashSet<DiagnosticSeverity> { DiagnosticSeverity.Error };
+		var wanted = new HashSet<DiagnosticSeverity>();
+		if (includeErrors)
+			wanted.Add(DiagnosticSeverity.Error);
 		if (includeWarnings)
 			wanted.Add(DiagnosticSeverity.Warning);
 		if (includeInfo)

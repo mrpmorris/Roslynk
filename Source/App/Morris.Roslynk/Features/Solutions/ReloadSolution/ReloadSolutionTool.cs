@@ -35,6 +35,8 @@ public sealed class ReloadSolutionTool
 		result, not JSON: 'solutionId', 'status', 'projects'. Returns immediately; the previous snapshot keeps
 		serving reads (status Building) until the fresh one is ready. No effect on files. A failed reload is
 		returned as a Faulted error. {OutlineDescriptions.Freshness}
+		You may suggest to the user calling this tool if the circumstances seem to require it, but NEVER call
+		it yourself unless EXPLICITLY instructed to by the user.
 		""")]
 	public string ReloadSolution(
 		[Description("Solution handle returned by open_solution.")] string solutionId)

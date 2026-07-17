@@ -2,9 +2,8 @@ using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Reflection;
-using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Observability;
@@ -15,6 +14,15 @@ namespace Morris.Roslynk.Infrastructure.Workspaces;
 public sealed class SolutionWorkspace : IDisposable
 {
 	private static readonly string[] RelevantProperties = ["EmitCompilerGeneratedFiles", "CompilerGeneratedFilesOutputPath"];
+
+	// MSBuildWorkspace loads analyzer/source-generator assemblies directly from their build-output
+	// path and holds a file lock for the lifetime of the workspace. Because Roslynk keeps solutions
+	// loaded, that lock never releases and a concurrent `dotnet build` cannot overwrite the generator's
+	// output DLL. A shadow-copy loader copies each analyzer assembly to a temp directory and loads the
+	// copy, leaving the originals in bin/obj unlocked.
+	private static readonly IAnalyzerAssemblyLoader ShadowCopyAnalyzerLoader =
+		new ShadowCopyingAnalyzerAssemblyLoader(
+			Path.Combine(Path.GetTempPath(), "Roslynk", "AnalyzerShadowCopy"));
 
 	private readonly MSBuildWorkspace Workspace;
 
@@ -128,6 +136,12 @@ public sealed class SolutionWorkspace : IDisposable
 					solution = await ExpandMultiTargetProjectsAsync(solution, cancellationToken);
 				}
 
+				using (Activity? shadowActivity = RoslynkActivitySource.Instance.StartActivity("shadow_copy_analyzers"))
+				{
+					shadowActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
+					solution = UseShadowCopyAnalyzerLoaders(solution, loadDiagnostics);
+				}
+
 				loadActivity?.SetTag(ActivityTags.ProjectCountTag, solution.Projects.Count());
 				return new SolutionWorkspace(workspace, solution, immutableModels, loadDiagnostics.ToArray());
 			}
@@ -210,110 +224,61 @@ public sealed class SolutionWorkspace : IDisposable
 		return (type, ctor, getProp);
 	}
 
-	private static async Task<Solution> ExpandMultiTargetProjectsAsync(Solution solution, CancellationToken ct)
+	private static Solution UseShadowCopyAnalyzerLoaders(Solution solution, ConcurrentBag<string> loadDiagnostics)
 	{
-		foreach (Project project in solution.Projects.ToArray())
+		// One reference per path per load: projects share analyzer paths heavily (SDK analyzers), and a
+		// shared instance avoids re-reflecting over the same assembly per project. Scoped to this load —
+		// not static — so a reload after a generator rebuild creates fresh references that observe the
+		// new bits through the stamp-keyed shadow loader.
+		var referencesByPath = new Dictionary<string, AnalyzerFileReference>(StringComparer.OrdinalIgnoreCase);
+
+		foreach (Project project in solution.Projects)
 		{
-			if (project.FilePath is null) continue;
+			if (project.AnalyzerReferences.Count == 0)
+				continue;
 
-			string[]? tfms = await ReadTargetFrameworksAsync(project.FilePath);
-			if (tfms is null || tfms.Length <= 1) continue;
+			var remapped = new List<AnalyzerReference>(project.AnalyzerReferences.Count);
+			bool changed = false;
 
-			string? activeTfm = DetectActiveTfm(project);
-			if (activeTfm is null) continue;
-
-			foreach (string tfm in tfms)
+			foreach (AnalyzerReference reference in project.AnalyzerReferences)
 			{
-				if (string.Equals(tfm, activeTfm, StringComparison.OrdinalIgnoreCase))
-					continue;
-
-				using (Activity? tfmActivity = RoslynkActivitySource.Instance.StartActivity("expand_tfm"))
+				if (reference is AnalyzerFileReference fileReference)
 				{
-					tfmActivity?.SetTag(ActivityTags.TargetFrameworkTag, tfm);
-					tfmActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(project.FilePath));
-
-					var properties = new Dictionary<string, string> {
-						["TargetFramework"] = tfm
-					};
-
-					using MSBuildWorkspace subWorkspace = MSBuildWorkspace.Create(properties);
-					Project subProject = await subWorkspace.OpenProjectAsync(project.FilePath, cancellationToken: ct);
-
-					ProjectId newProjectId = ProjectId.CreateNewId();
-					ProjectInfo projectInfo = ProjectInfo.Create(
-						newProjectId,
-						VersionStamp.Create(),
-						$"{project.Name}({tfm})",
-						subProject.AssemblyName,
-						subProject.Language,
-						filePath: subProject.FilePath,
-						outputFilePath: subProject.OutputFilePath,
-						compilationOptions: subProject.CompilationOptions,
-						parseOptions: subProject.ParseOptions,
-						metadataReferences: subProject.MetadataReferences,
-						projectReferences: [],
-						analyzerReferences: subProject.AnalyzerReferences);
-
-					solution = solution.AddProject(projectInfo);
-
-					int docCount = 0;
-					foreach (Document doc in subProject.Documents)
+					if (!referencesByPath.TryGetValue(fileReference.FullPath, out AnalyzerFileReference? shadowReference))
 					{
-						SourceText text = await doc.GetTextAsync(ct);
-						solution = solution.AddDocument(
-							DocumentId.CreateNewId(newProjectId),
-							doc.Name,
-							text,
-							doc.Folders,
-							doc.FilePath);
-						docCount++;
+						shadowReference = new AnalyzerFileReference(fileReference.FullPath, ShadowCopyAnalyzerLoader);
+
+						// A reference that fails to load otherwise vanishes silently: AnalyzerFileReference
+						// reports failures only through this event, and the compilation proceeds without
+						// the reference's analyzers and generators — phantom CS0246s with no visible cause.
+						shadowReference.AnalyzerLoadFailed += (_, e) =>
+							loadDiagnostics.Add($"Analyzer load failed for '{fileReference.FullPath}': {e.Message}");
+
+						// Force the load now so failures land in LoadDiagnostics before it is snapshotted;
+						// the first compilation would load these assemblies anyway.
+						_ = shadowReference.GetAnalyzers(project.Language);
+						_ = shadowReference.GetGenerators(project.Language);
+
+						referencesByPath[fileReference.FullPath] = shadowReference;
 					}
 
-					tfmActivity?.SetTag(ActivityTags.ProjectCountTag, docCount);
+					remapped.Add(shadowReference);
+					changed = true;
+				}
+				else
+				{
+					remapped.Add(reference);
 				}
 			}
+
+			if (changed)
+				solution = solution.WithProjectAnalyzerReferences(project.Id, remapped);
 		}
 
 		return solution;
 	}
 
-	private static string? DetectActiveTfm(Project project)
-	{
-		if (project.ParseOptions is CSharpParseOptions csharpOptions)
-		{
-			foreach (string symbol in csharpOptions.PreprocessorSymbolNames)
-			{
-				if (symbol.StartsWith("NET", StringComparison.Ordinal) &&
-					symbol.EndsWith("_0", StringComparison.Ordinal) &&
-					symbol.Length > 5)
-				{
-					string version = symbol[3..^2].ToLowerInvariant();
-					return $"net{version}.0";
-				}
-			}
-		}
-		return null;
-	}
-
-	private static async Task<string[]?> ReadTargetFrameworksAsync(string projectFilePath)
-	{
-		try
-		{
-			string content = await File.ReadAllTextAsync(projectFilePath);
-			var match = Regex.Match(content,
-				@"<TargetFrameworks[^>]*>(.*?)</TargetFrameworks>",
-				RegexOptions.IgnoreCase | RegexOptions.Singleline);
-
-			if (!match.Success) return null;
-
-			return match.Groups[1].Value
-				.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-		}
-		catch
-		{
-			return null;
-		}
-	}
+	private static Task<Solution> ExpandMultiTargetProjectsAsync(Solution solution, CancellationToken ct) => Task.FromResult(solution);
 
 	public void Dispose() => Workspace.Dispose();
 }
