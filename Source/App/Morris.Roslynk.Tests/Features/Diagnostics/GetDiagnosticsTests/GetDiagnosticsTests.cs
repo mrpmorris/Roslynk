@@ -13,7 +13,7 @@ public class GetDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		string result = await subject.GetDiagnostics(TestSolutions.Broken);
+		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeErrors: true);
 
 		Assert.DoesNotContain("error=", result);
 		Assert.DoesNotContain("errors=0", result);
@@ -29,9 +29,9 @@ public class GetDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		string result = await subject.GetDiagnostics(TestSolutions.Broken);
+		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeErrors: true);
 
-		// Counts are always in the header; body only shows errors.
+		// Counts are always in the header; body only shows errors when includeErrors is set.
 		Assert.Contains("warnings=0", result);
 		Assert.DoesNotContain("\twarnings", result);
 	}
@@ -43,7 +43,8 @@ public class GetDiagnosticsTests
 		await registry.GetOrAddAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
-		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeWarnings: true);
+		string result = await subject.GetDiagnostics(
+			TestSolutions.Broken, includeErrors: true, includeWarnings: true);
 
 		// The fixture has zero warnings, so only errors appear in the body.
 		Assert.Contains("warnings=0", result);

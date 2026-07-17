@@ -11,7 +11,14 @@ namespace Morris.Roslynk.Tests.Infrastructure.Razor;
 /// </summary>
 public class RazorStaleSnapshotTests
 {
-	private const string GeneratedSubPath = @"obj\Debug\net8.0\generated\Microsoft.CodeAnalysis.Razor.Compiler\Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator";
+	// Use Path.Combine so planted paths resolve on Linux and Windows (literal backslashes are not separators on Unix).
+	private static readonly string GeneratedSubPath = Path.Combine(
+		"obj",
+		"Debug",
+		"net8.0",
+		"generated",
+		"Microsoft.CodeAnalysis.Razor.Compiler",
+		"Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator");
 
 	[Fact]
 	public async Task WhenAGeneratedFileHasNoSource_ThenItIsNotAddedToTheSolution()
@@ -36,15 +43,17 @@ public class RazorStaleSnapshotTests
 		string solutionPath = TestSolutions.CreateScratchRazorSolution();
 
 		// Stale: Counter.razor exists but was edited after this file was emitted.
+		// Cover every component so incompleteness is not the reason the snapshot is rejected — only age is.
 		string planted = PlantGeneratedFile(solutionPath, "Counter_razor.g.cs",
 			"namespace RazorLib { public partial class Counter { void M() { StaleSnapshotMarker(); } } }");
+		PlantGeneratedFile(solutionPath, "UsesCounter_razor.g.cs",
+			"namespace RazorLib { public partial class UsesCounter : global::Microsoft.AspNetCore.Components.ComponentBase { } }");
 		File.SetLastWriteTimeUtc(planted, new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc));
 
 		using SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(solutionPath);
 		IReadOnlyList<Diagnostic> diagnostics = await new DiagnosticsService().GetAllDiagnosticsAsync(workspace.Solution);
 
-		Assert.DoesNotContain(workspace.Solution.Projects.SelectMany(p => p.Documents),
-			d => d.FilePath?.Contains("Microsoft.CodeAnalysis.Razor.Compiler", StringComparison.OrdinalIgnoreCase) == true);
+		// Stale content must not drive compilation (regenerated or dropped); marker would surface as CS0103.
 		Assert.DoesNotContain(diagnostics, d => d.GetMessage().Contains("StaleSnapshotMarker"));
 	}
 
@@ -96,10 +105,11 @@ public class RazorStaleSnapshotTests
 	{
 		string solutionPath = TestSolutions.CreateScratchRazorSolution();
 
+		// Markers prove the pre-generated snapshot was dropped when _Imports invalidates it.
 		PlantGeneratedFile(solutionPath, "Counter_razor.g.cs",
-			"namespace RazorLib { public partial class Counter : global::Microsoft.AspNetCore.Components.ComponentBase { } }");
+			"namespace RazorLib { public partial class Counter { void M() { DirectiveStaleMarker(); } } }");
 		PlantGeneratedFile(solutionPath, "UsesCounter_razor.g.cs",
-			"namespace RazorLib { public partial class UsesCounter : global::Microsoft.AspNetCore.Components.ComponentBase { } }");
+			"namespace RazorLib { public partial class UsesCounter { void M() { DirectiveStaleMarker(); } } }");
 
 		// _Imports.razor produces no .g.cs of its own but changes every component's generated code, so
 		// one written after the snapshot invalidates it wholesale.
@@ -108,9 +118,9 @@ public class RazorStaleSnapshotTests
 		File.SetLastWriteTimeUtc(Path.Combine(projectDir, "_Imports.razor"), DateTime.UtcNow.AddMinutes(5));
 
 		using SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(solutionPath);
+		IReadOnlyList<Diagnostic> diagnostics = await new DiagnosticsService().GetAllDiagnosticsAsync(workspace.Solution);
 
-		Assert.DoesNotContain(workspace.Solution.Projects.SelectMany(p => p.Documents),
-			d => d.FilePath?.Contains("Microsoft.CodeAnalysis.Razor.Compiler", StringComparison.OrdinalIgnoreCase) == true);
+		Assert.DoesNotContain(diagnostics, d => d.GetMessage().Contains("DirectiveStaleMarker"));
 	}
 
 	private static string PlantGeneratedFile(string solutionPath, string fileName, string content)

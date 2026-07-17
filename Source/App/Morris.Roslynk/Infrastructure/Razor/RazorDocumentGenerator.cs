@@ -282,39 +282,46 @@ public static class RazorDocumentGenerator
 
 	/// <summary>
 	/// Enumerates the project's .razor/.cshtml files. The workspace's additional documents are
-	/// authoritative when present (they include linked files outside the project directory and respect
-	/// exclusions); the disk scan covers projects whose design-time build registers no additional files.
+	/// included (linked files outside the project directory, exclusions). A disk scan is always
+	/// merged in so files present on disk but not yet in the design-time graph (e.g. a newly written
+	/// <c>_Imports.razor</c>) still participate in snapshot freshness.
 	/// </summary>
 	private static IEnumerable<string> EnumerateRazorSources(Project project, string projectDir)
 	{
-		var fromProject = project.AdditionalDocuments
+		HashSet<string> paths = new(StringComparer.OrdinalIgnoreCase);
+
+		foreach (string path in project.AdditionalDocuments
 			.Select(document => document.FilePath)
 			.OfType<string>()
 			.Where(path => path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase)
-				|| path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase))
-			.ToArray();
-
-		if (fromProject.Length > 0)
-			return fromProject;
+				|| path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase)))
+		{
+			paths.Add(path);
+		}
 
 		try
 		{
-			return Directory.EnumerateFiles(projectDir, "*.razor", SearchOption.AllDirectories)
-				.Concat(Directory.EnumerateFiles(projectDir, "*.cshtml", SearchOption.AllDirectories))
-				.Where(file =>
+			foreach (string file in Directory.EnumerateFiles(projectDir, "*.razor", SearchOption.AllDirectories)
+				.Concat(Directory.EnumerateFiles(projectDir, "*.cshtml", SearchOption.AllDirectories)))
+			{
+				// Build artifacts under bin/obj are not project sources.
+				string relative = System.IO.Path.GetRelativePath(projectDir, file);
+				string firstSegment = relative.Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)[0];
+				if (string.Equals(firstSegment, "bin", StringComparison.OrdinalIgnoreCase)
+					|| string.Equals(firstSegment, "obj", StringComparison.OrdinalIgnoreCase))
 				{
-					// Build artifacts under bin/obj are not project sources.
-					string relative = System.IO.Path.GetRelativePath(projectDir, file);
-					string firstSegment = relative.Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)[0];
-					return !string.Equals(firstSegment, "bin", StringComparison.OrdinalIgnoreCase)
-						&& !string.Equals(firstSegment, "obj", StringComparison.OrdinalIgnoreCase);
-				})
-				.ToArray();
+					continue;
+				}
+
+				paths.Add(file);
+			}
 		}
 		catch
 		{
-			return [];
+			// Disk scan is best-effort; additional documents alone still apply.
 		}
+
+		return paths;
 	}
 
 	private static async Task<Solution> AddPreGeneratedFilesAsync(Solution solution, Project project, IReadOnlyList<string> files, CancellationToken cancellationToken)
@@ -442,36 +449,38 @@ public static class RazorDocumentGenerator
 	{
 		try
 		{
-			if (!MSBuildLocator.IsRegistered)
-				return null;
+			var searchRoots = new List<string>();
 
-			string msbuildPath = MSBuildLocator.QueryVisualStudioInstances().FirstOrDefault()?.MSBuildPath ?? string.Empty;
-
-			string[] candidates =
-			[
-				System.IO.Path.Combine(msbuildPath, "Sdks", "Microsoft.NET.Sdk.Razor", "source-generators", RazorCompilerFileName),
-				System.IO.Path.Combine(msbuildPath, "Sdks", "Microsoft.NET.Sdk.Razor", "tools", RazorCompilerFileName),
-				System.IO.Path.Combine(msbuildPath, "..", "..", "Sdks", "Microsoft.NET.Sdk.Razor", "source-generators", RazorCompilerFileName),
-				System.IO.Path.Combine(msbuildPath, "..", "..", "Sdks", "Microsoft.NET.Sdk.Razor", "tools", RazorCompilerFileName),
-			];
-
-			foreach (string candidate in candidates)
+			if (MSBuildLocator.IsRegistered)
 			{
-				string fullPath = System.IO.Path.GetFullPath(candidate);
-				if (File.Exists(fullPath))
-					return fullPath;
+				string msbuildPath = MSBuildLocator.QueryVisualStudioInstances().FirstOrDefault()?.MSBuildPath ?? string.Empty;
+				if (msbuildPath.Length > 0)
+				{
+					searchRoots.Add(System.IO.Path.Combine(msbuildPath, "Sdks", "Microsoft.NET.Sdk.Razor", "source-generators"));
+					searchRoots.Add(System.IO.Path.Combine(msbuildPath, "Sdks", "Microsoft.NET.Sdk.Razor", "tools"));
+					searchRoots.Add(System.IO.Path.GetFullPath(System.IO.Path.Combine(msbuildPath, "..", "..", "Sdks", "Microsoft.NET.Sdk.Razor", "source-generators")));
+					searchRoots.Add(System.IO.Path.GetFullPath(System.IO.Path.Combine(msbuildPath, "..", "..", "Sdks", "Microsoft.NET.Sdk.Razor", "tools")));
+				}
 			}
 
-			string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-			string sdkRoot = System.IO.Path.Combine(programFiles, "dotnet", "sdk");
-			if (Directory.Exists(sdkRoot))
+			// Windows Program Files layout and Linux/macOS DOTNET_ROOT / ~/.dotnet / /usr/share/dotnet.
+			foreach (string? sdkRoot in SdkRootCandidates())
 			{
+				if (sdkRoot is null || !Directory.Exists(sdkRoot))
+					continue;
+
 				foreach (string versionDir in Directory.EnumerateDirectories(sdkRoot))
 				{
-					string path = System.IO.Path.Combine(versionDir, "Sdks", "Microsoft.NET.Sdk.Razor", "source-generators", RazorCompilerFileName);
-					if (File.Exists(path))
-						return path;
+					searchRoots.Add(System.IO.Path.Combine(versionDir, "Sdks", "Microsoft.NET.Sdk.Razor", "source-generators"));
+					searchRoots.Add(System.IO.Path.Combine(versionDir, "Sdks", "Microsoft.NET.Sdk.Razor", "tools"));
 				}
+			}
+
+			foreach (string directory in searchRoots)
+			{
+				string path = System.IO.Path.Combine(directory, RazorCompilerFileName);
+				if (File.Exists(path))
+					return path;
 			}
 		}
 		catch (Exception)
@@ -479,6 +488,24 @@ public static class RazorDocumentGenerator
 		}
 
 		return null;
+	}
+
+	private static IEnumerable<string?> SdkRootCandidates()
+	{
+		string? dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
+		if (!string.IsNullOrWhiteSpace(dotnetRoot))
+			yield return System.IO.Path.Combine(dotnetRoot, "sdk");
+
+		string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+		if (!string.IsNullOrWhiteSpace(programFiles))
+			yield return System.IO.Path.Combine(programFiles, "dotnet", "sdk");
+
+		string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+		if (!string.IsNullOrWhiteSpace(userProfile))
+			yield return System.IO.Path.Combine(userProfile, ".dotnet", "sdk");
+
+		yield return "/usr/share/dotnet/sdk";
+		yield return "/usr/local/share/dotnet/sdk";
 	}
 
 	private static IIncrementalGenerator? Load(string razorPath)
