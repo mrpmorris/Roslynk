@@ -23,26 +23,6 @@ All operating directly on the projects compiled in a loaded solution!
 - **Observability:** OpenTelemetry, exported via OTLP to a backend you configure.
 
 
-
-## Layout
-
-```
-Source/
-  App/
-    Morris.Roslynk/        Features/ (vertical slices) + Infrastructure/ (shared engine)
-    Morris.Roslynk.Mcp/    Windows service host (bootstrap only)
-    Morris.Roslynk.Tests/
-    Morris.Roslynk.McpTests/
-  TestFixtures/
-```
-
-## Build
-
-```
-dotnet build Source/Morris.Roslynk.slnx
-dotnet test  Source/Morris.Roslynk.slnx
-```
-
 ## Connect an MCP client (all platforms)
 
 Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download) on `PATH`. The `stdio` verb is a
