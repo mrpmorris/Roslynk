@@ -38,20 +38,13 @@ self-launching bridge: the MCP client spawns it, it starts the shared HTTP daemo
 `localhost:6502` if one isn't already running, and pipes the session through. Nothing to launch or
 babysit by hand.
 
-From the published NuGet package on **GitHub Packages** (this repo is private — no clone, no build):
+From the published NuGet package (no clone, no build):
 
 ```bash
-# One-time: add the private feed (PAT needs read:packages + access to this repo)
-dotnet nuget add source "https://nuget.pkg.github.com/mrpmorris/index.json" \
-  --name github \
-  --username YOUR_GITHUB_USERNAME \
-  --password YOUR_GITHUB_PAT \
-  --store-password-in-clear-text
-
 claude mcp add roslynk -- dnx Roslynk --yes -- stdio
 ```
 
-Tagged releases (`v*`) are packed and pushed to that feed by CI.
+Tagged releases (e.g. `1.0.0-beta.1`, no `v` prefix) are packed and pushed to nuget.org by CI.
 
 From a source checkout:
 

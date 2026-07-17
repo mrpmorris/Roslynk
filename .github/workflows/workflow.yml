@@ -1,18 +1,19 @@
-name: Publish to GitHub Packages
+name: Publish to NuGet
 
-# Pushing a tag like v1.2.3 packs Roslynk at that version and publishes it to this repository's
-# GitHub Packages NuGet feed, after the full test suite passes.
-# Consumers add the feed:
-#   https://nuget.pkg.github.com/OWNER/index.json
-# and authenticate with a PAT (read:packages) or GITHUB_TOKEN that can read packages from this private repo.
+# Pushing a tag like 1.0.0-beta.1 packs Roslynk at that version and publishes it to NuGet.org, after the
+# full test suite passes. Tag name is the package version (no "v" prefix). Authentication is Trusted
+# Publishing (GitHub OIDC, no stored API key): NuGet/login exchanges this workflow's identity for a
+# short-lived key. Requirements:
+#   - a Trusted Publishing policy on nuget.org for this repository and this workflow file
+#   - the NUGET_USER repository variable set to the nuget.org username that owns the policy
 on:
   push:
     tags:
-      - "v*"
+      - "[0-9]*"
 
 permissions:
   contents: read
-  packages: write
+  id-token: write
 
 jobs:
   publish:
@@ -25,7 +26,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Derive version from tag
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
 
       - name: Test
         run: dotnet test Source/Morris.Roslynk.slnx --configuration Release
@@ -37,18 +38,15 @@ jobs:
           -p:Version=$VERSION
           --output ./nupkgs
 
-      - name: Add GitHub Packages source
-        run: >
-          dotnet nuget add source
-          "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
-          --name github
-          --username ${{ github.actor }}
-          --password ${{ secrets.GITHUB_TOKEN }}
-          --store-password-in-clear-text
+      - name: NuGet login (Trusted Publishing)
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
 
       - name: Push
         run: >
           dotnet nuget push ./nupkgs/*.nupkg
-          --api-key ${{ secrets.GITHUB_TOKEN }}
-          --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
           --skip-duplicate
