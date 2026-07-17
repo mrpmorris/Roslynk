@@ -2,15 +2,27 @@
 
 **Roslyn + link** — the link between Claude and Roslyn.
 
+Add the MCP to your AI harness, then type "Open (solution file name)" - that's it!
+
+The biggest time saver you will see is checking for compiler errors and warnings; with
+Roslynk it is practically instant, no need to wait minutes for the solution to build.
+
 Roslynk gives an MCP client (e.g. Claude) semantic intelligence over C# code via Roslyn:
-diagnostics, symbol navigation, find-references, semantic rename, code actions, dead-code detection
-and more — operating directly on the projects compiled in a loaded solution.
+* diagnostics
+* symbol navigation
+* find-references
+* semantic rename
+* code actions
+* dead-code detection
+* and more
+
+All operating directly on the projects compiled in a loaded solution!
 
 - **Transport:** HTTP only, bound to loopback (`127.0.0.1`/`::1`).
 - **Host:** foreground console on Linux/WSL/macOS; on Windows, also installable as a headless service. No UI.
 - **Observability:** OpenTelemetry, exported via OTLP to a backend you configure.
 
-See [Requirements.md](Requirements.md) for the full design.
+
 
 ## Layout
 
