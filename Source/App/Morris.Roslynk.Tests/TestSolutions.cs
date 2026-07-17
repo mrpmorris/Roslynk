@@ -11,7 +11,6 @@ internal static class TestSolutions
 	private static readonly Lazy<string> SimpleSolution = new(() => Prepare("SimpleSolution", "SimpleSolution.slnx"));
 	private static readonly Lazy<string> BrokenSolution = new(() => Prepare("BrokenSolution", "BrokenSolution.slnx"));
 	private static readonly Lazy<string> RazorSolutionPath = new(() => Prepare("RazorSolution", "RazorSolution.slnx"));
-	private static readonly Lazy<string> MultiTargetSolutionPath = new(() => Prepare("MultiTargetSolution", "MultiTargetSolution.slnx"));
 	private static readonly Lazy<string> ReferencesSolutionPath = new(() => Prepare("ReferencesSolution", "ReferencesSolution.slnx"));
 	private static readonly Lazy<string> ConditionalSolutionPath = new(() => Prepare("ConditionalSolution", "ConditionalSolution.slnx"));
 	private static readonly Lazy<string> GeneratorSolutionPath = new(() =>
@@ -32,9 +31,6 @@ internal static class TestSolutions
 
 	/// <summary>A Razor Class Library with a component whose handler is wired only in markup.</summary>
 	public static string Razor => RazorSolutionPath.Value;
-
-	/// <summary>A net8.0;net10.0 multi-targeted project with a CS0029 present only in the net8.0 compilation.</summary>
-	public static string MultiTarget => MultiTargetSolutionPath.Value;
 
 	/// <summary>A two-file solution with an interface referenced many ways, for testing reference grouping.</summary>
 	public static string References => ReferencesSolutionPath.Value;

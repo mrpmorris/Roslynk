@@ -9,12 +9,11 @@ namespace Morris.Roslynk.Infrastructure.Diagnostics;
 
 /// <summary>
 /// Computes diagnostics for a solution; the compiler pass by default, or the compiler plus the project's
-/// configured analyzers (NetAnalyzers etc.) when requested; optionally limited to one target framework of
-/// a multi-targeted project. Running analyzers is slower, so it is opt-in.
+/// configured analyzers (NetAnalyzers etc.) when requested. Running analyzers is slower, so it is opt-in.
 /// </summary>
 public sealed class DiagnosticsService
 {
-	public async Task<IReadOnlyList<Diagnostic>> GetAllDiagnosticsAsync(Solution solution, string? targetFramework = null, bool includeAnalyzers = false, CancellationToken cancellationToken = default)
+	public async Task<IReadOnlyList<Diagnostic>> GetAllDiagnosticsAsync(Solution solution, bool includeAnalyzers = false, CancellationToken cancellationToken = default)
 	{
 		if (solution is null)
 			throw new ArgumentNullException(nameof(solution));
@@ -22,15 +21,10 @@ public sealed class DiagnosticsService
 		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("compute_diagnostics"))
 		{
 			activity?.SetTag("roslynk.analyzers", includeAnalyzers);
-			if (targetFramework is not null)
-				activity?.SetTag("roslynk.target.framework", ActivityTags.Truncate(targetFramework));
 
 			var results = new List<Diagnostic>();
 			foreach (Project project in solution.Projects)
 			{
-				if (!ProjectFramework.Matches(project, targetFramework))
-					continue;
-
 				Compilation? compilation = await project.GetCompilationAsync(cancellationToken);
 				if (compilation is null)
 					continue;

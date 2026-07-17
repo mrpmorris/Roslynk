@@ -5,25 +5,14 @@ namespace Morris.Roslynk.Tests.Infrastructure.Workspaces.ProjectLoadTrackerTests
 public class MarkLoadedTests
 {
 	[Fact]
-	public void WhenTheSameProjectAndFrameworkAreReportedTwice_ThenItCountsOnce()
+	public void WhenTheSameProjectIsReportedTwice_ThenItCountsOnce()
 	{
 		var subject = new ProjectLoadTracker();
 
-		subject.MarkLoaded(@"C:\app\Lib.csproj", "net10.0");
-		subject.MarkLoaded(@"C:\app\Lib.csproj", "net10.0");
+		subject.MarkLoaded(@"C:\app\Lib.csproj");
+		subject.MarkLoaded(@"C:\app\Lib.csproj");
 
 		Assert.Equal(1, subject.Count);
-	}
-
-	[Fact]
-	public void WhenAProjectIsReportedForTwoFrameworks_ThenEachCounts()
-	{
-		var subject = new ProjectLoadTracker();
-
-		subject.MarkLoaded(@"C:\app\Lib.csproj", "net8.0");
-		subject.MarkLoaded(@"C:\app\Lib.csproj", "net10.0");
-
-		Assert.Equal(2, subject.Count);
 	}
 
 	[Fact]
@@ -31,8 +20,8 @@ public class MarkLoadedTests
 	{
 		var subject = new ProjectLoadTracker();
 
-		subject.MarkLoaded(@"C:\app\One.csproj", null);
-		subject.MarkLoaded(@"C:\app\Two.csproj", null);
+		subject.MarkLoaded(@"C:\app\One.csproj");
+		subject.MarkLoaded(@"C:\app\Two.csproj");
 
 		Assert.Equal(2, subject.Count);
 	}
@@ -42,6 +31,6 @@ public class MarkLoadedTests
 	{
 		var subject = new ProjectLoadTracker();
 
-		Assert.Throws<ArgumentNullException>(() => subject.MarkLoaded(null!, null));
+		Assert.Throws<ArgumentNullException>(() => subject.MarkLoaded(null!));
 	}
 }

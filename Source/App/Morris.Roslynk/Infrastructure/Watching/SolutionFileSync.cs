@@ -202,7 +202,7 @@ public SolutionFileSync(RoslynInstance instance, DiagnosticsService? diagnostics
 
 				return Task.FromResult(new WriteResult(updated, []));
 			},
-			async (solution, token) => await DiagnosticsService.GetAllDiagnosticsAsync(solution, targetFramework: null, includeAnalyzers: false, token),
+			async (solution, token) => await DiagnosticsService.GetAllDiagnosticsAsync(solution, includeAnalyzers: false, token),
 			cancellationToken);
 	}
 

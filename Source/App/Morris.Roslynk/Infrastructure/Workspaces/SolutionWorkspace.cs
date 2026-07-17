@@ -130,12 +130,6 @@ public sealed class SolutionWorkspace : IDisposable
 					solution = await RazorDocumentGenerator.AugmentAsync(solution, immutableModels, cancellationToken);
 				}
 
-				using (Activity? mttActivity = RoslynkActivitySource.Instance.StartActivity("expand_multi_target"))
-				{
-					mttActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
-					solution = await ExpandMultiTargetProjectsAsync(solution, cancellationToken);
-				}
-
 				using (Activity? shadowActivity = RoslynkActivitySource.Instance.StartActivity("shadow_copy_analyzers"))
 				{
 					shadowActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
@@ -277,10 +271,6 @@ public sealed class SolutionWorkspace : IDisposable
 
 		return solution;
 	}
-
-	// Multi-TFM expansion is left to MSBuildWorkspace / the Roslyn host — no manual per-framework clone.
-	private static Task<Solution> ExpandMultiTargetProjectsAsync(Solution solution, CancellationToken ct) =>
-		Task.FromResult(solution);
 
 	public void Dispose() => Workspace.Dispose();
 }

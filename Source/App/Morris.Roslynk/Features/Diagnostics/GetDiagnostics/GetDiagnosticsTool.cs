@@ -60,7 +60,6 @@ public sealed class GetDiagnosticsTool
 		[Description("Include warning-severity diagnostics. Default false.")] bool includeWarnings = false,
 		[Description("Include info-severity diagnostics. Default false.")] bool includeInfo = false,
 		[Description("Include hidden-severity diagnostics. Default false.")] bool includeHidden = false,
-		[Description("Optional target framework (e.g. net8.0) to limit a multi-targeted project to one compilation.")] string? targetFramework = null,
 		[Description("Run the project's analyzers (NetAnalyzers / IDE rules) for a richer result. Default true; set false for a faster compiler-only pass.")] bool includeAnalyzers = true)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
@@ -70,10 +69,10 @@ public sealed class GetDiagnosticsTool
 			return OutlineError.Format(Error.Indexing(), model.Status);
 
 		// Fence writes, drain in-flight ones, then build (or reuse the cached result when nothing changed).
-		string cacheKey = $"{targetFramework ?? "*"}|{includeAnalyzers}";
+		string cacheKey = $"{includeAnalyzers}";
 		DiagnosticsResult diagnostics = await instance.RequestDiagnosticsAsync(
 			cacheKey,
-			(solution, token) => DiagnosticsService.GetAllDiagnosticsAsync(solution, targetFramework, includeAnalyzers, token));
+			(solution, token) => DiagnosticsService.GetAllDiagnosticsAsync(solution, includeAnalyzers, token));
 
 		Solution compiled = diagnostics.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(compiled);

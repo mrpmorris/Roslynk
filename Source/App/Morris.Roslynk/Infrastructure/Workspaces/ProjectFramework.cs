@@ -47,7 +47,4 @@ public static class ProjectFramework
 		return null;
 	}
 
-	/// <summary>True if <paramref name="project"/> should be included for the requested framework (null = any).</summary>
-	public static bool Matches(Project project, string? targetFramework) =>
-		targetFramework is null || string.Equals(Of(project), targetFramework, StringComparison.OrdinalIgnoreCase);
 }
