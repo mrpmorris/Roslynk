@@ -3,9 +3,8 @@ name: Publish to NuGet
 # Pushing a tag like 1.0.0-beta.1 packs Roslynk at that version and publishes it to NuGet.org, after the
 # full test suite passes. Tag name is the package version (no "v" prefix). Authentication is Trusted
 # Publishing (GitHub OIDC, no stored API key): NuGet/login exchanges this workflow's identity for a
-# short-lived key. Requirements:
-#   - a Trusted Publishing policy on nuget.org for this repository and this workflow file
-#   - the NUGET_USER repository variable set to the nuget.org username that owns the policy
+# short-lived key. Requires a Trusted Publishing policy on nuget.org for this repository and this
+# workflow file, owned by the nuget.org username below (profile name, not email).
 on:
   push:
     tags:
@@ -42,7 +41,7 @@ jobs:
         id: login
         uses: NuGet/login@v1
         with:
-          user: ${{ vars.NUGET_USER }}
+          user: mrpmorris
 
       - name: Push
         run: >
