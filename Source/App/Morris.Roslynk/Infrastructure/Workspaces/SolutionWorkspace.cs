@@ -124,16 +124,20 @@ public sealed class SolutionWorkspace : IDisposable
 					propsActivity?.SetTag(ActivityTags.ProjectCountTag, immutableModels.Count);
 				}
 
-				using (Activity? razorActivity = RoslynkActivitySource.Instance.StartActivity("razor_augment"))
-				{
-					razorActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
-					solution = await RazorDocumentGenerator.AugmentAsync(solution, immutableModels, cancellationToken);
-				}
-
+				// Shadow-copy remap MUST precede the Razor augmentation: AugmentAsync requests compilations,
+				// which run source generators and therefore load every analyzer reference. If the references
+				// still use MSBuildWorkspace's default loader at that point, the originals in bin/obj get
+				// memory-mapped and locked for the lifetime of the process.
 				using (Activity? shadowActivity = RoslynkActivitySource.Instance.StartActivity("shadow_copy_analyzers"))
 				{
 					shadowActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
 					solution = UseShadowCopyAnalyzerLoaders(solution, loadDiagnostics);
+				}
+
+				using (Activity? razorActivity = RoslynkActivitySource.Instance.StartActivity("razor_augment"))
+				{
+					razorActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
+					solution = await RazorDocumentGenerator.AugmentAsync(solution, immutableModels, cancellationToken);
 				}
 
 				loadActivity?.SetTag(ActivityTags.ProjectCountTag, solution.Projects.Count());
