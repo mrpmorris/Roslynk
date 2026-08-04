@@ -1,5 +1,7 @@
 namespace Morris.Roslynk.Infrastructure.Writing;
 
+using System.Text;
+
 /// <summary>
 /// Commits a batch of full-file rewrites atomically. Each file is written to a temp copy first, then
 /// swapped in with <see cref="File.Replace(string, string, string)"/> (atomic per file, no torn reads),
@@ -16,13 +18,15 @@ public static class AtomicFileWriter
 	/// <summary>The suffix of the backup sibling the previous content is parked at during the swap.</summary>
 	public const string BackupFileSuffix = ".roslynk.bak";
 
+	private static readonly Encoding DefaultUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+
 	public static async Task WriteAllAsync(IReadOnlyList<PendingWrite> writes, CancellationToken cancellationToken = default)
 	{
 		var staged = new List<StagedFile>();
 		foreach (PendingWrite write in writes)
 		{
 			string tempPath = write.FilePath + TempFileSuffix;
-			await File.WriteAllTextAsync(tempPath, write.Text, cancellationToken);
+			await File.WriteAllTextAsync(tempPath, write.Text, write.Encoding ?? DefaultUtf8, cancellationToken);
 			staged.Add(new StagedFile(write.FilePath, tempPath, write.FilePath + BackupFileSuffix));
 		}
 

@@ -97,11 +97,11 @@ Header always carries `errors=`, `warnings=`, `infos=`, `hidden=` counts regardl
 All write tools: `checkOnly=true` previews changed files without writing; writes are atomic (all-or-nothing) and stale-guarded (on-disk content re-hashed against the loaded snapshot; mismatch → `error=Stale`, nothing written). Successful writes advance the in-memory model immediately. Response shape: `applied=Y|N` + tool-specific headers + changed-file list grouped by project.
 
 ### apply_patch
-`solutionId`, `patch` (git unified diff: `---`/`+++`/`@@` hunks, one or more .cs sections), `baseVersions` (optional list of `{path, version}` from a prior read, for explicit optimistic concurrency), `checkOnly`.
+`solutionId`, `patch` (git unified diff: `---`/`+++`/`@@` hunks, one or more file sections), `baseVersions` (optional list of `{path, version}` from a prior read, for explicit optimistic concurrency), `checkOnly`.
 
 - Hunks are **content-anchored**; line numbers in `@@` headers are untrusted and may be omitted (`@@`). Each hunk must match exactly one place — include enough context. Ambiguous or unmatched → `error=Conflict` naming the file and reason.
-- Edits existing solution-compiled .cs files only. Creation, deletion, and non-.cs targets are rejected before any hunk is attempted: `error=NotSupported` with `rejected=<path>` lines.
-- Path resolution: absolute → solution-relative → unique suffix match across solution documents.
+- Edits any existing text file inside the solution folder. Compiled `.cs` and `.razor`/`.cshtml` documents (regular and additional) are folded into the in-memory model; other files (`.csproj`, `.json`, `.md`, ...) are written to disk only. Creation, deletion, binary files, `obj`/`bin` paths, and paths outside the solution folder are rejected before any hunk is attempted: `error=NotSupported` with `rejected=<path>` lines. Encoding (UTF-8/UTF-16 BOM) is preserved.
+- Path resolution: absolute → solution-relative → unique suffix match across solution documents (regular and additional); a path not in the model falls back to solution-folder-relative.
 - The stale-write guard runs even without `baseVersions`.
 
 ### rename_symbol

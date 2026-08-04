@@ -3,7 +3,7 @@ namespace Morris.Roslynk.Infrastructure.Patching;
 /// <summary>
 /// All hunks targeting one file, with the paths from the <c>---</c> / <c>+++</c> headers (the <c>a/</c>
 /// and <c>b/</c> prefixes stripped). A <c>/dev/null</c> on either side marks a file creation or deletion,
-/// which the apply tool rejects in v1 (it edits existing solution-compiled <c>.cs</c> documents only).
+/// which the apply tool rejects (it edits existing text files only).
 /// </summary>
 public sealed class FilePatch
 {

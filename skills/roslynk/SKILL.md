@@ -32,7 +32,7 @@ Never call `reload_solution` on your own initiative. File changes — including 
 | Find a symbol by partial name | `search_symbols` | grep across the repo |
 | Rename a symbol everywhere (incl. `.razor`) | `rename_symbol` | find-and-replace |
 | Apply a compiler-suggested fix | `apply_code_fix` / `get_code_actions` → `apply_code_action` | hand-editing |
-| Edit .cs source directly | `apply_patch` (unified diff) | host editor Write/Edit |
+| Edit source/text files | `apply_patch` (unified diff) | host editor Write/Edit |
 | Remove unused `using` directives | `remove_unused_usings` | hand-editing |
 | Add an optional parameter to a method | `change_signature` | hand-editing call sites |
 | Find unused members / dead `#if` branches | `find_dead_code` / `find_dead_conditionals` | eyeballing |
@@ -70,10 +70,10 @@ All write tools (`apply_patch`, `rename_symbol`, `apply_code_action`, `apply_cod
 - Writes are **atomic and stale-guarded**: if a target file changed on disk since Roslynk read it, the whole batch is rejected with `error=Stale` rather than clobbering the concurrent edit. On `Stale`, just recompute from current state and retry.
 - Writes go straight to disk and the in-memory model advances with them, so a `get_diagnostics` immediately after a write reflects the change — no reload, no rebuild step.
 
-Prefer `apply_patch` over the host editor's Write/Edit for `.cs` files that are compiled in the solution — it keeps Roslynk's model in sync and gets you the stale-write protection. Its rules:
+Prefer `apply_patch` over the host editor's Write/Edit for files inside the solution folder — it keeps Roslynk's model in sync for compiled files and gets you the stale-write protection. Its rules:
 
 - Standard git unified diff, but hunks are **content-anchored, not line-number-anchored** — include enough surrounding context that each hunk matches exactly one place, or you'll get `error=Conflict`.
-- It edits **existing solution-compiled .cs files only**. File creation, deletion, and non-.cs files are rejected (`error=NotSupported`) — use the host editor for those.
+- Targets any **existing text file inside the solution folder**: compiled `.cs` and `.razor`/`.cshtml` documents stay in sync with the model; other files (`.csproj`, `.json`, `.md`, ...) are written to disk only. File creation, deletion, binary files, `obj`/`bin` paths, and anything outside the solution folder are rejected (`error=NotSupported`).
 
 ### The diagnostics loop
 

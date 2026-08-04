@@ -66,19 +66,149 @@ public class ApplyPatchTests
 	}
 
 	[Fact]
-	public async Task WhenThePatchTargetsANonSourceFile_ThenItIsNotSupported()
+	public async Task WhenThePatchTargetsAProjectFile_ThenItIsAppliedToDisk()
 	{
 		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new ApplyPatchTool(registry);
 
-		string patch = BuildFullReplacePatch("SimpleLibrary/SimpleLibrary.csproj", "<Project/>\n", "<Project></Project>\n");
+		string projectFile = FindFile(solutionPath, "SimpleLibrary.csproj");
+		string original = await File.ReadAllTextAsync(projectFile);
+		string patch = BuildFullReplacePatch("SimpleLibrary/SimpleLibrary.csproj", original, original + "<!-- patched -->\n");
+
+		string result = await subject.ApplyPatch(solutionPath, patch);
+
+		Assert.Contains("applied=Y", result);
+		Assert.Contains("<!-- patched -->", await File.ReadAllTextAsync(projectFile));
+	}
+
+	[Fact]
+	public async Task WhenThePatchTargetsARazorFile_ThenItIsAppliedAndTheSnapshotIsUpdated()
+	{
+		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string counter = FindFile(solutionPath, "Counter.razor");
+		string original = await File.ReadAllTextAsync(counter);
+		string patch = BuildFullReplacePatch("RazorLib/Counter.razor", original, original + "@* patched *@\n");
+
+		string result = await subject.ApplyPatch(solutionPath, patch);
+
+		Assert.Contains("applied=Y", result);
+		Assert.Contains("@* patched *@", await File.ReadAllTextAsync(counter));
+		Assert.Contains("@* patched *@", await ReadAdditionalSnapshotTextAsync(instance, counter));
+	}
+
+	[Fact]
+	public async Task WhenThePatchTargetsATextFileOutsideTheModel_ThenItIsAppliedToDisk()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string readme = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "README.txt");
+		File.WriteAllText(readme, "hello\n");
+
+		string result = await subject.ApplyPatch(
+			solutionPath,
+			BuildFullReplacePatch("SimpleLibrary/README.txt", "hello\n", "hello\nworld\n"));
+
+		Assert.Contains("applied=Y", result);
+		Assert.Equal("hello\nworld\n", await File.ReadAllTextAsync(readme));
+	}
+
+	[Fact]
+	public async Task WhenThePatchTargetsABinaryFile_ThenItIsNotSupported()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string binary = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "data.bin");
+		File.WriteAllBytes(binary, [0x00, 0x41, 0x42, 0x43]);
+		string patch = BuildFullReplacePatch("SimpleLibrary/data.bin", "\u0000ABC", "x");
 
 		string result = await subject.ApplyPatch(solutionPath, patch);
 
 		Assert.Contains("error=NotSupported", result);
 		Assert.Contains("rejected=", result);
+	}
+
+	[Fact]
+	public async Task WhenThePatchTargetsAFileUnderObj_ThenItIsNotSupported()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string objFile = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "obj", "sample.txt");
+		Directory.CreateDirectory(Path.GetDirectoryName(objFile)!);
+		File.WriteAllText(objFile, "hello\n");
+
+		string result = await subject.ApplyPatch(
+			solutionPath,
+			BuildFullReplacePatch("SimpleLibrary/obj/sample.txt", "hello\n", "world\n"));
+
+		Assert.Contains("error=NotSupported", result);
+		Assert.Contains("rejected=", result);
+	}
+
+	[Fact]
+	public async Task WhenThePatchTargetsAFileOutsideTheSolutionFolder_ThenItIsNotSupported()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string outside = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(solutionPath))!, "outside.txt");
+		File.WriteAllText(outside, "hello\n");
+
+		string result = await subject.ApplyPatch(
+			solutionPath,
+			BuildFullReplacePatch("../outside.txt", "hello\n", "world\n"));
+
+		Assert.Contains("error=NotSupported", result);
+		Assert.Contains("rejected=", result);
+	}
+
+	[Fact]
+	public async Task WhenThePatchTargetsANonExistentFile_ThenItIsNotSupported()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string result = await subject.ApplyPatch(
+			solutionPath,
+			BuildFullReplacePatch("SimpleLibrary/Missing.cs", "anything\n", "else\n"));
+
+		Assert.Contains("error=NotSupported", result);
+		Assert.Contains("rejected=", result);
+	}
+
+	[Fact]
+	public async Task WhenThePatchCreatesANewFile_ThenItIsNotSupported()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string result = await subject.ApplyPatch(
+			solutionPath,
+			"--- /dev/null\n+++ b/SimpleLibrary/New.txt\n@@ -0,0 +1,1 @@\n+hello\n");
+
+		Assert.Contains("error=NotSupported", result);
+		Assert.Contains("rejected=", result);
+		Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "New.txt")));
 	}
 
 	[Fact]
@@ -161,6 +291,14 @@ public class ApplyPatchTests
 		Microsoft.CodeAnalysis.Solution solution = instance.CurrentSolution;
 		Microsoft.CodeAnalysis.DocumentId id = solution.GetDocumentIdsWithFilePath(path).First();
 		return (await solution.GetDocument(id)!.GetTextAsync()).ToString();
+	}
+
+	private static async Task<string> ReadAdditionalSnapshotTextAsync(RoslynInstance instance, string path)
+	{
+		Microsoft.CodeAnalysis.Solution solution = instance.CurrentSolution;
+		Microsoft.CodeAnalysis.DocumentId id = solution.GetDocumentIdsWithFilePath(path)
+			.First(documentId => solution.GetAdditionalDocument(documentId) is not null);
+		return (await solution.GetAdditionalDocument(id)!.GetTextAsync()).ToString();
 	}
 
 	private static string BuildFullReplacePatch(string relativePath, string originalText, string newText)
