@@ -67,5 +67,3 @@ Foreground dev:
 ```powershell
 dotnet run --project Source/App/Morris.Roslynk.Mcp
 ```
-
-Installed service: see [Source/WindowsServiceInstaller/README.md](Source/WindowsServiceInstaller/README.md).
