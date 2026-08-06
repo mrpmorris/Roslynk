@@ -24,25 +24,34 @@ public sealed class DiagnosticsService
 
 			var results = new List<Diagnostic>();
 			foreach (Project project in solution.Projects)
-			{
-				Compilation? compilation = await project.GetCompilationAsync(cancellationToken);
-				if (compilation is null)
-					continue;
-
-				if (includeAnalyzers && TryGetAnalyzers(project, out ImmutableArray<DiagnosticAnalyzer> analyzers))
-				{
-					CompilationWithAnalyzers withAnalyzers = compilation.WithAnalyzers(analyzers, project.AnalyzerOptions);
-					results.AddRange(await withAnalyzers.GetAllDiagnosticsAsync(cancellationToken));
-				}
-				else
-				{
-					results.AddRange(compilation.GetDiagnostics(cancellationToken));
-				}
-			}
+				results.AddRange(await GetProjectDiagnosticsAsync(project, includeAnalyzers, cancellationToken));
 
 			activity?.SetTag("roslynk.diagnostic.count", results.Count);
 			return results;
 		}
+	}
+
+	/// <summary>
+	/// Compiler diagnostics for <paramref name="project"/>, plus its configured analyzers when
+	/// <paramref name="includeAnalyzers"/> is true — same rules as <see cref="GetAllDiagnosticsAsync"/> for one project.
+	/// Used by the code-fix path so list and fix share one analyzer-aware source without re-scanning the whole solution.
+	/// </summary>
+	public async Task<IReadOnlyList<Diagnostic>> GetProjectDiagnosticsAsync(Project project, bool includeAnalyzers = false, CancellationToken cancellationToken = default)
+	{
+		if (project is null)
+			throw new ArgumentNullException(nameof(project));
+
+		Compilation? compilation = await project.GetCompilationAsync(cancellationToken);
+		if (compilation is null)
+			return [];
+
+		if (includeAnalyzers && TryGetAnalyzers(project, out ImmutableArray<DiagnosticAnalyzer> analyzers))
+		{
+			CompilationWithAnalyzers withAnalyzers = compilation.WithAnalyzers(analyzers, project.AnalyzerOptions);
+			return await withAnalyzers.GetAllDiagnosticsAsync(cancellationToken);
+		}
+
+		return compilation.GetDiagnostics(cancellationToken);
 	}
 
 	private static bool TryGetAnalyzers(Project project, out ImmutableArray<DiagnosticAnalyzer> analyzers)

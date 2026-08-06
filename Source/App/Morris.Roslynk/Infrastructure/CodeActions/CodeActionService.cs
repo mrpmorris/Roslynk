@@ -5,44 +5,59 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CodeRefactorings;
 using Microsoft.CodeAnalysis.Text;
+using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.CodeActions;
 
 /// <summary>
 /// Discovers code fixes and refactorings at a span and resolves a previously-discovered action back to the
-/// solution it would produce. Fixes are driven from the compiler diagnostics overlapping the span (analyzer
-/// diagnostics need a separate analyzer pass, layered on later); refactorings are computed over the span.
+/// solution it would produce. Fixes are driven from compiler <em>and</em> project-analyzer diagnostics
+/// overlapping the span (same analyzer set as <c>get_diagnostics</c> with analyzers on); refactorings are
+/// computed over the span.
 /// </summary>
 public sealed class CodeActionService
 {
 	private const int MaxActions = 50;
 
+	private readonly DiagnosticsService DiagnosticsService;
+
+	public CodeActionService(DiagnosticsService diagnosticsService)
+	{
+		DiagnosticsService = diagnosticsService ?? throw new ArgumentNullException(nameof(diagnosticsService));
+	}
+
+	/// <summary>Test-friendly constructor; production code receives <see cref="DiagnosticsService"/> via DI.</summary>
+	public CodeActionService()
+		: this(new DiagnosticsService())
+	{
+	}
+
 	public async Task<IReadOnlyList<DiscoveredAction>> DiscoverAsync(Document document, TextSpan span, CancellationToken cancellationToken = default)
 	{
 		var discovered = new List<DiscoveredAction>();
 
-		// Source diagnostics from the whole compilation (so compilation-completion diagnostics are included),
-		// filtered to this document's tree and the span. The provider's FixableDiagnosticIds gates relevance,
-		// so every severity is kept.
-		Compilation? compilation = await document.Project.GetCompilationAsync(cancellationToken);
-		SyntaxTree? tree = await document.GetSyntaxTreeAsync(cancellationToken);
-		ImmutableArray<Diagnostic> diagnostics = compilation is null || tree is null
-			? []
-			: compilation.GetDiagnostics(cancellationToken)
-				.Where(diagnostic => diagnostic.Location.SourceTree == tree && diagnostic.Location.SourceSpan.IntersectsWith(span))
-				.ToImmutableArray();
+		// Same analyzer-aware source as get_diagnostics (includeAnalyzers: true): compiler CS* plus project
+		// analyzer IDE*/CA* ids, so fix-by-id and get_code_actions can see what the list path reports.
+		ImmutableArray<Diagnostic> diagnostics = await GetDiagnosticsForDocumentAsync(document, cancellationToken);
+		diagnostics = diagnostics
+			.Where(diagnostic => diagnostic.Location.IsInSource
+				&& diagnostic.Location.SourceSpan.IntersectsWith(span))
+			.ToImmutableArray();
 
 		foreach (CodeFixProvider provider in CodeActionCatalog.Instance.FixProviders)
 		{
 			ImmutableArray<string> fixable = SafeFixableIds(provider);
 			foreach (Diagnostic diagnostic in diagnostics)
 			{
-				if (!fixable.Contains(diagnostic.Id))
+				// Some IDE diagnostics are "classification" ids (e.g. IDE0005) while the fix provider only
+				// claims a related fixable id (RemoveUnnecessaryImportsFixable). Map before RegisterCodeFixes.
+				Diagnostic forProvider = MapToProviderDiagnostic(diagnostic, fixable);
+				if (!fixable.Contains(forProvider.Id))
 					continue;
 
 				var registered = new List<CodeAction>();
-				var context = new CodeFixContext(document, diagnostic, (action, _) => registered.Add(action), cancellationToken);
+				var context = new CodeFixContext(document, forProvider, (action, _) => registered.Add(action), cancellationToken);
 				try
 				{
 					await provider.RegisterCodeFixesAsync(context);
@@ -52,6 +67,7 @@ public sealed class CodeActionService
 					continue;
 				}
 
+				// Keep the original (agent-visible) id on the action so apply_code_fix(IDE0005) matches.
 				foreach (CodeAction action in registered)
 					discovered.Add(new DiscoveredAction(action, "Fix", diagnostic.Id));
 			}
@@ -75,6 +91,31 @@ public sealed class CodeActionService
 		}
 
 		return discovered.Take(MaxActions).ToArray();
+	}
+
+	/// <summary>
+	/// First diagnostic with <paramref name="diagnosticId"/> in <paramref name="document"/>, using the same
+	/// analyzer-aware set as discovery / <c>get_diagnostics</c>. Used by <c>apply_code_fix</c>.
+	/// Also matches known fixable aliases (e.g. <c>RemoveUnnecessaryImportsFixable</c> for IDE0005).
+	/// </summary>
+	public async Task<Diagnostic?> FindDiagnosticAsync(Document document, string diagnosticId, CancellationToken cancellationToken = default)
+	{
+		ImmutableArray<Diagnostic> diagnostics = await GetDiagnosticsForDocumentAsync(document, cancellationToken);
+		Diagnostic? exact = diagnostics.FirstOrDefault(diagnostic =>
+			string.Equals(diagnostic.Id, diagnosticId, StringComparison.Ordinal));
+		if (exact is not null)
+			return exact;
+
+		// Prefer the agent-visible classification id when the caller asked for it via a related id, or the reverse.
+		foreach (string related in RelatedDiagnosticIds(diagnosticId))
+		{
+			Diagnostic? match = diagnostics.FirstOrDefault(diagnostic =>
+				string.Equals(diagnostic.Id, related, StringComparison.Ordinal));
+			if (match is not null)
+				return match;
+		}
+
+		return null;
 	}
 
 	/// <summary>Re-discovers the action named by <paramref name="actionRef"/> and returns the solution it produces, or null.</summary>
@@ -151,6 +192,26 @@ public sealed class CodeActionService
 		return TextSpan.FromBounds(Math.Min(start, end), Math.Max(start, end));
 	}
 
+	/// <summary>
+	/// Analyzer-aware diagnostics for one document (project-scoped compile + analyzers, filtered to the
+	/// document's tree). Matches <c>get_diagnostics</c> with analyzers on for that file's project.
+	/// </summary>
+	private async Task<ImmutableArray<Diagnostic>> GetDiagnosticsForDocumentAsync(Document document, CancellationToken cancellationToken)
+	{
+		SyntaxTree? tree = await document.GetSyntaxTreeAsync(cancellationToken);
+		if (tree is null)
+			return [];
+
+		IReadOnlyList<Diagnostic> all = await DiagnosticsService.GetProjectDiagnosticsAsync(
+			document.Project,
+			includeAnalyzers: true,
+			cancellationToken);
+
+		return all
+			.Where(diagnostic => diagnostic.Location.IsInSource && diagnostic.Location.SourceTree == tree)
+			.ToImmutableArray();
+	}
+
 	private static int Offset(SourceText text, int line, int column)
 	{
 		int lineIndex = Math.Clamp(line - 1, 0, text.Lines.Count - 1);
@@ -171,5 +232,52 @@ public sealed class CodeActionService
 		{
 			return [];
 		}
+	}
+
+	/// <summary>
+	/// Ids that share a fix with <paramref name="diagnosticId"/> when the analyzer reports a display id and a
+	/// separate fixable id (Roslyn's unnecessary-imports pattern).
+	/// </summary>
+	internal static IEnumerable<string> RelatedDiagnosticIds(string diagnosticId)
+	{
+		if (diagnosticId is "IDE0005" or "IDE0005_gen")
+		{
+			yield return "RemoveUnnecessaryImportsFixable";
+			yield break;
+		}
+
+		if (diagnosticId == "RemoveUnnecessaryImportsFixable")
+		{
+			yield return "IDE0005";
+			yield return "IDE0005_gen";
+		}
+	}
+
+	/// <summary>
+	/// When a provider does not claim the classification id but claims a known fixable alias, return a diagnostic
+	/// with that alias id at the same location so <see cref="CodeFixProvider.RegisterCodeFixesAsync"/> accepts it.
+	/// </summary>
+	private static Diagnostic MapToProviderDiagnostic(Diagnostic diagnostic, ImmutableArray<string> fixableIds)
+	{
+		if (fixableIds.Contains(diagnostic.Id))
+			return diagnostic;
+
+		foreach (string related in RelatedDiagnosticIds(diagnostic.Id))
+		{
+			if (!fixableIds.Contains(related))
+				continue;
+
+			// Preserve location and message; providers typically gate only on Id.
+			var descriptor = new DiagnosticDescriptor(
+				related,
+				diagnostic.Descriptor.Title,
+				diagnostic.GetMessage(),
+				diagnostic.Descriptor.Category,
+				diagnostic.Severity,
+				isEnabledByDefault: true);
+			return Diagnostic.Create(descriptor, diagnostic.Location);
+		}
+
+		return diagnostic;
 	}
 }

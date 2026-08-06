@@ -36,17 +36,18 @@ public sealed class ApplyCodeFixTool
 		OpenWorld = false)]
 	[Description(
 		$"""
-		Applies the code fix for the first occurrence of a diagnostic id (e.g. CS0219) in a .cs file; the
+		Applies the code fix for the first occurrence of a diagnostic id (e.g. CS0219 or IDE0005) in a .cs file; the
 		quick path when you already know which diagnostic to clear, without first listing actions. Returns a
 		text result, not JSON: 'applied', 'action', 'status' header, a blank line, then one
 		solution-relative changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} Written atomically through the same safe write path. Pass
-		checkOnly to preview without writing. Prefer this over hand-editing the file to clear a diagnostic so
+		checkOnly to preview without writing. Uses the same analyzer-aware diagnostic set as get_diagnostics
+		(analyzers on). Prefer this over hand-editing the file to clear a diagnostic so
 		the in-memory model stays in sync.
 		""")]
 	public async Task<string> ApplyCodeFix(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Path of the .cs file; absolute, or relative to the solution folder.")] string documentPath,
-		[Description("The compiler diagnostic id to fix, e.g. CS0219.")] string diagnosticId,
+		[Description("The diagnostic id to fix, e.g. CS0219 or IDE0005.")] string diagnosticId,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
@@ -65,16 +66,19 @@ public sealed class ApplyCodeFixTool
 		if (document is null)
 			return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs document."));
 
-		Compilation? compilation = await document.Project.GetCompilationAsync(cancellationToken);
-		SyntaxTree? tree = await document.GetSyntaxTreeAsync(cancellationToken);
-		Diagnostic? diagnostic = compilation?.GetDiagnostics(cancellationToken)
-			.FirstOrDefault(candidate => candidate.Id == diagnosticId && candidate.Location.SourceTree == tree);
+		// Analyzer-aware lookup (same source as get_diagnostics with analyzers on) so IDE*/CA* ids work, not only CS*.
+		Diagnostic? diagnostic = await CodeActionService.FindDiagnosticAsync(document, diagnosticId, cancellationToken);
 		if (diagnostic is null)
 			return Failure(Error.NotFound($"No {diagnosticId} diagnostic was found in '{documentPath}'."));
 
 		TextSpan span = diagnostic.Location.SourceSpan;
 		IReadOnlyList<DiscoveredAction> actions = await CodeActionService.DiscoverAsync(document, span, cancellationToken);
-		DiscoveredAction? fix = actions.FirstOrDefault(action => action.DiagnosticId == diagnosticId);
+		// Match the requested id, or a known related fixable/classification id (IDE0005 ↔ RemoveUnnecessaryImportsFixable).
+		DiscoveredAction? fix = actions.FirstOrDefault(action =>
+			action.DiagnosticId is string actionId
+			&& (string.Equals(actionId, diagnosticId, StringComparison.Ordinal)
+				|| CodeActionService.RelatedDiagnosticIds(diagnosticId).Contains(actionId)
+				|| CodeActionService.RelatedDiagnosticIds(actionId).Contains(diagnosticId)));
 		if (fix is null)
 			return Failure(Error.NotSupported($"No fix is available for {diagnosticId}."));
 
