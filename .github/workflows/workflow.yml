@@ -1,10 +1,14 @@
 name: Publish to NuGet
 
 # Pushing a tag like 1.0.0-beta.1 packs Roslynk at that version and publishes it to NuGet.org, after the
-# full test suite passes. Tag name is the package version (no "v" prefix). Authentication is Trusted
-# Publishing (GitHub OIDC, no stored API key): NuGet/login exchanges this workflow's identity for a
-# short-lived key. Requires a Trusted Publishing policy on nuget.org for this repository and this
-# workflow file, owned by the nuget.org username below (profile name, not email).
+# full test suite passes. Tag name is the package version (no "v" prefix).
+#
+# Only tags whose commit is reachable from origin/master are published. Tagging a commit that lives
+# only on dev (or another branch) fails the job and never reaches NuGet.
+#
+# Authentication is Trusted Publishing (GitHub OIDC, no stored API key): NuGet/login exchanges this
+# workflow's identity for a short-lived key. Requires a Trusted Publishing policy on nuget.org for
+# this repository and this workflow file, owned by the nuget.org username below (profile name, not email).
 on:
   push:
     tags:
@@ -19,6 +23,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Need full history so we can test ancestry against master.
+          fetch-depth: 0
+
+      - name: Require tag commit is on master
+        run: |
+          set -euo pipefail
+          git fetch origin master
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' points at ${GITHUB_SHA}, which is not on origin/master."
+            echo "NuGet publishes only from master. Merge to master first, then tag the merge commit."
+            exit 1
+          fi
+          echo "Tag ${GITHUB_REF_NAME} is on master — continuing publish."
 
       - uses: actions/setup-dotnet@v4
         with:
