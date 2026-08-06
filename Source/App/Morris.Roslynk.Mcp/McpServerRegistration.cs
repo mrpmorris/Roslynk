@@ -15,7 +15,7 @@ internal static class McpServerRegistration
 		{
 			Name = "Roslynk",
 			Title = "Roslynk; C# semantic intelligence",
-			Version = "1.0.0"
+			Version = "1.1.1"
 		};
 
 		options.ServerInstructions =

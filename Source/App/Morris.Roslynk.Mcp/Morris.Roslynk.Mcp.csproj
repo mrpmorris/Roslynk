@@ -7,7 +7,7 @@
 		<ToolCommandName>roslynk</ToolCommandName>
 		<PackageId>Roslynk</PackageId>
 		<!-- CI overrides Version from the release tag; this is only the local-build fallback. -->
-		<Version>0.0.1-local</Version>
+		<Version>1.1.1</Version>
 		<Description>Roslynk MCP server: C# semantic intelligence over Roslyn. Run with 'dnx Roslynk -- stdio' as an MCP stdio command; it self-starts a shared local daemon.</Description>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageProjectUrl>https://github.com/mrpmorris/Roslynk</PackageProjectUrl>
