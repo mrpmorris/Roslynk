@@ -42,3 +42,6 @@ nugets/
 ## OS
 Thumbs.db
 .DS_Store
+
+## Local agent / memsearch index (machine-local)
+.memsearch/
