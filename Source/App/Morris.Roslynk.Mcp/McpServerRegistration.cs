@@ -1,3 +1,4 @@
+using System.Reflection;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Mcp.Observability;
@@ -15,7 +16,8 @@ internal static class McpServerRegistration
 		{
 			Name = "Roslynk",
 			Title = "Roslynk; C# semantic intelligence",
-			Version = "1.1.1"
+			// Track the assembly informational version (set from Package/Version at build; CI injects the release).
+			Version = AppVersion
 		};
 
 		options.ServerInstructions =
