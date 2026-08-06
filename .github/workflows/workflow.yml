@@ -1,49 +1,60 @@
 name: Publish to NuGet
 
-# Pushing a tag like 1.0.0-beta.1 packs Roslynk at that version and publishes it to NuGet.org, after the
-# full test suite passes. Tag name is the package version (no "v" prefix).
+# Intentional releases only. This workflow does NOT run on pull requests, branch pushes, or tags.
 #
-# Only tags whose commit is reachable from origin/master are published. Tagging a commit that lives
-# only on dev (or another branch) fails the job and never reaches NuGet.
+# Who can publish: someone with permission to run workflows on this repo, who starts this workflow
+# manually from the Actions tab (or `gh workflow run`) with the master branch selected and a
+# SemVer version input. No other trigger exists.
 #
 # Authentication is Trusted Publishing (GitHub OIDC, no stored API key): NuGet/login exchanges this
 # workflow's identity for a short-lived key. Requires a Trusted Publishing policy on nuget.org for
 # this repository and this workflow file, owned by the nuget.org username below (profile name, not email).
 on:
-  push:
-    tags:
-      - "[0-9]*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version (SemVer, no v prefix), e.g. 1.1.1 or 1.2.0-beta.1"
+        required: true
+        type: string
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
   publish:
+    # Defense in depth: even if someone dispatches against another branch in the UI, refuse.
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          # Need full history so we can test ancestry against master.
-          fetch-depth: 0
-
-      - name: Require tag commit is on master
+      - name: Validate version
+        env:
+          VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          git fetch origin master
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
-            echo "::error::Tag '${GITHUB_REF_NAME}' points at ${GITHUB_SHA}, which is not on origin/master."
-            echo "NuGet publishes only from master. Merge to master first, then tag the merge commit."
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-].*)?$ ]]; then
+            echo "::error::VERSION '$VERSION' is not a valid SemVer-like tag (expected e.g. 1.1.1 or 1.2.0-beta.1)."
             exit 1
           fi
-          echo "Tag ${GITHUB_REF_NAME} is on master — continuing publish."
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Refuse if version tag already exists
+        run: |
+          set -euo pipefail
+          git fetch --tags origin
+          if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null; then
+            echo "::error::Git tag '${VERSION}' already exists. Bump the version or delete the tag deliberately."
+            exit 1
+          fi
 
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
-
-      - name: Derive version from tag
-        run: echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
 
       - name: Test
         run: dotnet test Source/Morris.Roslynk.slnx --configuration Release
@@ -67,3 +78,12 @@ jobs:
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
+
+      # Tag only after a successful push so a failed publish never leaves a release tag on the repo.
+      - name: Create and push release tag
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "Roslynk $VERSION"
+          git push origin "refs/tags/${VERSION}"

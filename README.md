@@ -36,7 +36,8 @@ From the published NuGet package (no clone, no build):
 claude mcp add roslynk -- dnx Roslynk --yes -- stdio
 ```
 
-Tagged releases (e.g. `1.0.0-beta.1`, no `v` prefix) are packed and pushed to nuget.org by CI.
+Releases are published to nuget.org only via a **manual** Actions run of *Publish to NuGet* on
+`master` (not PRs, not `dev`, not tag pushes). The workflow packs that version and creates the git tag after a successful push.
 
 From a source checkout:
 
