@@ -35,4 +35,22 @@ internal static class McpServerRegistration
 
 		options.NameTracesAfterTools();
 	}
+
+	/// <summary>
+	/// Package/assembly version from the build (InformationalVersion when present, else assembly version).
+	/// Strips any <c>+metadata</c> suffix so MCP clients see a clean SemVer-ish string.
+	/// </summary>
+	private static string AppVersion
+	{
+		get
+		{
+			Assembly assembly = typeof(McpServerRegistration).Assembly;
+			string? informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+			string raw = !string.IsNullOrWhiteSpace(informational)
+				? informational
+				: assembly.GetName().Version?.ToString() ?? "0.0.0";
+			int plus = raw.IndexOf('+', StringComparison.Ordinal);
+			return plus >= 0 ? raw[..plus] : raw;
+		}
+	}
 }
