@@ -30,11 +30,37 @@ self-launching bridge: the MCP client spawns it, it starts the shared HTTP daemo
 `localhost:6502` if one isn't already running, and pipes the session through. Nothing to launch or
 babysit by hand.
 
-From the published NuGet package (no clone, no build):
+First install the global .NET tool from NuGet (no clone, no build needed):
+
+```bash
+dotnet tool install roslynk -g
+```
+
+### Claude Desktop
 
 ```bash
 claude mcp add roslynk -- dnx Roslynk --yes -- stdio
 ```
+
+### Manual `mcp.json` (VS Code, Cursor, Windsurf, and others)
+
+Add the following entry to your MCP configuration file (e.g. `.vscode/mcp.json`,
+`~/.cursor/mcp.json`, or your AI tool's equivalent):
+
+```json
+{
+  "mcpServers": {
+    "roslynk": {
+      "type": "stdio",
+      "command": "dnx",
+      "args": ["Roslynk", "--yes", "--", "stdio"]
+    }
+  }
+}
+```
+
+> **Important:** the `stdio` argument at the end is required. Without it the process starts as an
+> HTTP daemon and never responds to the MCP `initialize` handshake, causing the client to hang.
 
 Tagged releases (e.g. `1.0.0-beta.1`, no `v` prefix) are packed and pushed to nuget.org by CI.
 
@@ -42,6 +68,20 @@ From a source checkout:
 
 ```bash
 claude mcp add roslynk -- dotnet run --project /path/to/Roslynk/Source/App/Morris.Roslynk.Mcp -- stdio
+```
+
+Or in `mcp.json` from a source checkout:
+
+```json
+{
+  "mcpServers": {
+    "roslynk": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "/path/to/Roslynk/Source/App/Morris.Roslynk.Mcp", "--", "stdio"]
+    }
+  }
+}
 ```
 
 (With a published build, use `Morris.Roslynk.Mcp stdio` as the command instead — it starts faster.)
