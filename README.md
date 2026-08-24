@@ -86,6 +86,48 @@ Or in `mcp.json` from a source checkout:
 
 (With a published build, use `Morris.Roslynk.Mcp stdio` as the command instead — it starts faster.)
 
+### DeepSeek Harness (`dsh`)
+
+DeepSeek Harness bridges MCP servers through `@deepseek-ai/dsh-mcp-client` — one plugin row per
+server. Add Roslynk to your user patch layer at `$DSH_HOME/cordis.patch.yml` (defaults to
+`~/.dsh/cordis.patch.yml` or `%USERPROFILE\.dsh\cordis.patch.yml`), which is applied to every profile:
+
+```yaml
+- insert:
+    - id: mcp-roslynk
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: roslynk
+        transport: stdio
+        command: dnx
+        args: ['Roslynk', '--yes', '--', 'stdio']
+```
+
+> **Important:** a new plugin has to go inside an `insert:` list. A bare top-level `- id: mcp-roslynk`
+> row is an *id-targeted config override* of a row that already exists in the composed tree, so `dsh`
+> prints `patch: entry "mcp-roslynk" not found` to stderr and boots with no bridge and no tools.
+
+To attach to an already-running daemon instead of spawning one, use the HTTP transport:
+
+```yaml
+- insert:
+    - id: mcp-roslynk
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: roslynk
+        transport: streamable-http
+        url: http://localhost:6502
+```
+
+The tools reach the model as `mcp__roslynk__*`. Check the composition without booting a session:
+
+```bash
+dsh --profile web --dump-config
+```
+
+The row should be listed under a `# == <path>/cordis.patch.yml` comment, with no `not found` warning
+above it. `dsh` watches the patch file, so edits reconnect the server without restarting the process.
+
 The daemon outlives individual sessions so Roslyn workspaces stay warm across clients. Its console
 output goes to `Roslynk/daemon.log` under the local application-data folder (`~/.local/share` on
 Linux, `~/Library/Application Support` on macOS, `%LOCALAPPDATA%` on Windows).
@@ -108,6 +150,22 @@ cp -r skills/roslynk ~/.claude/skills/
 # or per-project
 cp -r skills/roslynk .claude/skills/
 ```
+
+### DeepSeek Harness: install the skill
+
+`dsh` scans `$DSH_HOME/skills` (defaults to `~/.dsh/skills`) for user-wide skills, and
+`<projectRoot>/.dsh/skills` for project ones — the project root being the nearest ancestor
+containing `.git`:
+
+```bash
+# user-wide (all profiles, all projects)
+cp -r skills/roslynk ~/.dsh/skills/
+
+# or per-project
+cp -r skills/roslynk .dsh/skills/
+```
+
+The skill directory is watched, so a fresh copy is picked up without restarting `dsh`.
 
 ### Everything else: example system prompt for LLMs
 
