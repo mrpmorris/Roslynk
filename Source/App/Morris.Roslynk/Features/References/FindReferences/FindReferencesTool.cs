@@ -57,7 +57,7 @@ public sealed class FindReferencesTool
 	public async Task<string> FindReferences(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'.")] string symbolName,
-		[Description("Maximum reference locations to return. Default 100.")] int maxResults = 100,
+		[Description("Maximum reference locations to return.")] int maxResults = 100,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);

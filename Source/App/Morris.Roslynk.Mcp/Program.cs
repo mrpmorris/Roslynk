@@ -27,7 +27,7 @@ builder.Services.AddHostedService<IdleEvictionService>();
 builder.Services
 	.AddMcpServer(McpServerRegistration.Configure)
 	.WithHttpTransport()
-	.WithToolsFromAssembly(typeof(ServicesRegistration).Assembly);
+	.WithRoslynkTools();
 
 WebApplication app = builder.Build();
 

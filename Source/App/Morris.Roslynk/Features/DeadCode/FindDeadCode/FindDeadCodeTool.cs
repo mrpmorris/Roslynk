@@ -79,8 +79,8 @@ public sealed class FindDeadCodeTool
 	public async Task<string> FindDeadCode(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Optional fully-qualified-name prefix to limit the scan, e.g. MyApp.Services. Omit for the whole solution.")] string? scope = null,
-		[Description("Include unreferenced public/protected members (the API surface). Default false.")] bool includePublic = false,
-		[Description("Maximum candidates to return. Default 50.")] int maxResults = 50)
+		[Description("Include unreferenced public/protected members (the API surface).")] bool includePublic = false,
+		[Description("Maximum candidates to return.")] int maxResults = 50)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
