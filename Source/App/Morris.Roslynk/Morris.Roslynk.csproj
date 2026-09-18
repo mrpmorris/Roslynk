@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<ItemGroup>
+		<InternalsVisibleTo Include="Morris.Roslynk.McpTests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
 		<PackageReference Include="Microsoft.Build.Locator" />
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />

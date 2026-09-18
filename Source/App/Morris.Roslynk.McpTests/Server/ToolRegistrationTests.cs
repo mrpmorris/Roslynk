@@ -11,7 +11,7 @@ public class ToolRegistrationTests
 	{
 		var services = new ServiceCollection();
 		services.AddRoslynk();
-		services.AddMcpServer().WithToolsFromAssembly(typeof(ServicesRegistration).Assembly);
+		services.AddMcpServer().WithRoslynkTools();
 		using ServiceProvider provider = services.BuildServiceProvider();
 
 		HashSet<string> toolNames = provider.GetServices<McpServerTool>()
