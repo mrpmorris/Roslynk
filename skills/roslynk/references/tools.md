@@ -79,18 +79,20 @@ No parameters. Lists every solution loaded by the daemon (daemon-wide, not sessi
 ### get_diagnostics
 `solutionId`, `includeErrors`/`includeWarnings`/`includeInfo`/`includeHidden` (**all default false**), `targetFramework` (optional; pins a multi-targeted project to one compilation), `includeAnalyzers` (default true; `false` = faster compiler-only pass).
 
-Header always carries `errors=`, `warnings=`, `infos=`, `hidden=` counts regardless of include flags, so filtering is never silent — a bare call is a cheap compile check. Body (per included severity) nests file→severity→`<id>,<line:col>,<message>`. Results are cached per `(targetFramework, includeAnalyzers)` and invalidated on any write, so repeated calls are cheap. This replaces `dotnet build` for correctness checking.
+Header always carries `errors=`, `warnings=`, `infos=`, `hidden=` counts regardless of include flags, so filtering is never silent — a bare call is a cheap compile check. Body (per included severity) nests file→severity→`<id>,<line:col>,<message>`. Ids that exist only to trigger a code fix (they carry no message and accompany a public rule, as IDE0005's does) are not listed; fix the public id instead. Results are cached per `(targetFramework, includeAnalyzers)` and invalidated on any write, so repeated calls are cheap. This replaces `dotnet build` for correctness checking.
 
 ## Code actions
 
 ### get_code_actions
-`solutionId`, `documentPath` (.cs, absolute or solution-relative), `line`, `column` (1-based), `endLine`/`endColumn` (optional, for a selection span). Returns lines `<actionId>,<kind>,<diagnosticId> <title>`; `kind` ∈ `Fix|Refactoring`; `diagnosticId` is `-` for refactorings. Capped at 50. `actionId` is opaque — pass it back verbatim.
+`solutionId`, `documentPath` (.cs, absolute or solution-relative), `line`, `column` (1-based), `endLine`/`endColumn` (optional, for a selection span). Returns lines `<actionId>,<kind>,<diagnosticId> <title>`; `kind` ∈ `Fix|Refactoring`; `diagnosticId` is `-` for refactorings. Fixes cover analyzer diagnostics as well as compiler ones, so `IDE*` and `CA*` ids appear here when the project references the analyzer that reports them. Capped at 50. `actionId` is opaque — pass it back verbatim.
 
 ### apply_code_action
 `solutionId`, `actionId` (from get_code_actions), `checkOnly` (default false). The action is re-resolved at apply time, not cached — if the code changed since discovery, `error=Conflict`: re-run `get_code_actions`. Malformed id → `error=Invalid`. Returns `applied`, `action`, changed files.
 
 ### apply_code_fix
-`solutionId`, `documentPath`, `diagnosticId` (e.g. `CS0219`), `checkOnly` (default false). Quick path: fixes the first occurrence of that diagnostic in the file without an actionId round-trip. No such diagnostic in the file → `NotFound`; no registered fix → `NotSupported`; fix produced no changes → `Conflict`.
+`solutionId`, `documentPath`, `diagnosticId` (a compiler id such as `CS0219`, or an analyzer id such as `IDE0005`), `checkOnly` (default false). Quick path: fixes the first occurrence of that diagnostic in the file without an actionId round-trip. No such diagnostic in the file → `NotFound`; no registered fix → `NotSupported`; fix produced no changes → `Conflict`.
+
+Analyzer ids are only reported — and so only fixable — when the project actually references the analyzer. `IDE*` rules come from the CodeStyle analyzers, which a project pulls in with `EnforceCodeStyleInBuild` or an explicit `Microsoft.CodeAnalysis.CSharp.CodeStyle` package reference; an SDK copy built against a newer compiler than Roslynk's is skipped.
 
 ## Editing
 
@@ -113,7 +115,7 @@ All write tools: `checkOnly=true` previews changed files without writing; writes
 v1 scope: appends one optional parameter to one ordinary method. `NotSupported` for virtual/override/abstract methods, interface members and implementations, partial methods, `params` methods, constructors/operators/accessors/local functions; overloads → `Ambiguous` (cannot target a specific overload). Only true invocation call sites are updated — method groups, `nameof`, and `cref` are left alone (still valid because the parameter is optional). Returns `updatedCallSites` count.
 
 ### remove_unused_usings
-`solutionId`, `documentPath` (optional; omit to clean the whole solution), `checkOnly`. Driven by compiler diagnostic CS8019. Nothing to remove → `applied=N`, `removedCount=0` (not an error). Safe to re-run (idempotent).
+`solutionId`, `documentPath` (optional; omit to clean the whole solution), `checkOnly`. CS8019 finds the files to touch; each one is then rewritten by Roslyn's own IDE0005 fix, which preserves the surrounding trivia, falling back to a syntactic removal when the IDE0005 analyzer is not referenced. Nothing to remove → `applied=N`, `removedCount=0` (not an error). Safe to re-run (idempotent).
 
 ## Dead code
 

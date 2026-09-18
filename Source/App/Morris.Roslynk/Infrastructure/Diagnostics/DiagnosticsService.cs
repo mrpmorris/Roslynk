@@ -29,9 +29,13 @@ public sealed class DiagnosticsService
 				if (compilation is null)
 					continue;
 
-				if (includeAnalyzers && TryGetAnalyzers(project, out ImmutableArray<DiagnosticAnalyzer> analyzers))
+				ImmutableArray<DiagnosticAnalyzer> analyzers =
+					includeAnalyzers
+					? AnalyzerDriverFactory.AnalyzersFor(project)
+					: [];
+				if (!analyzers.IsEmpty)
 				{
-					CompilationWithAnalyzers withAnalyzers = compilation.WithAnalyzers(analyzers, project.AnalyzerOptions);
+					CompilationWithAnalyzers withAnalyzers = AnalyzerDriverFactory.Create(project, compilation, analyzers);
 					results.AddRange(await withAnalyzers.GetAllDiagnosticsAsync(cancellationToken));
 				}
 				else
@@ -43,13 +47,5 @@ public sealed class DiagnosticsService
 			activity?.SetTag("roslynk.diagnostic.count", results.Count);
 			return results;
 		}
-	}
-
-	private static bool TryGetAnalyzers(Project project, out ImmutableArray<DiagnosticAnalyzer> analyzers)
-	{
-		analyzers = project.AnalyzerReferences
-			.SelectMany(reference => reference.GetAnalyzers(project.Language))
-			.ToImmutableArray();
-		return !analyzers.IsEmpty;
 	}
 }

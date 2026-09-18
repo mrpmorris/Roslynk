@@ -208,13 +208,13 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > **Code actions:**
 > - `get_code_actions`: List fixes and refactorings at a position. Parameters: `solutionId`, `documentPath`, `line`, `column`, `endLine`, `endColumn`.
 > - `apply_code_action`: Apply one by its opaque `actionId` (pass it back verbatim). Parameters: `solutionId`, `actionId`, `checkOnly`.
-> - `apply_code_fix`: Fix the first occurrence of a diagnostic id in a file, no round-trip. Parameters: `solutionId`, `documentPath`, `diagnosticId`, `checkOnly`.
+> - `apply_code_fix`: Fix the first occurrence of a diagnostic id (compiler or analyzer, e.g. `CS0219` or `IDE0005`) in a file, no round-trip. Parameters: `solutionId`, `documentPath`, `diagnosticId`, `checkOnly`.
 >
 > **Editing:**
 > - `apply_patch`: Edit text files with a git unified diff. Parameters: `solutionId`, `patch`, `baseVersions`, `checkOnly`. Hunks are content-anchored, not line-number-anchored — include enough context that each matches exactly one place.
 > - `rename_symbol`: Compiler-correct rename across partial classes, every `#if` branch, every target framework, and `.razor`/`.cshtml`. Parameters: `solutionId`, `symbolName`, `newName`, `checkOnly`.
 > - `change_signature`: Append one optional parameter to an ordinary method and thread an argument into every call site. Parameters: `solutionId`, `methodId`, `parameterType`, `parameterName`, `defaultValue`, `callSiteArgument`, `checkOnly`.
-> - `remove_unused_usings`: Strip unused `using` directives (CS8019). Parameters: `solutionId`, `documentPath` (omit for the whole solution), `checkOnly`.
+> - `remove_unused_usings`: Strip unused `using` directives (CS8019), preserving surrounding trivia. Parameters: `solutionId`, `documentPath` (omit for the whole solution), `checkOnly`.
 >
 > **Dead code:**
 > - `find_dead_code`: Unreferenced members with a confidence and a reason — candidates, never verdicts; it deletes nothing. Parameters: `solutionId`, `scope` (FQN prefix; use it on large solutions), `includePublic`, `maxResults`.

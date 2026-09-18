@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -77,7 +78,11 @@ public sealed class GetDiagnosticsTool
 		Solution compiled = diagnostics.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(compiled);
 
-		IReadOnlyList<Diagnostic> all = diagnostics.Diagnostics;
+		// Analyzers report private trigger ids alongside the public rule (IDE0005's, for one). They have no
+		// message and nothing to act on, so they are dropped before the counts as well as the body.
+		List<Diagnostic> all = diagnostics.Diagnostics
+			.Where(diagnostic => !CodeActionCatalog.IsPrivateFixTrigger(diagnostic.Id))
+			.ToList();
 
 		var wanted = new HashSet<DiagnosticSeverity>();
 		if (includeErrors)

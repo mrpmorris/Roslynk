@@ -5,37 +5,41 @@ using Microsoft.CodeAnalysis.CodeActions;
 using Microsoft.CodeAnalysis.CodeFixes;
 using Microsoft.CodeAnalysis.CodeRefactorings;
 using Microsoft.CodeAnalysis.Text;
+using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.CodeActions;
 
 /// <summary>
 /// Discovers code fixes and refactorings at a span and resolves a previously-discovered action back to the
-/// solution it would produce. Fixes are driven from the compiler diagnostics overlapping the span (analyzer
-/// diagnostics need a separate analyzer pass, layered on later); refactorings are computed over the span.
+/// solution it would produce. Fixes are driven from the compiler <em>and</em> analyzer diagnostics
+/// overlapping the span, so anything <c>get_diagnostics</c> lists is fixable here; refactorings are
+/// computed over the span.
 /// </summary>
 public sealed class CodeActionService
 {
 	private const int MaxActions = 50;
 
+	private readonly DocumentDiagnosticsProvider DocumentDiagnostics;
+
+	public CodeActionService(DocumentDiagnosticsProvider documentDiagnostics)
+	{
+		DocumentDiagnostics = documentDiagnostics ?? throw new ArgumentNullException(nameof(documentDiagnostics));
+	}
+
 	public async Task<IReadOnlyList<DiscoveredAction>> DiscoverAsync(Document document, TextSpan span, CancellationToken cancellationToken = default)
 	{
 		var discovered = new List<DiscoveredAction>();
 
-		// Source diagnostics from the whole compilation (so compilation-completion diagnostics are included),
-		// filtered to this document's tree and the span. The provider's FixableDiagnosticIds gates relevance,
-		// so every severity is kept.
-		Compilation? compilation = await document.Project.GetCompilationAsync(cancellationToken);
-		SyntaxTree? tree = await document.GetSyntaxTreeAsync(cancellationToken);
-		ImmutableArray<Diagnostic> diagnostics = compilation is null || tree is null
-			? []
-			: compilation.GetDiagnostics(cancellationToken)
-				.Where(diagnostic => diagnostic.Location.SourceTree == tree && diagnostic.Location.SourceSpan.IntersectsWith(span))
-				.ToImmutableArray();
+		// The document's compiler and analyzer diagnostics, narrowed to the span here. The provider's
+		// FixableDiagnosticIds gates relevance, so every severity is kept - IDE0005 is hidden by default.
+		ImmutableArray<Diagnostic> diagnostics = (await DocumentDiagnostics.GetForDocumentAsync(document, cancellationToken))
+			.Where(diagnostic => diagnostic.Location.SourceSpan.IntersectsWith(span))
+			.ToImmutableArray();
 
 		foreach (CodeFixProvider provider in CodeActionCatalog.Instance.FixProviders)
 		{
-			ImmutableArray<string> fixable = SafeFixableIds(provider);
+			ImmutableArray<string> fixable = CodeActionCatalog.FixableIds(provider);
 			foreach (Diagnostic diagnostic in diagnostics)
 			{
 				if (!fixable.Contains(diagnostic.Id))
@@ -53,7 +57,7 @@ public sealed class CodeActionService
 				}
 
 				foreach (CodeAction action in registered)
-					discovered.Add(new DiscoveredAction(action, "Fix", diagnostic.Id));
+					discovered.Add(new DiscoveredAction(action, "Fix", CodeActionCatalog.PublicId(diagnostic.Id)));
 			}
 		}
 
@@ -160,16 +164,4 @@ public sealed class CodeActionService
 	}
 
 	private static string KeyOf(CodeAction action) => action.EquivalenceKey ?? action.Title;
-
-	private static ImmutableArray<string> SafeFixableIds(CodeFixProvider provider)
-	{
-		try
-		{
-			return provider.FixableDiagnosticIds;
-		}
-		catch
-		{
-			return [];
-		}
-	}
 }

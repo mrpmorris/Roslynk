@@ -12,6 +12,7 @@ internal static class TestSolutions
 	private static readonly Lazy<string> BrokenSolution = new(() => Prepare("BrokenSolution", "BrokenSolution.slnx"));
 	private static readonly Lazy<string> RazorSolutionPath = new(() => Prepare("RazorSolution", "RazorSolution.slnx"));
 	private static readonly Lazy<string> ReferencesSolutionPath = new(() => Prepare("ReferencesSolution", "ReferencesSolution.slnx"));
+	private static readonly Lazy<string> CodeStyleSolutionPath = new(() => Prepare("CodeStyleSolution", "CodeStyleSolution.slnx"));
 	private static readonly Lazy<string> ConditionalSolutionPath = new(() => Prepare("ConditionalSolution", "ConditionalSolution.slnx"));
 	private static readonly Lazy<string> GeneratorSolutionPath = new(() =>
 	{
@@ -34,6 +35,12 @@ internal static class TestSolutions
 
 	/// <summary>A two-file solution with an interface referenced many ways, for testing reference grouping.</summary>
 	public static string References => ReferencesSolutionPath.Value;
+
+	/// <summary>
+	/// A single-project solution with <c>EnforceCodeStyleInBuild</c> on - so the IDE analyzers are
+	/// referenced - containing an unnecessary using with a comment above it.
+	/// </summary>
+	public static string CodeStyle => CodeStyleSolutionPath.Value;
 
 	/// <summary>A single-project solution whose method is called in both the #if DEBUG and #else branches.</summary>
 	public static string Conditional => ConditionalSolutionPath.Value;
@@ -88,6 +95,9 @@ internal static class TestSolutions
 	/// write tests can modify files without dirtying the committed fixture.
 	/// </summary>
 	public static string CreateScratchSimpleSolution() => CreateScratch("SimpleSolution", "SimpleSolution.slnx");
+
+	/// <summary>A writable scratch copy of the CodeStyleSolution fixture, for tests that apply analyzer fixes.</summary>
+	public static string CreateScratchCodeStyleSolution() => CreateScratch("CodeStyleSolution", "CodeStyleSolution.slnx");
 
 	/// <summary>A writable scratch copy of the ConditionalSolution fixture, for tests that rename/edit it.</summary>
 	public static string CreateScratchConditionalSolution() => CreateScratch("ConditionalSolution", "ConditionalSolution.slnx");

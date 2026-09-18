@@ -23,7 +23,7 @@ public class CodeActionDiscoveryTests
 		string solutionPath = UnusedLocalScenario.Create(out string greeter, out int unusedLine);
 		using var registry = new InstanceRegistry();
 		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
-		var service = new CodeActionService();
+		var service = TestServices.CodeActions();
 
 		Document document = CodeActionService.FindDocument(instance.CurrentSolution, greeter)!;
 		SourceText text = await document.GetTextAsync();

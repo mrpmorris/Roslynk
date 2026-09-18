@@ -83,7 +83,7 @@ The core edit cycle: make a change (via any write tool) → `get_diagnostics` (b
 
 Two paths:
 
-- **Quick path** — you already know the diagnostic ID (from `get_diagnostics`): `apply_code_fix(documentPath, diagnosticId)` fixes the first occurrence of that ID in the file. One call, no handle juggling.
+- **Quick path** — you already know the diagnostic ID (from `get_diagnostics`): `apply_code_fix(documentPath, diagnosticId)` fixes the first occurrence of that ID in the file. One call, no handle juggling. Analyzer IDs work too (`IDE0005` and the like), not just `CS*`.
 - **Full path** — you want to see what's on offer at a location: `get_code_actions(documentPath, line, column)` lists fixes and refactorings with opaque `actionId`s; pass one verbatim to `apply_code_action`. Action IDs aren't cached server-side — if the code changed in between, you'll get `error=Conflict`; re-run `get_code_actions` and pick again.
 
 ### Rename and signature changes

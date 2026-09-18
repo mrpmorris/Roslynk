@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <!-- Independent of the product's central package versions: this fixture pins the CodeStyle analyzer
+         package to the Roslyn version Roslynk loads, so IDE0005 is reported whatever SDK the tests run on.
+         EnforceCodeStyleInBuild would instead use the SDK's own copy, which Roslyn skips whenever it is
+         built against a newer compiler than the one Roslynk loads. -->
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.CodeStyle" Version="5.9.0" PrivateAssets="all" />
+  </ItemGroup>
+
+</Project>

@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeFixes;
@@ -22,10 +23,46 @@ public sealed class CodeActionCatalog
 	public IReadOnlyList<CodeFixProvider> FixProviders { get; }
 	public IReadOnlyList<CodeRefactoringProvider> RefactoringProviders { get; }
 
+	/// <summary>Every diagnostic id some fix provider in the catalog handles, read once per process.</summary>
+	public ImmutableHashSet<string> FixableDiagnosticIds { get; }
+
 	private CodeActionCatalog(IReadOnlyList<CodeFixProvider> fixProviders, IReadOnlyList<CodeRefactoringProvider> refactoringProviders)
 	{
 		FixProviders = fixProviders;
 		RefactoringProviders = refactoringProviders;
+		FixableDiagnosticIds = fixProviders.SelectMany(provider => FixableIds(provider).AsEnumerable()).ToImmutableHashSet(StringComparer.Ordinal);
+	}
+
+	/// <summary>
+	/// Fixer trigger ids that are not the id a caller would name, mapped to the id they would. Roslyn's
+	/// unnecessary-imports fixer does not register against IDE0005: its analyzer reports a second, hidden
+	/// diagnostic whose id is the fixer's private trigger, and the IDE matches the fix on that. A fix found
+	/// that way is reported under the public id so 'apply_code_fix IDE0005' finds it.
+	/// </summary>
+	private static readonly ImmutableDictionary<string, string> PublicIds = ImmutableDictionary
+		.CreateRange(StringComparer.Ordinal, [KeyValuePair.Create("RemoveUnnecessaryImportsFixable", "IDE0005")]);
+
+	/// <summary>The id a caller would name for a fix triggered by <paramref name="diagnosticId"/>.</summary>
+	public static string PublicId(string diagnosticId) =>
+		PublicIds.TryGetValue(diagnosticId, out string? publicId) ? publicId : diagnosticId;
+
+	/// <summary>
+	/// Whether the id exists only to trigger a fixer. Such a diagnostic carries no message and duplicates
+	/// the public one it accompanies, so it is worth listing nowhere - the public id is what a caller acts on.
+	/// </summary>
+	public static bool IsPrivateFixTrigger(string diagnosticId) => PublicIds.ContainsKey(diagnosticId);
+
+	/// <summary>The ids a provider claims to fix, or none when asking it throws.</summary>
+	public static ImmutableArray<string> FixableIds(CodeFixProvider provider)
+	{
+		try
+		{
+			return provider.FixableDiagnosticIds;
+		}
+		catch
+		{
+			return [];
+		}
 	}
 
 	private static CodeActionCatalog Build()

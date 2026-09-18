@@ -15,7 +15,7 @@ public class ApplyCodeActionTests
 		string solutionPath = UnusedLocalScenario.Create(out string greeter, out int unusedLine);
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
-		var service = new CodeActionService();
+		var service = TestServices.CodeActions();
 		string actionId = await DiscoverRemoveUnusedAsync(registry, service, solutionPath, greeter, unusedLine);
 		var subject = new ApplyCodeActionTool(registry, service, new ApplyPipeline());
 
@@ -31,7 +31,7 @@ public class ApplyCodeActionTests
 		string solutionPath = UnusedLocalScenario.Create(out string greeter, out int unusedLine);
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
-		var service = new CodeActionService();
+		var service = TestServices.CodeActions();
 		string before = await File.ReadAllTextAsync(greeter);
 		string actionId = await DiscoverRemoveUnusedAsync(registry, service, solutionPath, greeter, unusedLine);
 		var subject = new ApplyCodeActionTool(registry, service, new ApplyPipeline());
@@ -47,7 +47,7 @@ public class ApplyCodeActionTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new ApplyCodeActionTool(registry, new CodeActionService(), new ApplyPipeline());
+		var subject = new ApplyCodeActionTool(registry, TestServices.CodeActions(), new ApplyPipeline());
 
 		string result = await subject.ApplyCodeAction(TestSolutions.Simple, "not-a-valid-id");
 
@@ -58,7 +58,7 @@ public class ApplyCodeActionTests
 	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
 	{
 		using var registry = new InstanceRegistry();
-		var subject = new ApplyCodeActionTool(registry, new CodeActionService(), new ApplyPipeline());
+		var subject = new ApplyCodeActionTool(registry, TestServices.CodeActions(), new ApplyPipeline());
 
 		string result = await subject.ApplyCodeAction(TestSolutions.Simple, "anything");
 
