@@ -1,11 +1,29 @@
 ﻿using Morris.Roslynk.Features.Usings.RemoveUnusedUsings;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Writing;
+using Morris.Roslynk.Tests.Helpers;
 
 namespace Morris.Roslynk.Tests.Features.Usings.RemoveUnusedUsingsTests;
 
 public class RemoveUnusedUsingsTests
 {
+	[Fact]
+	public async Task WhenAUsingHasACommentAboveIt_ThenTheCommentSurvives()
+	{
+		// The reason this tool now goes through Roslyn's own fix: removing the node took the comment with it.
+		string solutionPath = UnnecessaryUsingScenario.Create(out string greeter);
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.RemoveUnusedUsings(registry);
+
+		string result = await subject.RemoveUnusedUsings(solutionPath);
+
+		Assert.Contains("applied=Y", result);
+		string content = await File.ReadAllTextAsync(greeter);
+		Assert.DoesNotContain(UnnecessaryUsingScenario.UnnecessaryUsing, content);
+		Assert.Contains(UnnecessaryUsingScenario.Comment, content);
+	}
+
 	[Fact]
 	public async Task WhenAFileHasAnUnnecessaryUsing_ThenItIsRemoved()
 	{
@@ -15,7 +33,7 @@ public class RemoveUnusedUsingsTests
 
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RemoveUnusedUsingsTool(registry, new ApplyPipeline());
+		var subject = TestServices.RemoveUnusedUsings(registry);
 
 		string result = await subject.RemoveUnusedUsings(solutionPath);
 
@@ -34,7 +52,7 @@ public class RemoveUnusedUsingsTests
 
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RemoveUnusedUsingsTool(registry, new ApplyPipeline());
+		var subject = TestServices.RemoveUnusedUsings(registry);
 
 		string result = await subject.RemoveUnusedUsings(solutionPath, documentPath: null, checkOnly: true);
 
@@ -48,7 +66,7 @@ public class RemoveUnusedUsingsTests
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new RemoveUnusedUsingsTool(registry, new ApplyPipeline());
+		var subject = TestServices.RemoveUnusedUsings(registry);
 
 		string result = await subject.RemoveUnusedUsings(TestSolutions.Simple);
 
@@ -60,7 +78,7 @@ public class RemoveUnusedUsingsTests
 	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
 	{
 		using var registry = new InstanceRegistry();
-		var subject = new RemoveUnusedUsingsTool(registry, new ApplyPipeline());
+		var subject = TestServices.RemoveUnusedUsings(registry);
 
 		string result = await subject.RemoveUnusedUsings(TestSolutions.Simple);
 

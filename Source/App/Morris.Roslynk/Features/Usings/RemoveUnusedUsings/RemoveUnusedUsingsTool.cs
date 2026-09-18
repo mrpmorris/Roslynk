@@ -1,7 +1,10 @@
+using System.Collections.Immutable;
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.CodeActions;
+using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
@@ -10,6 +13,12 @@ using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Features.Usings.RemoveUnusedUsings;
 
+/// <summary>
+/// Removes unnecessary using directives. The compiler's CS8019 finds the files worth touching, then each
+/// one is rewritten by Roslyn's own IDE0005 fix, which gets the surrounding trivia right. Where that fix is
+/// unavailable - IDE0005's analyzer only ships with <c>EnforceCodeStyleInBuild</c> - the directives are
+/// removed syntactically instead, keeping their leading trivia so comments above a using survive.
+/// </summary>
 [McpServerToolType]
 public sealed class RemoveUnusedUsingsTool
 {
@@ -17,13 +26,25 @@ public sealed class RemoveUnusedUsingsTool
 
 	private const string UnnecessaryUsingId = "CS8019";
 
+	/// <summary>IDE0005 and its generated-code counterpart, both fixed by the same provider.</summary>
+	private static readonly ImmutableHashSet<string> UnnecessaryImportIds =
+		ImmutableHashSet.Create(StringComparer.Ordinal, "IDE0005", "IDE0005_gen");
+
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly ApplyPipeline ApplyPipeline;
+	private readonly CodeActionService CodeActionService;
+	private readonly DocumentDiagnosticsProvider DocumentDiagnostics;
 
-	public RemoveUnusedUsingsTool(InstanceRegistry instanceRegistry, ApplyPipeline applyPipeline)
+	public RemoveUnusedUsingsTool(
+		InstanceRegistry instanceRegistry,
+		ApplyPipeline applyPipeline,
+		CodeActionService codeActionService,
+		DocumentDiagnosticsProvider documentDiagnostics)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		ApplyPipeline = applyPipeline ?? throw new ArgumentNullException(nameof(applyPipeline));
+		CodeActionService = codeActionService ?? throw new ArgumentNullException(nameof(codeActionService));
+		DocumentDiagnostics = documentDiagnostics ?? throw new ArgumentNullException(nameof(documentDiagnostics));
 	}
 
 	[McpServerTool(
@@ -71,7 +92,7 @@ public sealed class RemoveUnusedUsingsTool
 		HashSet<DocumentId>? targetDocuments = null;
 		if (documentPath is not null)
 		{
-			Document? document = ResolveDocument(solution, documentPath);
+			Document? document = CodeActionService.FindDocument(solution, documentPath);
 			if (document is null)
 				return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs document."));
 			targetDocuments = [document.Id];
@@ -85,6 +106,7 @@ public sealed class RemoveUnusedUsingsTool
 			if (compilation is null)
 				continue;
 
+			// CS8019 only picks the files worth rewriting; the rewrite itself is the IDE0005 fix below.
 			IEnumerable<IGrouping<SyntaxTree, Diagnostic>> byTree = compilation.GetDiagnostics(cancellationToken)
 				.Where(diagnostic => diagnostic.Id == UnnecessaryUsingId && diagnostic.Location.SourceTree is not null)
 				.GroupBy(diagnostic => diagnostic.Location.SourceTree!);
@@ -95,19 +117,20 @@ public sealed class RemoveUnusedUsingsTool
 				if (document is null || !IsEditableSource(document) || (targetDocuments is not null && !targetDocuments.Contains(document.Id)))
 					continue;
 
-				SyntaxNode root = await treeDiagnostics.Key.GetRootAsync(cancellationToken);
-				UsingDirectiveSyntax[] usings = treeDiagnostics
-					.Select(diagnostic => root.FindNode(diagnostic.Location.SourceSpan).FirstAncestorOrSelf<UsingDirectiveSyntax>())
-					.Where(node => node is not null)
-					.Distinct()
-					.ToArray()!;
-
-				if (usings.Length == 0)
+				Document? current = updated.GetDocument(document.Id);
+				if (current is null)
 					continue;
 
-				SyntaxNode newRoot = root.RemoveNodes(usings, SyntaxRemoveOptions.KeepNoTrivia)!;
-				updated = updated.WithDocumentSyntaxRoot(document.Id, newRoot);
-				removed += usings.Length;
+				int before = await UsingCountAsync(current, cancellationToken);
+				Solution? fixedSolution = await TryFixAsync(current, cancellationToken)
+					?? await RemoveByHandAsync(updated, current, treeDiagnostics, cancellationToken);
+				if (fixedSolution is null)
+					continue;
+
+				updated = fixedSolution;
+				Document? rewritten = updated.GetDocument(document.Id);
+				int after = rewritten is null ? before : await UsingCountAsync(rewritten, cancellationToken);
+				removed += Math.Max(before - after, 0);
 			}
 		}
 
@@ -119,6 +142,61 @@ public sealed class RemoveUnusedUsingsTool
 
 		IReadOnlyList<string> changed = await ApplyPipeline.ApplyAsync(instance, updated, cancellationToken);
 		return Success(applied: true, changed, removed);
+	}
+
+	/// <summary>
+	/// The solution Roslyn's IDE0005 fix would produce for the whole document, or null when the analyzer
+	/// that reports IDE0005 is not referenced by the project.
+	/// </summary>
+	private async Task<Solution?> TryFixAsync(Document document, CancellationToken cancellationToken)
+	{
+		ImmutableArray<Diagnostic> diagnostics = await DocumentDiagnostics.GetForDocumentAsync(document, cancellationToken);
+		foreach (Diagnostic diagnostic in diagnostics.Where(candidate => UnnecessaryImportIds.Contains(candidate.Id)))
+		{
+			IReadOnlyList<DiscoveredAction> actions = await CodeActionService.DiscoverAsync(document, diagnostic.Location.SourceSpan, cancellationToken);
+			DiscoveredAction? fix = actions.FirstOrDefault(action => action.DiagnosticId == diagnostic.Id);
+			if (fix is null)
+				continue;
+
+			Solution? changed = await CodeActionService.ChangedSolutionAsync(fix.Action, cancellationToken);
+			if (changed is not null)
+				return changed;
+		}
+
+		return null;
+	}
+
+	/// <summary>
+	/// Removes the CS8019 directives syntactically. Their leading trivia is kept so a comment or a
+	/// conditional directive above a using is not taken with it.
+	/// </summary>
+	private static async Task<Solution?> RemoveByHandAsync(
+		Solution solution,
+		Document document,
+		IEnumerable<Diagnostic> treeDiagnostics,
+		CancellationToken cancellationToken)
+	{
+		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken);
+		if (root is null)
+			return null;
+
+		UsingDirectiveSyntax[] usings = treeDiagnostics
+			.Select(diagnostic => root.FindNode(diagnostic.Location.SourceSpan).FirstAncestorOrSelf<UsingDirectiveSyntax>())
+			.Where(node => node is not null)
+			.Distinct()
+			.ToArray()!;
+
+		if (usings.Length == 0)
+			return null;
+
+		SyntaxNode newRoot = root.RemoveNodes(usings, SyntaxRemoveOptions.KeepUnbalancedDirectives | SyntaxRemoveOptions.KeepLeadingTrivia)!;
+		return solution.WithDocumentSyntaxRoot(document.Id, newRoot);
+	}
+
+	private static async Task<int> UsingCountAsync(Document document, CancellationToken cancellationToken)
+	{
+		SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken);
+		return root is null ? 0 : root.DescendantNodes().OfType<UsingDirectiveSyntax>().Count();
 	}
 
 	private static readonly string[] GeneratedSuffixes = [".g.cs", ".g.i.cs", ".designer.cs", ".generated.cs"];
@@ -139,28 +217,5 @@ public sealed class RemoveUnusedUsingsTool
 		}
 
 		return true;
-	}
-
-	private static Document? ResolveDocument(Solution solution, string path)
-	{
-		string normalized = path.Replace('/', System.IO.Path.DirectorySeparatorChar).Replace('\\', System.IO.Path.DirectorySeparatorChar);
-		string full = SolutionRelativePath.ToAbsolute(SolutionRelativePath.DirectoryOf(solution), normalized);
-
-		Document? suffixMatch = null;
-		int suffixMatches = 0;
-		foreach (Document document in solution.Projects.SelectMany(project => project.Documents))
-		{
-			if (document.FilePath is null)
-				continue;
-			if (string.Equals(document.FilePath, full, StringComparison.OrdinalIgnoreCase))
-				return document;
-			if (document.FilePath.EndsWith(System.IO.Path.DirectorySeparatorChar + normalized, StringComparison.OrdinalIgnoreCase))
-			{
-				suffixMatch = document;
-				suffixMatches++;
-			}
-		}
-
-		return suffixMatches == 1 ? suffixMatch : null;
 	}
 }

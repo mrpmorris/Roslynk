@@ -23,6 +23,7 @@ public static class ServicesRegistration
 		services.AddSingleton<ProjectionService>();
 		services.AddSingleton<ConditionalCoverage>();
 		services.AddSingleton<ApplyPipeline>();
+		services.AddSingleton<DocumentDiagnosticsProvider>();
 		services.AddSingleton<CodeActionService>();
 		services.AddSingleton(provider => new SolutionMetrics(RoslynkMeter.Instance, provider.GetRequiredService<InstanceRegistry>()));
 		return services;

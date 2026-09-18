@@ -36,7 +36,8 @@ public sealed class GetCodeActionsTool
 		{OutlineDescriptions.CommonMethodInstructions}
 		The body is one '<actionId>,<kind>,<diagnosticId> <title>' line per action (diagnosticId is '-' for a refactoring; the
 		title is free text and trails last). The actionId is opaque and must be passed back verbatim to
-		apply_code_action. Fixes are driven by the compiler diagnostics at that span; refactorings by the span
+		apply_code_action. Fixes are driven by the compiler and analyzer diagnostics at that span (so analyzer
+		ids such as IDE0005 are offered here too); refactorings by the span
 		itself. Line and column are 1-based. {OutlineDescriptions.ErrorBlock} Prefer discovering a fix here over editing by hand.
 		""")]
 	public async Task<string> GetCodeActions(

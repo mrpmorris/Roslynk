@@ -2,7 +2,9 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
+using System.Collections.Immutable;
 using Morris.Roslynk.Infrastructure.CodeActions;
+using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
@@ -19,12 +21,18 @@ public sealed class ApplyCodeFixTool
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly CodeActionService CodeActionService;
 	private readonly ApplyPipeline ApplyPipeline;
+	private readonly DocumentDiagnosticsProvider DocumentDiagnostics;
 
-	public ApplyCodeFixTool(InstanceRegistry instanceRegistry, CodeActionService codeActionService, ApplyPipeline applyPipeline)
+	public ApplyCodeFixTool(
+		InstanceRegistry instanceRegistry,
+		CodeActionService codeActionService,
+		ApplyPipeline applyPipeline,
+		DocumentDiagnosticsProvider documentDiagnostics)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		CodeActionService = codeActionService ?? throw new ArgumentNullException(nameof(codeActionService));
 		ApplyPipeline = applyPipeline ?? throw new ArgumentNullException(nameof(applyPipeline));
+		DocumentDiagnostics = documentDiagnostics ?? throw new ArgumentNullException(nameof(documentDiagnostics));
 	}
 
 	[McpServerTool(
@@ -36,7 +44,8 @@ public sealed class ApplyCodeFixTool
 		OpenWorld = false)]
 	[Description(
 		$"""
-		Applies the code fix for the first occurrence of a diagnostic id (e.g. CS0219) in a .cs file; the
+		Applies the code fix for the first occurrence of a diagnostic id (a compiler id such as CS0219, or an
+		analyzer id such as IDE0005) in a .cs file; the
 		quick path when you already know which diagnostic to clear, without first listing actions. Returns a
 		text result, not JSON: 'applied', 'action', 'status' header, a blank line, then one
 		solution-relative changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} Written atomically through the same safe write path. Pass
@@ -46,7 +55,7 @@ public sealed class ApplyCodeFixTool
 	public async Task<string> ApplyCodeFix(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Path of the .cs file; absolute, or relative to the solution folder.")] string documentPath,
-		[Description("The compiler diagnostic id to fix, e.g. CS0219.")] string diagnosticId,
+		[Description("The diagnostic id to fix, e.g. CS0219 or IDE0005.")] string diagnosticId,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
@@ -65,10 +74,11 @@ public sealed class ApplyCodeFixTool
 		if (document is null)
 			return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs document."));
 
-		Compilation? compilation = await document.Project.GetCompilationAsync(cancellationToken);
-		SyntaxTree? tree = await document.GetSyntaxTreeAsync(cancellationToken);
-		Diagnostic? diagnostic = compilation?.GetDiagnostics(cancellationToken)
-			.FirstOrDefault(candidate => candidate.Id == diagnosticId && candidate.Location.SourceTree == tree);
+		ImmutableArray<Diagnostic> diagnostics = await DocumentDiagnostics.GetForDocumentAsync(document, cancellationToken);
+		Diagnostic? diagnostic = diagnostics
+			.Where(candidate => candidate.Id == diagnosticId)
+			.OrderBy(candidate => candidate.Location.SourceSpan.Start)
+			.FirstOrDefault();
 		if (diagnostic is null)
 			return Failure(Error.NotFound($"No {diagnosticId} diagnostic was found in '{documentPath}'."));
 
