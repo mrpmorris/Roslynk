@@ -24,9 +24,18 @@ Detailed per-tool reference. Read the section you need; SKILL.md carries the wor
 ```
 error=<Indexing|Faulted|NotFound|Ambiguous|NotSupported|Stale|Invalid|Conflict>
 errorMessage=<text>
-candidate=<fqn>        (0+ lines: NotFound suggestions / Ambiguous matches)
+candidate=<name>       (0+ lines: NotFound suggestions / Ambiguous matches)
 stale=<path>           (0+ lines, Stale only)
 ```
+
+**Symbol names.** A name is a fully-qualified name, optionally carrying a parameter-type list for a
+method or indexer: `N.T.M`, `N.T.M(int, string)`, `N.T.this[int]`, `N.T.M<T>(T)`. Parameter names,
+default values, nullable annotations and `global::` are ignored on input, and fully-qualified parameter
+types are accepted, so `M(System.Int32)` and `M(int value = 0)` both resolve `M(int)`. A `ref`/`out`/`in`
+modifier is optional but honoured when written. Without a parameter list the name matches every overload
+→ `error=Ambiguous`, one `candidate=` per match; every candidate is accepted verbatim by the tool that
+emitted it, and the `resolvedSymbol`/`resolvedType`/`resolvedMethod`/`#fullName` a tool echoes is in the
+same re-queryable form.
 
 **Truncation.** Known-total tools emit `count=<total>` and `truncated=Y` when capped; unknown-total scans (`find_dead_code`) emit only `truncated=Y`.
 
@@ -52,10 +61,10 @@ No parameters. Lists every solution loaded by the daemon (daemon-wide, not sessi
 `solutionId`, `filePath` (absolute or solution-relative), `line`, `column` (1-based). Position-based go-to-definition. Returns `#fullName`, `#kind`, plus `#project`/`#path`/`#loc` for source symbols or `#assembly=` for metadata-only. (Note the `#`-prefixed header style, unique to this tool family.)
 
 ### get_symbol
-`solutionId`, `symbolName` (FQN, any symbol kind including members). Unambiguous source match → `#project`/`#path`/`#loc` headers + body containing the verbatim declaration text cut before the body (brace/`=>` excluded). Metadata symbol → `#source=metadata`, `#kind`, `#signature`, `#assembly`. Ambiguous → a locator tree (project→file→namespace→types→`kind,name,loc`) instead of an error, so pick and retry with a fuller name. Preferred over reading a file to identify a symbol.
+`solutionId`, `symbolName` (FQN, any symbol kind including members). Unambiguous source match → `#project`/`#path`/`#loc` headers + body containing the verbatim declaration text cut before the body (brace/`=>` excluded). Metadata symbol → `#source=metadata`, `#kind`, `#signature`, `#assembly`. Ambiguous → `error=Ambiguous` with one `candidate=` per match. Preferred over reading a file to identify a symbol.
 
 ### get_symbol_body
-`solutionId`, `symbolName` (FQN, any declared symbol kind), `includeLeadingTrivia` (default false). Returns the symbol's **complete source text including its body**, verbatim — original indentation, line endings and spacing, no reformatting or truncation. Headers `#project`/`#path`/`#loc`, a blank line, then the text. `includeLeadingTrivia=true` extends the text (and the `loc`) back over the declaration's comments, XML docs and directives. A partial type or partial method declared in several files returns `#parts=<n>` and one `part=<n>,project=...,path=...,loc=...` line per block instead. Overloads (or any name matching several distinct symbols) — `error=Ambiguous`; a metadata/referenced-assembly symbol — `error=NotSupported` (use `get_symbol` for its signature). Prefer this over reading or grepping the file to see what a member does.
+`solutionId`, `symbolName` (FQN, any declared symbol kind), `includeLeadingTrivia` (default false). Returns the symbol's **complete source text including its body**, verbatim — original indentation, line endings and spacing, no reformatting or truncation. Headers `#project`/`#path`/`#loc`, a blank line, then the text. `includeLeadingTrivia=true` extends the text (and the `loc`) back over the declaration's comments, XML docs and directives. A partial type or partial method declared in several files returns `#parts=<n>` and one `part=<n>,project=...,path=...,loc=...` line per block instead. Overloads (or any name matching several distinct symbols) — `error=Ambiguous`, resolved by retrying with a candidate's parameter-type list; a metadata/referenced-assembly symbol — `error=NotSupported` (use `get_symbol` for its signature). Prefer this over reading or grepping the file to see what a member does.
 
 ### get_members
 `solutionId`, `typeName` (FQN), `includeInherited` (default false), `nameFilter` (default null; trailing `*` = prefix match, otherwise case-insensitive substring), `includeMethods`/`includeFields`/`includeProperties`/`includeEvents`/`includeNestedTypes` (all default true). Lists all members including private, grouped by declaring file (`<metadata>` bucket for referenced-assembly types). Member lines: `kind,name,loc[,paramType|paramType|...]` (param list only for methods with parameters). Returns declarations + spans, not bodies — use `get_symbol_body` for a member's body.
@@ -69,7 +78,7 @@ No parameters. Lists every solution loaded by the daemon (daemon-wide, not sessi
 `solutionId`, `symbolName` (FQN), `maxResults` (default 100). Compiler-accurate: skips comments, strings, unrelated same-named members. References grouped file→namespace→type→member; pipe-delimited `loc`s on one line for multiple hits. Deduped across `#if` projections. `count=`/`truncated=Y` when capped.
 
 ### get_callers
-`solutionId`, `methodName` (FQN). Callers grouped file→namespace→containing type→calling member with the caller's declaration `loc`. Resolves overloads via the compiler.
+`solutionId`, `methodName` (FQN). Callers grouped file→namespace→containing type→calling member with the caller's declaration `loc`. Target one overload by writing its parameter-type list.
 
 ### find_implementations
 `solutionId`, `symbolName` (FQN of interface, abstract member, or virtual member). Implementors/overrides across all projections, deduped.
@@ -110,12 +119,12 @@ All write tools: `checkOnly=true` previews changed files without writing; writes
 - The stale-write guard runs even without `baseVersions`.
 
 ### rename_symbol
-`solutionId`, `symbolName` (FQN), `newName` (must be a valid C# identifier), `checkOnly`. Renames across partial classes, all `#if` projections, all TFMs, and Razor: edits computed against generated `.g.cs` are mapped back through `#line` directives and written to the real `.razor`/`.cshtml` (covering `@code` blocks, markup expressions, and component attributes in other components). Unverifiable mapping aborts the whole rename before writing. Ambiguous → `error=Ambiguous` with candidates.
+`solutionId`, `symbolName` (FQN), `newName` (must be a valid C# identifier), `checkOnly`. Renames across partial classes, all `#if` projections, all TFMs, and Razor: edits computed against generated `.g.cs` are mapped back through `#line` directives and written to the real `.razor`/`.cshtml` (covering `@code` blocks, markup expressions, and component attributes in other components). Unverifiable mapping aborts the whole rename before writing. Ambiguous → `error=Ambiguous` with candidates; retry with one verbatim to rename a single overload.
 
 ### change_signature
 `solutionId`, `methodId` (FQN), `parameterType` (e.g. `System.Threading.CancellationToken`), `parameterName` (valid identifier), `defaultValue` (**required** — keeps the parameter optional, e.g. `default`, `null`, `0`), `callSiteArgument` (optional; when given, threaded into every call site as a named argument), `checkOnly`.
 
-v1 scope: appends one optional parameter to one ordinary method. `NotSupported` for virtual/override/abstract methods, interface members and implementations, partial methods, `params` methods, constructors/operators/accessors/local functions; overloads → `Ambiguous` (cannot target a specific overload). Only true invocation call sites are updated — method groups, `nameof`, and `cref` are left alone (still valid because the parameter is optional). Returns `updatedCallSites` count.
+v1 scope: appends one optional parameter to one ordinary method. `NotSupported` for virtual/override/abstract methods, interface members and implementations, partial methods, `params` methods, constructors/operators/accessors/local functions. An overloaded method is targeted by its parameter-type list; a bare name → `Ambiguous`. Only true invocation call sites are updated — method groups, `nameof`, and `cref` are left alone (still valid because the parameter is optional). Returns `updatedCallSites` count.
 
 ### remove_unused_usings
 `solutionId`, `documentPath` (optional; omit to clean the whole solution), `checkOnly`. CS8019 finds the files to touch; each one is then rewritten by Roslyn's own IDE0005 fix, which preserves the surrounding trivia, falling back to a syntactic removal when the IDE0005 analyzer is not referenced. Nothing to remove → `applied=N`, `removedCount=0` (not an error). Safe to re-run (idempotent).
