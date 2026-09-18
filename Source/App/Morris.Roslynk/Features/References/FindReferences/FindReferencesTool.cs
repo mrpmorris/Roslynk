@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
@@ -41,7 +41,7 @@ public sealed class FindReferencesTool
 		'Namespace.Type' or 'Namespace.Type.Member').
 		{OutlineDescriptions.CommonMethodInstructions}
 		The body groups every reference under file -> namespace -> type(s) -> member, so a shared declaration is printed once:
-		  resolvedSymbol=<fully-qualified name>
+		  resolvedSymbol=<name, parameter types included for a method or indexer>
 
 		  <project>
 		  \t<relative/forward-slash/folder>
@@ -56,7 +56,7 @@ public sealed class FindReferencesTool
 		""")]
 	public async Task<string> FindReferences(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'.")] string symbolName,
+		[Description($"Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'. {OutlineDescriptions.SymbolNameGrammar}")] string symbolName,
 		[Description("Maximum reference locations to return.")] int maxResults = 100,
 		CancellationToken cancellationToken = default)
 	{
@@ -83,10 +83,7 @@ public sealed class FindReferencesTool
 		}
 
 		if (groups.Count > 1)
-		{
-			string[] candidates = groups.Select(group => group[0].Symbol.ToDisplayString()).Distinct(StringComparer.Ordinal).ToArray();
-			return Failure(Error.Ambiguous($"'{symbolName}' matched several symbols.", candidates));
-		}
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
 		ISymbol representative = resolved[0].Symbol;
@@ -138,7 +135,7 @@ public sealed class FindReferencesTool
 		}
 
 		var builder = new OutlineBuilder();
-		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(representative));
+		builder.Header("resolvedSymbol", SymbolResolver.SignatureName(representative));
 		if (truncated)
 		{
 			builder.Header("count", hits.Count);

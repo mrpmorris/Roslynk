@@ -57,4 +57,39 @@ public class RenameSymbolTests
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
+	[Fact]
+	public async Task WhenAnOverloadIsTargetedBySignature_ThenOnlyThatOverloadIsRenamed()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string libraryDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
+
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+
+		string result = await subject.RenameSymbol(solutionPath, "SimpleLibrary.Ledger.Add(int, int)", "AddRepeatedly");
+
+		Assert.Contains("applied=Y", result);
+		// The echoed name is the one that was resolved, i.e. before the rename.
+		Assert.Contains("resolvedSymbol=SimpleLibrary.Ledger.Add(int, int)", result);
+
+		string ledger = await File.ReadAllTextAsync(Path.Combine(libraryDir, "Ledger.cs"));
+		Assert.Contains("public int AddRepeatedly(int amount, int times)", ledger);
+		Assert.Contains("public int Add(int amount)", ledger);
+	}
+
+	[Fact]
+	public async Task WhenTheNameMatchesSeveralOverloads_ThenAmbiguousCandidatesAreDistinguishable()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+
+		string result = await subject.RenameSymbol(TestSolutions.Simple, "SimpleLibrary.Ledger.Add", "Accumulate");
+
+		Assert.Contains("error=Ambiguous", result);
+		Assert.Contains("candidate=SimpleLibrary.Ledger.Add(int)\n", result);
+		Assert.Contains("candidate=SimpleLibrary.Ledger.Add(int, int)\n", result);
+	}
+
 }

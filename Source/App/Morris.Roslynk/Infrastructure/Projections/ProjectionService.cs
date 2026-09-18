@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -106,20 +106,18 @@ public sealed class ProjectionService
 	}
 
 	/// <summary>
-	/// A stable identity for a symbol across projections: its fully-qualified name plus a parameter-type
-	/// signature for methods/indexers, so the same member found in several projections groups together while
-	/// distinct overloads stay separate.
+	/// A stable identity for a symbol across projections: the <see cref="SymbolSignature"/> rendering at
+	/// <see cref="SignatureTier.FullyQualifiedWithRefKinds"/>, so the same member found in several
+	/// projections groups
+	/// together while distinct overloads stay separate. Sharing the renderer with the candidate strings
+	/// tools emit is deliberate: two spellings of the same idea are how they drift apart.
 	/// </summary>
-	public static string KeyOf(ISymbol symbol)
-	{
-		string fullyQualified = SymbolResolver.FullyQualifiedName(symbol);
-		return symbol switch
-		{
-			IMethodSymbol method => $"{fullyQualified}({string.Join(",", method.Parameters.Select(parameter => parameter.Type.ToDisplayString()))})",
-			IPropertySymbol { IsIndexer: true } indexer => $"{fullyQualified}[{string.Join(",", indexer.Parameters.Select(parameter => parameter.Type.ToDisplayString()))}]",
-			_ => fullyQualified
-		};
-	}
+	/// <remarks>
+	/// The same fully-qualified name declared by two different projects keys the same and is therefore
+	/// reported as one candidate, not two.
+	/// </remarks>
+	public static string KeyOf(ISymbol symbol) =>
+		SymbolSignature.Of(symbol, SignatureTier.FullyQualifiedWithRefKinds);
 
 	private static IReadOnlyCollection<string> Symbols(Project project) =>
 		((CSharpParseOptions)project.ParseOptions!).PreprocessorSymbolNames.ToArray();

@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Symbols.GetSymbolBody;
+﻿using Morris.Roslynk.Features.Symbols.GetSymbolBody;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -160,6 +160,17 @@ public class GetSymbolBodyTests
 		}
 
 		return "";
+	}
+
+	[Fact]
+	public async Task WhenAnOverloadIsTargetedBySignature_ThenOnlyThatOverloadIsReturned()
+	{
+		string result = await RunAsync("SimpleLibrary.Ledger.Add(int, int)");
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("path=SimpleLibrary/Ledger.cs\n", result);
+		Assert.Contains("public int Add(int amount, int times)", result);
+		Assert.DoesNotContain("Adds <paramref", result);
 	}
 
 	private static async Task<string> RunAsync(string symbolName, bool includeLeadingTrivia = false)

@@ -44,9 +44,11 @@ To read a method's *body*, use `get_symbol_body` — it returns the whole declar
 
 Most tools take a **fully-qualified name**: `Namespace.Type` or `Namespace.Type.Member` (no `global::` prefix). Names also resolve against referenced assemblies, so `System.String.Substring` works.
 
+A method or indexer may carry a parameter-type list to target one overload: `Namespace.Type.Method(int, string)`, `Namespace.Type.this[int]`, `Namespace.Type.Method<T>(T)`. Parameter names, default values and nullable annotations are ignored, and fully-qualified parameter types work too, so `Method(System.Int32)` and `Method(int value = 0)` both hit `Method(int)`. Written *without* a list the name matches every overload, which is reported as `error=Ambiguous`.
+
 The intended loop when a name doesn't resolve cleanly:
 
-- `error=Ambiguous` → the response lists `candidate=` lines with exact FQNs. Pick the right one and retry.
+- `error=Ambiguous` → the response lists one `candidate=` line per match, each distinguishable. A candidate is exactly what the same tool accepts: copy one back verbatim as the name and it resolves to that one symbol.
 - `error=NotFound` → `candidate=` lines carry fuzzy suggestions. If none fit, try `search_symbols` with a substring.
 
 Two tools are position-based instead (file path + 1-based line and column): `find_definition` (you have a cursor location, not a name) and `get_code_actions` (actions are inherently positional).
@@ -91,11 +93,11 @@ Two paths:
 
 `rename_symbol` is compiler-correct across partial classes, all `#if` branches, every target framework, and **Razor**: usages in `.razor`/`.cshtml` markup and `@code` blocks are rewritten in the actual Razor source. Trust it over any textual replace. The new name must be a valid C# identifier.
 
-`change_signature` (v1) does exactly one thing: append a single *optional* parameter to an ordinary method, optionally threading an argument into every call site. It refuses virtual/override/abstract/interface/partial methods, overloaded methods, constructors, and operators — for those, fall back to `apply_patch` plus `find_references` to update call sites yourself.
+`change_signature` (v1) does exactly one thing: append a single *optional* parameter to an ordinary method, optionally threading an argument into every call site. It refuses virtual/override/abstract/interface/partial methods, constructors, and operators — for those, fall back to `apply_patch` plus `find_references` to update call sites yourself.
 
 ### Dead-code cleanup
 
-`find_dead_code` reports candidates with `High`/`Medium` confidence and a reason — it never deletes. It already excludes interface implementations, overrides, test methods, generated code, and DI-attributed members, but treat results as *candidates*: public API may be used externally, reflection can hide uses. Confirm intent with the user before bulk-deleting. The reported `loc` is the full declaration span, ready to hand to `apply_patch` for removal. On large solutions pass `scope` (an FQN prefix) — the scan is per-symbol and whole-solution scans are slow. `find_dead_conditionals` similarly flags `#if` branches never compiled under any loaded configuration, with the caveat that configurations Roslynk hasn't loaded (CI-only defines, missing workloads) can produce false positives.
+`find_dead_code` reports candidates with `High`/`Medium` confidence and a reason — it never deletes. It already excludes interface implementations, overrides, test methods, generated code, and DI-attributed members, but treat results as *candidates*: public API may be used externally, reflection can hide uses. Confirm intent with the user before bulk-deleting. The reported `loc` is the full declaration span, ready to hand to `apply_patch` for removal. Each unused overload is reported as its own leaf, told apart by its `loc` — the leaf name carries no parameter list, so passing it to `get_symbol_body` returns `error=Ambiguous` and you pick from the candidates. On large solutions pass `scope` (an FQN prefix) — the scan is per-symbol and whole-solution scans are slow. `find_dead_conditionals` similarly flags `#if` branches never compiled under any loaded configuration, with the caveat that configurations Roslynk hasn't loaded (CI-only defines, missing workloads) can produce false positives.
 
 ## Limits to remember
 

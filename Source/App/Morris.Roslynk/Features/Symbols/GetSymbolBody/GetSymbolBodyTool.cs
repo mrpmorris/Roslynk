@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -62,7 +62,7 @@ public sealed class GetSymbolBodyTool
 		""")]
 	public async Task<string> GetSymbolBody(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType.MyMethod'.")] string symbolName,
+		[Description($"Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType.MyMethod'. {OutlineDescriptions.SymbolNameGrammar}")] string symbolName,
 		[Description("Include the declaration's leading comments, XML documentation and preceding directives. Default false.")] bool includeLeadingTrivia = false,
 		CancellationToken cancellationToken = default)
 	{
@@ -100,13 +100,7 @@ public sealed class GetSymbolBodyTool
 		}
 
 		if (groups.Count > 1)
-		{
-			string[] candidates = groups
-				.Select(group => SymbolResolver.FullyQualifiedName(group[0].Symbol))
-				.Distinct(StringComparer.Ordinal)
-				.ToArray();
-			return Failure(Error.Ambiguous($"'{symbolName}' matched several symbols (likely overloads).", candidates));
-		}
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		ProjectionSymbol resolved = groups[0][0];
 		ISymbol symbol = resolved.Symbol;

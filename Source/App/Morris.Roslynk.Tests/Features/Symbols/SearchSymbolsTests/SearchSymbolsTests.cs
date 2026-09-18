@@ -45,4 +45,17 @@ public class SearchSymbolsTests
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
+	[Fact]
+	public async Task WhenAQueryMatchesSeveralOverloads_ThenEveryOverloadIsListed()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new SearchSymbolsTool(registry, new ProjectionService());
+
+		string result = await subject.SearchSymbols(TestSolutions.Simple, "Add");
+
+		Assert.DoesNotContain("error=", result);
+		// Both Ledger.Add overloads are listed; before the dedupe key carried the signature, one was dropped.
+		Assert.Equal(2, result.Split('\n').Count(line => line.TrimStart('\t').StartsWith("method,Add,", StringComparison.Ordinal)));
+	}
 }

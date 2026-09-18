@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
@@ -70,8 +70,8 @@ public sealed class GetTypeHierarchyTool
 
 		if (typeGroups.Count == 0)
 		{
-			string[] resolved = groups.Select(group => SymbolResolver.FullyQualifiedName(group[0].Symbol)).Distinct(StringComparer.Ordinal).ToArray();
-			IReadOnlyList<string> candidates = resolved.Length > 0
+			IReadOnlyList<string> resolved = SymbolSignature.Distinguish(groups.Select(group => group[0].Symbol));
+			IReadOnlyList<string> candidates = resolved.Count > 0
 				? resolved
 				: await SymbolResolver.SuggestAsync(model.Solution, typeName);
 
@@ -79,10 +79,7 @@ public sealed class GetTypeHierarchyTool
 		}
 
 		if (typeGroups.Count > 1)
-		{
-			string[] candidates = typeGroups.Select(group => SymbolResolver.FullyQualifiedName(group[0].Symbol)).Distinct(StringComparer.Ordinal).ToArray();
-			return Failure(Error.Ambiguous($"'{typeName}' matched several types.", candidates));
-		}
+			return Failure(SymbolAmbiguity.Ambiguous(typeName, typeGroups.Select(group => group[0].Symbol)));
 
 		IReadOnlyList<ProjectionSymbol> resolvedType = typeGroups[0];
 		var type = (INamedTypeSymbol)resolvedType[0].Symbol;
@@ -114,7 +111,7 @@ public sealed class GetTypeHierarchyTool
 			.ToList();
 
 		var builder = new OutlineBuilder();
-		builder.Header("resolvedType", SymbolResolver.FullyQualifiedName(type));
+		builder.Header("resolvedType", SymbolResolver.SignatureName(type));
 		builder.Status(model.Status);
 		builder.BeginBody();
 

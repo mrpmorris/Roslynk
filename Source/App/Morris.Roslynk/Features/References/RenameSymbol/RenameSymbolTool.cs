@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Rename;
@@ -48,7 +48,7 @@ public sealed class RenameSymbolTool
 		against the Razor-generated code are mapped back through the compiler's #line directives, covering
 		@code blocks, markup expressions, and component-attribute usages in other components' markup.
 		Returns a text result, not
-		JSON: 'applied', 'resolvedSymbol', 'status' header, a blank line, then one
+		JSON: 'applied', 'resolvedSymbol' (the name as resolved, before the rename), 'status' header, a blank line, then one
 		solution-relative changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} Refuses an invalid identifier and reports candidates when
 		the name is ambiguous. Pass checkOnly to preview the files that would change without writing. Prefer
 		this over a textual find/replace rename; it renames the symbol itself, so it never touches unrelated
@@ -56,7 +56,7 @@ public sealed class RenameSymbolTool
 		""")]
 	public async Task<string> RenameSymbol(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Fully-qualified name of the symbol to rename.")] string symbolName,
+		[Description($"Fully-qualified name of the symbol to rename. {OutlineDescriptions.SymbolNameGrammar}")] string symbolName,
 		[Description("The new name (must be a valid C# identifier).")] string newName,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false)
 	{
@@ -82,13 +82,10 @@ public sealed class RenameSymbolTool
 			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", suggestions.Count > 0 ? suggestions : null));
 		}
 		if (groups.Count > 1)
-		{
-			string[] candidates = groups.Select(group => SymbolResolver.FullyQualifiedName(group[0].Symbol)).Distinct(StringComparer.Ordinal).ToArray();
-			return Failure(Error.Ambiguous("The name is ambiguous; rename using one of the candidate fully-qualified names.", candidates));
-		}
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
-		string resolvedName = SymbolResolver.FullyQualifiedName(resolved[0].Symbol);
+		string resolvedName = SymbolResolver.SignatureName(resolved[0].Symbol);
 
 		// Rename in each projection — each rewrites only its own active branch, semantically — then union the
 		// per-file text changes (deduped by span), so a symbol used in both #if and #else branches, or across

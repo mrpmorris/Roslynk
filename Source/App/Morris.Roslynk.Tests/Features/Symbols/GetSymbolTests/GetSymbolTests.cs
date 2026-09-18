@@ -100,6 +100,25 @@ public class GetSymbolTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
 
+	[Fact]
+	public async Task WhenTheNameMatchesSeveralOverloads_ThenAmbiguousIsReturnedWithDistinguishableCandidates()
+	{
+		string result = await RunAsync("SimpleLibrary.Ledger.Add");
+
+		Assert.Contains("error=Ambiguous", result);
+		Assert.Contains("candidate=SimpleLibrary.Ledger.Add(int)\n", result);
+		Assert.Contains("candidate=SimpleLibrary.Ledger.Add(int, int)\n", result);
+	}
+
+	[Fact]
+	public async Task WhenAnOverloadIsTargetedBySignature_ThenItsDeclarationIsReturned()
+	{
+		string result = await RunAsync("SimpleLibrary.Ledger.Add(int, int)");
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("public int Add(int amount, int times)", result);
+	}
+
 	private static async Task<string> RunAsync(string symbolName)
 	{
 		using var registry = new InstanceRegistry();

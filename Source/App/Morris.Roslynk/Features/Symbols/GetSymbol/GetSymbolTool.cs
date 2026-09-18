@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -50,12 +50,11 @@ public sealed class GetSymbolTool
 
 		  private Task Search(CancellationToken cancellationToken)
 		A metadata symbol (no source) instead returns '#source=metadata', '#kind', '#signature', '#assembly'.
-		An ambiguous name returns a 'project -> file -> namespace -> containing type(s) -> kind,name,loc' locator tree to
-		disambiguate. {OutlineDescriptions.Project}. {OutlineDescriptions.ErrorBlock} Prefer this over reading the file to identify a symbol.
+		{OutlineDescriptions.Project}. {OutlineDescriptions.ErrorBlock} Prefer this over reading the file to identify a symbol.
 		""")]
 	public async Task<string> GetSymbol(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'.")] string symbolName,
+		[Description($"Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'. {OutlineDescriptions.SymbolNameGrammar}")] string symbolName,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
@@ -90,7 +89,7 @@ public sealed class GetSymbolTool
 		}
 
 		if (order.Count > 1)
-			return Locator(order.Select(key => bySymbol[key]).ToList(), model, solutionDirectory);
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, order.Select(key => bySymbol[key].Symbol)));
 
 		(ISymbol Symbol, Solution Solution) match = bySymbol[order[0]];
 		return await DetailLeanAsync(match.Symbol, match.Solution, solutionDirectory, cancellationToken);
@@ -125,19 +124,6 @@ public sealed class GetSymbolTool
 		if (symbol.ContainingAssembly is { } assembly)
 			builder.Header("assembly", assembly.Name);
 
-		return builder.ToString();
-	}
-
-	private static string Locator(IReadOnlyList<(ISymbol Symbol, Solution Solution)> matches, SolutionModel model, string? solutionDirectory)
-	{
-		var root = new SymbolNode();
-		foreach ((ISymbol symbol, Solution solution) in matches)
-			SymbolPlacement.Place(root, symbol, solution, solutionDirectory);
-
-		var builder = new OutlineBuilder();
-		builder.Status(model.Status);
-		builder.BeginBody();
-		root.Render(builder);
 		return builder.ToString();
 	}
 

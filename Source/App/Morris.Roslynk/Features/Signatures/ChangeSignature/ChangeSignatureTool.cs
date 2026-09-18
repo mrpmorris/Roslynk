@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -41,7 +41,8 @@ public sealed class ChangeSignatureTool
 		$"""
 		Adds a new optional parameter to a method and, if a call-site value is given, threads it through every
 		invocation as a named argument; collapsing the repeated add-a-parameter cascades that are otherwise
-		redone by hand across files. Returns a text result, not JSON: 'applied', 'resolvedMethod',
+		redone by hand across files. Returns a text result, not JSON: 'applied', 'resolvedMethod' (the name
+		with its parameter types, identifying which overload was changed),
 		'updatedCallSites', 'status' header, a blank line, then one solution-relative changed-file
 		path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} The parameter must have a default so the change stays backward-compatible. v1 targets a
 		single ordinary method only: it refuses virtual/override/abstract methods, interface members and their
@@ -50,7 +51,7 @@ public sealed class ChangeSignatureTool
 		""")]
 	public async Task<string> ChangeSignature(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Fully-qualified name of the method to change, e.g. Namespace.Type.Method.")] string methodId,
+		[Description($"Fully-qualified name of the method to change, e.g. Namespace.Type.Method. {OutlineDescriptions.SymbolNameGrammar}")] string methodId,
 		[Description("The new parameter's type, e.g. System.Threading.CancellationToken.")] string parameterType,
 		[Description("The new parameter's name (a valid C# identifier).")] string parameterName,
 		[Description("The parameter's default value expression, e.g. default, null, 0. Required (the parameter is optional).")] string defaultValue,
@@ -82,14 +83,11 @@ public sealed class ChangeSignatureTool
 			return Failure(Error.NotFound($"No symbol matched '{methodId}'.", suggestions.Count > 0 ? suggestions : null));
 		}
 		if (matches.Count > 1)
-		{
-			string[] candidates = matches.Select(SymbolResolver.FullyQualifiedName).Distinct(StringComparer.Ordinal).ToArray();
-			return Failure(Error.Ambiguous($"'{methodId}' is ambiguous ({matches.Count} matches, likely overloads); v1 cannot target a specific overload.", candidates));
-		}
+			return Failure(SymbolAmbiguity.Ambiguous(methodId, matches));
 		if (matches[0] is not IMethodSymbol method)
 			return Failure(Error.NotSupported($"'{methodId}' is not a method."));
 
-		string resolved = SymbolResolver.FullyQualifiedName(method);
+		string resolved = SymbolResolver.SignatureName(method);
 
 		string? rejection = Reject(method, parameterName);
 		if (rejection is not null)

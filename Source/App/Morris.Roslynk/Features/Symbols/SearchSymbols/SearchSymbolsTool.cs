@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
@@ -72,7 +72,7 @@ public sealed class SearchSymbolsTool
 		{
 			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(projection.Solution, name => name.Contains(query, StringComparison.OrdinalIgnoreCase)))
 			{
-				if (seen.Add(SymbolResolver.FullyQualifiedName(symbol)))
+				if (seen.Add(SymbolSignature.Of(symbol, SignatureTier.FullyQualifiedWithRefKinds)))
 					matched.Add((symbol, projection.Solution));
 			}
 		}
