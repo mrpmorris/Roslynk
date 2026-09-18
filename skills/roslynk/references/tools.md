@@ -79,7 +79,7 @@ No parameters. Lists every solution loaded by the daemon (daemon-wide, not sessi
 ### get_diagnostics
 `solutionId`, `includeErrors`/`includeWarnings`/`includeInfo`/`includeHidden` (**all default false**), `targetFramework` (optional; pins a multi-targeted project to one compilation), `includeAnalyzers` (default true; `false` = faster compiler-only pass).
 
-Header always carries `errors=`, `warnings=`, `infos=`, `hidden=` counts regardless of include flags, so filtering is never silent — a bare call is a cheap compile check. Body (per included severity) nests file→severity→`<id>,<line:col>,<message>`. Results are cached per `(targetFramework, includeAnalyzers)` and invalidated on any write, so repeated calls are cheap. This replaces `dotnet build` for correctness checking.
+Header always carries `errors=`, `warnings=`, `infos=`, `hidden=` counts regardless of include flags, so filtering is never silent — a bare call is a cheap compile check. Body (per included severity) nests file→severity→`<id>,<line:col>,<message>`. Ids that exist only to trigger a code fix (they carry no message and accompany a public rule, as IDE0005's does) are not listed; fix the public id instead. Results are cached per `(targetFramework, includeAnalyzers)` and invalidated on any write, so repeated calls are cheap. This replaces `dotnet build` for correctness checking.
 
 ## Code actions
 

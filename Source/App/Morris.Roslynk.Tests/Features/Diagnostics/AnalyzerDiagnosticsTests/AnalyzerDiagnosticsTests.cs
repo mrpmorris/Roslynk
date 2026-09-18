@@ -7,6 +7,22 @@ namespace Morris.Roslynk.Tests.Features.Diagnostics.AnalyzerDiagnosticsTests;
 public class AnalyzerDiagnosticsTests
 {
 	[Fact]
+	public async Task WhenAnAnalyzerReportsAPrivateFixTrigger_ThenOnlyThePublicIdIsListed()
+	{
+		// The IDE0005 analyzer reports a second, message-less diagnostic that exists only to trigger its
+		// fixer; listing it would give an agent an id with nothing to act on.
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.CodeStyle);
+		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+
+		string result = await subject.GetDiagnostics(
+			TestSolutions.CodeStyle, includeWarnings: true, includeInfo: true, includeHidden: true);
+
+		Assert.Contains("IDE0005", result);
+		Assert.DoesNotContain("RemoveUnnecessaryImportsFixable", result);
+	}
+
+	[Fact]
 	public async Task WhenAnalyzersAreIncluded_ThenNonCompilerDiagnosticsAppear()
 	{
 		using var registry = new InstanceRegistry();

@@ -46,6 +46,12 @@ public sealed class CodeActionCatalog
 	public static string PublicId(string diagnosticId) =>
 		PublicIds.TryGetValue(diagnosticId, out string? publicId) ? publicId : diagnosticId;
 
+	/// <summary>
+	/// Whether the id exists only to trigger a fixer. Such a diagnostic carries no message and duplicates
+	/// the public one it accompanies, so it is worth listing nowhere - the public id is what a caller acts on.
+	/// </summary>
+	public static bool IsPrivateFixTrigger(string diagnosticId) => PublicIds.ContainsKey(diagnosticId);
+
 	/// <summary>The ids a provider claims to fix, or none when asking it throws.</summary>
 	public static ImmutableArray<string> FixableIds(CodeFixProvider provider)
 	{
