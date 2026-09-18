@@ -28,6 +28,7 @@ Never call `reload_solution` on your own initiative. File changes — including 
 | Find implementations of an interface/abstract member | `find_implementations` | grep |
 | See a type's members and where they're declared | `get_members` | reading the whole file |
 | Identify what a name refers to / get its signature | `get_symbol` | reading files |
+| Read a member's implementation / body | `get_symbol_body` | grepping or reading the file |
 | Explore base types / derived types | `get_type_hierarchy` | manual tracing |
 | Find a symbol by partial name | `search_symbols` | grep across the repo |
 | Rename a symbol everywhere (incl. `.razor`) | `rename_symbol` | find-and-replace |
@@ -37,7 +38,7 @@ Never call `reload_solution` on your own initiative. File changes — including 
 | Add an optional parameter to a method | `change_signature` | hand-editing call sites |
 | Find unused members / dead `#if` branches | `find_dead_code` / `find_dead_conditionals` | eyeballing |
 
-To read a method's *body*, use `get_members` or `get_symbol` to get the file path and line span, then read just those lines with your normal file-read tool. Roslynk locates; the host reads.
+To read a method's *body*, use `get_symbol_body` — it returns the whole declaration verbatim, so no file read is needed. Pass `includeLeadingTrivia: true` when you also want its XML docs and preceding comments. `get_members`/`get_symbol` still give you the file path and span when you want the location rather than the text.
 
 ## Addressing symbols
 

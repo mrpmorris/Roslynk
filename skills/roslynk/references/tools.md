@@ -6,7 +6,7 @@ Detailed per-tool reference. Read the section you need; SKILL.md carries the wor
 
 - [Shared conventions](#shared-conventions)
 - [Lifecycle: open_solution, get_solution_status, reload_solution](#lifecycle)
-- [Navigation: find_definition, get_symbol, get_members, search_symbols](#navigation)
+- [Navigation: find_definition, get_symbol, get_symbol_body, get_members, search_symbols](#navigation)
 - [Relationships: find_references, get_callers, find_implementations, get_type_hierarchy](#relationships)
 - [Diagnostics: get_diagnostics](#diagnostics)
 - [Code actions: get_code_actions, apply_code_action, apply_code_fix](#code-actions)
@@ -32,7 +32,7 @@ stale=<path>           (0+ lines, Stale only)
 
 **Defaults.** Don't pass a value for a defaulted parameter unless you need the non-default behavior.
 
-**`#if` projections.** Symbol tools (find_definition, find_implementations, get_members, get_symbol, get_type_hierarchy, find_references, get_callers, rename_symbol, search_symbols) also cover inactive `#if`/`#else` branches: Roslynk builds derived compilations toggling each uniformly-defined preprocessor symbol, and unions/dedupes results.
+**`#if` projections.** Symbol tools (find_definition, find_implementations, get_members, get_symbol, get_symbol_body, get_type_hierarchy, find_references, get_callers, rename_symbol, search_symbols) also cover inactive `#if`/`#else` branches: Roslynk builds derived compilations toggling each uniformly-defined preprocessor symbol, and unions/dedupes results.
 
 ## Lifecycle
 
@@ -54,8 +54,11 @@ No parameters. Lists every solution loaded by the daemon (daemon-wide, not sessi
 ### get_symbol
 `solutionId`, `symbolName` (FQN, any symbol kind including members). Unambiguous source match → `#project`/`#path`/`#loc` headers + body containing the verbatim declaration text cut before the body (brace/`=>` excluded). Metadata symbol → `#source=metadata`, `#kind`, `#signature`, `#assembly`. Ambiguous → a locator tree (project→file→namespace→types→`kind,name,loc`) instead of an error, so pick and retry with a fuller name. Preferred over reading a file to identify a symbol.
 
+### get_symbol_body
+`solutionId`, `symbolName` (FQN, any declared symbol kind), `includeLeadingTrivia` (default false). Returns the symbol's **complete source text including its body**, verbatim — original indentation, line endings and spacing, no reformatting or truncation. Headers `#project`/`#path`/`#loc`, a blank line, then the text. `includeLeadingTrivia=true` extends the text (and the `loc`) back over the declaration's comments, XML docs and directives. A partial type or partial method declared in several files returns `#parts=<n>` and one `part=<n>,project=...,path=...,loc=...` line per block instead. Overloads (or any name matching several distinct symbols) — `error=Ambiguous`; a metadata/referenced-assembly symbol — `error=NotSupported` (use `get_symbol` for its signature). Prefer this over reading or grepping the file to see what a member does.
+
 ### get_members
-`solutionId`, `typeName` (FQN), `includeInherited` (default false), `nameFilter` (default null; trailing `*` = prefix match, otherwise case-insensitive substring), `includeMethods`/`includeFields`/`includeProperties`/`includeEvents`/`includeNestedTypes` (all default true). Lists all members including private, grouped by declaring file (`<metadata>` bucket for referenced-assembly types). Member lines: `kind,name,loc[,paramType|paramType|...]` (param list only for methods with parameters). Returns declarations + spans, not bodies — read `startLine..endLine` of the file for the body.
+`solutionId`, `typeName` (FQN), `includeInherited` (default false), `nameFilter` (default null; trailing `*` = prefix match, otherwise case-insensitive substring), `includeMethods`/`includeFields`/`includeProperties`/`includeEvents`/`includeNestedTypes` (all default true). Lists all members including private, grouped by declaring file (`<metadata>` bucket for referenced-assembly types). Member lines: `kind,name,loc[,paramType|paramType|...]` (param list only for methods with parameters). Returns declarations + spans, not bodies — use `get_symbol_body` for a member's body.
 
 ### search_symbols
 `solutionId`, `query` (case-insensitive substring), `maxResults` (default 50). Source-declared symbols only (no metadata). Matched members nest under their type; a type's `loc` appears only if the type itself matched.
