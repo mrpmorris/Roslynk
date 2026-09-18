@@ -113,4 +113,32 @@ public class FindReferencesTests
 
 		return -1;
 	}
+	[Fact]
+	public async Task WhenAnOverloadIsTargetedBySignature_ThenOnlyThatOverloadsReferencesAreReturned()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
+
+		string result = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Ledger.Add(int)");
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("resolvedSymbol=SimpleLibrary.Ledger.Add(int)", result);
+	}
+
+	[Fact]
+	public async Task WhenTheNameMatchesSeveralOverloads_ThenTheCandidatesAreAcceptedBackVerbatim()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
+
+		string ambiguous = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Ledger.Add");
+		Assert.Contains("error=Ambiguous", ambiguous);
+		Assert.Contains("candidate=SimpleLibrary.Ledger.Add(int, int)\n", ambiguous);
+
+		string resolved = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Ledger.Add(int, int)");
+		Assert.DoesNotContain("error=", resolved);
+	}
+
 }

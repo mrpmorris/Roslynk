@@ -35,4 +35,18 @@ public class FindImplementationsTests
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
+	[Fact]
+	public async Task WhenTheNameMatchesSeveralOverloads_ThenAmbiguousIsReturnedWithDistinguishableCandidates()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new FindImplementationsTool(registry, new SymbolResolver(), new ProjectionService());
+
+		string result = await subject.FindImplementations(TestSolutions.Simple, "SimpleLibrary.Ledger.Add");
+
+		Assert.Contains("error=Ambiguous", result);
+		Assert.Contains("candidate=SimpleLibrary.Ledger.Add(int)\n", result);
+		Assert.Contains("candidate=SimpleLibrary.Ledger.Add(int, int)\n", result);
+	}
+
 }

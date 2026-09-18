@@ -1,4 +1,4 @@
-namespace Morris.Roslynk.Infrastructure.Outlines;
+﻿namespace Morris.Roslynk.Infrastructure.Outlines;
 
 /// <summary>
 /// Recurring fragments shared by the tools' <c>[Description]</c> attributes, so the wording for the common
@@ -72,5 +72,17 @@ internal static class OutlineDescriptions
 	/// <summary>The shared failure shape every tool falls back to.</summary>
 	public const string ErrorBlock =
 		"On failure the result is header only: error=<Indexing|NotFound|Ambiguous|...>, errorMessage=..., "
-		+ "and zero or more candidate=<fqn>.";
+		+ "and zero or more candidate=<name>. A candidate is an exact name this same tool accepts: send one "
+		+ "back verbatim as the name argument and it resolves to that one symbol.";
+
+	/// <summary>
+	/// The grammar a name-taking parameter accepts, interpolated into each tool's symbolName/typeName/
+	/// methodName description so the round-trip contract is stated where a caller reads it.
+	/// </summary>
+	public const string SymbolNameGrammar =
+		"A method or indexer may carry a parameter-type list to target one overload, e.g. "
+		+ "'MyNamespace.MyType.MyMethod(int, string)' or 'MyNamespace.MyType.this[int]'; parameter names, "
+		+ "default values and nullable annotations are ignored, and fully-qualified parameter types are "
+		+ "accepted too. Written without a list the name matches every overload, which is reported as "
+		+ "error=Ambiguous with one candidate per overload.";
 }

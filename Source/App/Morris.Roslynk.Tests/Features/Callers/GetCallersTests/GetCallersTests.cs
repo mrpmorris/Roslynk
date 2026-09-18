@@ -47,4 +47,33 @@ public class GetCallersTests
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
+	[Fact]
+	public async Task WhenAnOverloadIsTargetedBySignature_ThenOnlyThatOverloadsCallersAreReturned()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
+
+		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Ledger.Add(int)");
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("resolvedSymbol=SimpleLibrary.Ledger.Add(int)", result);
+		// Add(int) is called by Add(int, int); the reverse is not true.
+		Assert.Contains("method,Add,", result);
+	}
+
+	[Fact]
+	public async Task WhenTheNameMatchesSeveralOverloads_ThenAmbiguousCandidatesAreDistinguishable()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
+
+		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Ledger.Add");
+
+		Assert.Contains("error=Ambiguous", result);
+		Assert.Contains("candidate=SimpleLibrary.Ledger.Add(int)\n", result);
+		Assert.Contains("candidate=SimpleLibrary.Ledger.Add(int, int)\n", result);
+	}
+
 }

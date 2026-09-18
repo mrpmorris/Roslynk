@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
@@ -73,7 +73,9 @@ public sealed class FindDeadCodeTool
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc>,<confidence>,<reason>
 		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; confidence is High or
 		Medium; the free-text reason is the next field; a dead type is itself a leaf carrying its own loc. The loc is
-		the full declaration span, ready to pass to apply_patch to remove the member. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
+		the full declaration span, ready to pass to apply_patch to remove the member. Each unused overload of a
+		member is reported as its own leaf, distinguished by its loc; the leaf name carries no parameter
+		list, so pass the member name to get_symbol_body and pick from the candidates it offers. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
 		solutions with scope. {OutlineDescriptions.TruncationFlag} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock}
 		""")]
 	public async Task<string> FindDeadCode(
@@ -107,10 +109,11 @@ public sealed class FindDeadCodeTool
 				if (!IsCandidate(symbol, entryPoint, includePublic))
 					continue;
 
-				string fullyQualified = SymbolResolver.FullyQualifiedName(symbol);
-				if (scope is not null && !fullyQualified.StartsWith(scope, StringComparison.OrdinalIgnoreCase))
+				// scope is a namespace/type prefix, so it is matched against the parameterless name; the
+				// dedupe key carries the signature so two unused overloads are two findings, not one.
+				if (scope is not null && !SymbolResolver.FullyQualifiedName(symbol).StartsWith(scope, StringComparison.OrdinalIgnoreCase))
 					continue;
-				if (!seen.Add(fullyQualified))
+				if (!seen.Add(SymbolSignature.Of(symbol, SignatureTier.FullyQualifiedWithRefKinds)))
 					continue;
 
 				candidates.Add(symbol);
@@ -118,7 +121,7 @@ public sealed class FindDeadCodeTool
 		}
 
 		candidates.Sort((left, right) => string.Compare(
-			SymbolResolver.FullyQualifiedName(left), SymbolResolver.FullyQualifiedName(right), StringComparison.Ordinal));
+			SymbolResolver.SignatureName(left), SymbolResolver.SignatureName(right), StringComparison.Ordinal));
 
 		var results = new List<Candidate>();
 		bool truncated = false;

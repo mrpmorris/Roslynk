@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
@@ -40,7 +40,7 @@ public sealed class FindImplementationsTool
 		by fully-qualified name.
 		{OutlineDescriptions.CommonMethodInstructions}
 		Implementors are grouped file -> namespace, each as '<typeKind>,<typeName>,<loc>' where {OutlineDescriptions.Loc}:
-		  resolvedSymbol=<fully-qualified name>
+		  resolvedSymbol=<name, parameter types included for a method or indexer>
 
 		  <project>
 		  \t<relative/forward-slash/folder>
@@ -52,7 +52,7 @@ public sealed class FindImplementationsTool
 		""")]
 	public async Task<string> FindImplementations(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Fully-qualified name of the interface/abstract symbol, e.g. 'MyNamespace.IMyType'.")] string symbolName)
+		[Description($"Fully-qualified name of the interface/abstract symbol, e.g. 'MyNamespace.IMyType'. {OutlineDescriptions.SymbolNameGrammar}")] string symbolName)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
@@ -69,10 +69,7 @@ public sealed class FindImplementationsTool
 		if (groups.Count == 0)
 			return Failure(Error.NotFound($"No symbol matched '{symbolName}'."));
 		if (groups.Count > 1)
-		{
-			string[] candidates = groups.Select(group => SymbolResolver.FullyQualifiedName(group[0].Symbol)).Distinct(StringComparer.Ordinal).ToArray();
-			return Failure(Error.Ambiguous($"'{symbolName}' matched multiple symbols.", candidates));
-		}
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
 
@@ -90,7 +87,7 @@ public sealed class FindImplementationsTool
 		}
 
 		var builder = new OutlineBuilder();
-		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(resolved[0].Symbol));
+		builder.Header("resolvedSymbol", SymbolResolver.SignatureName(resolved[0].Symbol));
 		builder.Status(model.Status);
 		builder.BeginBody();
 		root.Render(builder);

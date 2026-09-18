@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
@@ -40,7 +40,7 @@ public sealed class GetCallersTool
 		{OutlineDescriptions.CommonMethodInstructions}
 		Callers are grouped file -> namespace -> containing type -> calling member, each leaf showing the
 		caller's declaration location:
-		  resolvedSymbol=<fully-qualified name>
+		  resolvedSymbol=<name, parameter types included for a method or indexer>
 
 		  <project>
 		  \t<relative/forward-slash/folder>
@@ -54,7 +54,7 @@ public sealed class GetCallersTool
 		""")]
 	public async Task<string> GetCallers(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Fully-qualified name of the method, e.g. 'MyNamespace.MyType.MyMethod'.")] string methodName)
+		[Description($"Fully-qualified name of the method, e.g. 'MyNamespace.MyType.MyMethod'. {OutlineDescriptions.SymbolNameGrammar}")] string methodName)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
@@ -76,10 +76,7 @@ public sealed class GetCallersTool
 		}
 
 		if (groups.Count > 1)
-		{
-			string[] candidates = groups.Select(group => SymbolResolver.FullyQualifiedName(group[0].Symbol)).Distinct(StringComparer.Ordinal).ToArray();
-			return Failure(Error.Ambiguous($"'{methodName}' matched several symbols.", candidates));
-		}
+			return Failure(SymbolAmbiguity.Ambiguous(methodName, groups.Select(group => group[0].Symbol)));
 
 		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
 
@@ -97,7 +94,7 @@ public sealed class GetCallersTool
 		}
 
 		var builder = new OutlineBuilder();
-		builder.Header("resolvedSymbol", SymbolResolver.FullyQualifiedName(resolved[0].Symbol));
+		builder.Header("resolvedSymbol", SymbolResolver.SignatureName(resolved[0].Symbol));
 		builder.Status(model.Status);
 		builder.BeginBody();
 		root.Render(builder);

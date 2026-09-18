@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -81,20 +81,22 @@ public sealed class GetMembersTool
 		// configuration are included; group by fully-qualified name so the same type across projections is one.
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
 		var typeInstances = new List<(INamedTypeSymbol Type, Solution Solution)>();
-		var distinctTypes = new HashSet<string>(StringComparer.Ordinal);
+		// Keyed by signature and holding the symbol, so an ambiguous match can emit candidates that are
+		// distinguishable from each other and accepted back verbatim.
+		var distinctTypes = new Dictionary<string, INamedTypeSymbol>(StringComparer.Ordinal);
 		foreach (Projection projection in projections)
 		{
 			foreach (INamedTypeSymbol candidate in (await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(projection.Solution, typeName)).OfType<INamedTypeSymbol>())
 			{
 				typeInstances.Add((candidate, projection.Solution));
-				distinctTypes.Add(SymbolResolver.FullyQualifiedName(candidate));
+				distinctTypes.TryAdd(ProjectionService.KeyOf(candidate), candidate);
 			}
 		}
 
 		if (distinctTypes.Count == 0)
 			return Failure(Error.NotFound($"No type matched '{typeName}'."));
 		if (distinctTypes.Count > 1)
-			return Failure(Error.Ambiguous($"'{typeName}' matched multiple types.", distinctTypes.OrderBy(name => name, StringComparer.Ordinal).ToArray()));
+			return Failure(SymbolAmbiguity.Ambiguous(typeName, distinctTypes.Values));
 
 		INamedTypeSymbol type = typeInstances[0].Type;
 
@@ -136,7 +138,7 @@ public sealed class GetMembersTool
 		}
 
 		var builder = new OutlineBuilder();
-		builder.Header("resolvedType", SymbolResolver.FullyQualifiedName(type));
+		builder.Header("resolvedType", SymbolResolver.SignatureName(type));
 		builder.Status(model.Status);
 		builder.BeginBody();
 

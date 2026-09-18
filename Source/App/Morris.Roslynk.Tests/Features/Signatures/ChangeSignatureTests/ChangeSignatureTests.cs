@@ -99,6 +99,23 @@ public class ChangeSignatureTests
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 	}
 
+	[Fact]
+	public async Task WhenAnOverloadIsTargetedBySignature_ThenThatOverloadIsChanged()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
+
+		string result = await subject.ChangeSignature(
+			solutionPath, "SimpleLibrary.Ledger.Add(int, int)", "int", "step", "1", callSiteArgument: "1");
+
+		Assert.Contains("applied=Y", result);
+		string text = await File.ReadAllTextAsync(FindFile(solutionPath, "Ledger.cs"));
+		Assert.Contains("public int Add(int amount, int times, int step = 1)", text);
+		Assert.Contains("public int Add(int amount)", text);
+	}
+
 	private static string FindFile(string solutionPath, string fileName) =>
 		Directory.EnumerateFiles(Path.GetDirectoryName(solutionPath)!, fileName, SearchOption.AllDirectories).First();
 }

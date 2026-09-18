@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using Microsoft.CodeAnalysis.Text;
@@ -23,37 +23,82 @@ public sealed class SymbolResolver
 	public static string FullyQualifiedName(ISymbol symbol) =>
 		symbol.ToDisplayString(FullyQualifiedFormat);
 
+	/// <summary>
+	/// The name a caller should send to reach this exact symbol: <see cref="FullyQualifiedName"/> plus a
+	/// parameter-type list for a method or indexer. Tools echo this rather than the parameterless name, so
+	/// every name a response carries can be sent straight back.
+	/// </summary>
+	public static string SignatureName(ISymbol symbol) =>
+		SymbolSignature.Of(symbol);
+
+	/// <summary>
+	/// Every symbol the name matches. A name may carry a parameter list to target one overload
+	/// (<c>N.T.M(int, string)</c>); written without one it matches every overload, so an ambiguous result
+	/// is still reported for the bare name a caller is most likely to try first.
+	/// </summary>
 	public async Task<IReadOnlyList<ISymbol>> FindByFullyQualifiedNameAsync(Solution solution, string name, CancellationToken cancellationToken = default)
 	{
-		if (string.IsNullOrWhiteSpace(name))
+		if (!SymbolSignature.TryParse(name, out SymbolSignatureQuery query))
 			return [];
 
 		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("resolve_symbol"))
 		{
 			activity?.SetTag("roslynk.symbol.name", ActivityTags.Truncate(name));
-
-			bool qualified = name.Contains('.');
-			string simpleName = qualified ? name[(name.LastIndexOf('.') + 1)..] : name;
+			activity?.SetTag("roslynk.symbol.signature", query.ListKind != ParameterListKind.None);
 
 			var seen = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
 			var matches = new List<ISymbol>();
 
+			// A declaration search is keyed on a member's own name, which an indexer does not have — it is
+			// declared as 'this[]' and renders as 'this'. A bracketed query therefore searches for the
+			// containing type and scans its indexers instead.
+			string searchName = query.ListKind == ParameterListKind.Brackets
+				? ContainingTypeName(query)
+				: query.SimpleName;
+
 			foreach (Project project in solution.Projects)
 			{
-				foreach (ISymbol symbol in await SymbolFinder.FindDeclarationsAsync(project, simpleName, ignoreCase: false, cancellationToken))
+				foreach (ISymbol symbol in await SymbolFinder.FindDeclarationsAsync(project, searchName, ignoreCase: false, cancellationToken))
 				{
-					bool isMatch = qualified
-						? string.Equals(FullyQualifiedName(symbol), name, StringComparison.Ordinal)
-						: string.Equals(symbol.Name, name, StringComparison.Ordinal);
-
-					if (isMatch && seen.Add(symbol))
-						matches.Add(symbol);
+					foreach (ISymbol candidate in Expand(symbol, query))
+					{
+						if (SymbolSignature.Matches(candidate, query) && seen.Add(candidate))
+							matches.Add(candidate);
+					}
 				}
 			}
 
-			activity?.SetTag("roslynk.match.count", matches.Count);
-			return matches;
+			IReadOnlyList<ISymbol> narrowed = SymbolSignature.Narrow(matches, query);
+			activity?.SetTag("roslynk.match.count", narrowed.Count);
+			return narrowed;
 		}
+	}
+
+	/// <summary>
+	/// The simple name of the type a bracketed query's indexer belongs to, generic argument list included so
+	/// the declaration search still finds a generic type.
+	/// </summary>
+	private static string ContainingTypeName(SymbolSignatureQuery query)
+	{
+		string head = query.QualifiedName;
+		int memberDot = head.LastIndexOf('.');
+		string container = memberDot >= 0 ? head[..memberDot] : head;
+		int containerDot = container.LastIndexOf('.');
+		return containerDot >= 0 ? container[(containerDot + 1)..] : container;
+	}
+
+	/// <summary>
+	/// The symbols a declaration hit stands for: itself, plus — for a bracketed query, whose search was for
+	/// the containing type — that type's indexers.
+	/// </summary>
+	private static IEnumerable<ISymbol> Expand(ISymbol symbol, SymbolSignatureQuery query)
+	{
+		if (query.ListKind != ParameterListKind.Brackets)
+			return [symbol];
+
+		return symbol is INamedTypeSymbol type
+			? type.GetMembers().OfType<IPropertySymbol>().Where(member => member.IsIndexer)
+			: [];
 	}
 
 	/// <summary>
@@ -68,18 +113,21 @@ public sealed class SymbolResolver
 		if (source.Count > 0 || string.IsNullOrWhiteSpace(name))
 			return source;
 
+		if (!SymbolSignature.TryParse(name, out SymbolSignatureQuery query))
+			return source;
+
 		var matches = new List<ISymbol>();
 		var seen = new HashSet<string>(StringComparer.Ordinal);
 
 		void Add(ISymbol symbol)
 		{
-			if (seen.Add(FullyQualifiedName(symbol)))
+			// Keyed on the signature so distinct overloads of a metadata member survive the dedupe.
+			if (seen.Add(SymbolSignature.Of(symbol, SignatureTier.FullyQualifiedWithRefKinds)))
 				matches.Add(symbol);
 		}
 
-		int lastDot = name.LastIndexOf('.');
-		string? containerName = lastDot > 0 ? name[..lastDot] : null;
-		string memberName = lastDot > 0 ? name[(lastDot + 1)..] : name;
+		int lastDot = query.QualifiedName.LastIndexOf('.');
+		string? containerName = lastDot > 0 ? query.QualifiedName[..lastDot] : null;
 
 		foreach (Project project in solution.Projects)
 		{
@@ -87,17 +135,23 @@ public sealed class SymbolResolver
 			if (compilation is null)
 				continue;
 
-			if (compilation.GetTypeByMetadataName(name) is INamedTypeSymbol type)
+			if (query.ListKind == ParameterListKind.None
+				&& compilation.GetTypeByMetadataName(query.QualifiedName) is INamedTypeSymbol type)
+			{
 				Add(type);
+			}
 
 			if (containerName is not null && compilation.GetTypeByMetadataName(containerName) is INamedTypeSymbol container)
 			{
-				foreach (ISymbol member in container.GetMembers(memberName))
-					Add(member);
+				foreach (ISymbol member in container.GetMembers(query.SimpleName))
+				{
+					if (SymbolSignature.Matches(member, query))
+						Add(member);
+				}
 			}
 		}
 
-		return matches;
+		return SymbolSignature.Narrow(matches, query);
 	}
 
 	/// <summary>
