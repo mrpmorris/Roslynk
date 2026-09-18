@@ -53,7 +53,7 @@ public sealed class SearchSymbolsTool
 	public async Task<string> SearchSymbols(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Substring to match against symbol names (case-insensitive).")] string query,
-		[Description("Maximum results to return. Default 50.")] int maxResults = 50)
+		[Description("Maximum results to return.")] int maxResults = 50)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();

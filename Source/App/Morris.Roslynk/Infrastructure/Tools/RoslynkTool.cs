@@ -14,7 +14,7 @@ namespace Morris.Roslynk.Infrastructure.Tools;
 /// genuinely omittable, and an argument the SDK cannot bind - a wrong type, an unparseable value - comes
 /// back as the standard header-only 'error='/'errorMessage=' result instead of an unhandled exception.
 /// </summary>
-public sealed class RoslynkTool : DelegatingMcpServerTool
+internal sealed class RoslynkTool : DelegatingMcpServerTool
 {
 	private readonly Tool Published;
 
@@ -60,7 +60,7 @@ public sealed class RoslynkTool : DelegatingMcpServerTool
 	/// <summary>
 	/// Maps an exception that escaped a tool onto the standard header-only failure result.
 	/// </summary>
-	internal static CallToolResult ToErrorResult(Exception exception)
+	public static CallToolResult ToErrorResult(Exception exception)
 	{
 		// A binding failure is the caller's fault and is reported as Invalid; anything else is a fault in
 		// the tool itself. Both are shaped like every other Roslynk failure so a caller never has to parse

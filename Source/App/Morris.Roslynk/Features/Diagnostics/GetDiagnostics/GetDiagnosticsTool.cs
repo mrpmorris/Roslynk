@@ -56,11 +56,11 @@ public sealed class GetDiagnosticsTool
 		""")]
 	public async Task<string> GetDiagnostics(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Include error-severity diagnostics. Default false.")] bool includeErrors = false,
-		[Description("Include warning-severity diagnostics. Default false.")] bool includeWarnings = false,
-		[Description("Include info-severity diagnostics. Default false.")] bool includeInfo = false,
-		[Description("Include hidden-severity diagnostics. Default false.")] bool includeHidden = false,
-		[Description("Run the project's analyzers (NetAnalyzers / IDE rules) for a richer result. Default true; set false for a faster compiler-only pass.")] bool includeAnalyzers = true)
+		[Description("Include error-severity diagnostics.")] bool includeErrors = false,
+		[Description("Include warning-severity diagnostics.")] bool includeWarnings = false,
+		[Description("Include info-severity diagnostics.")] bool includeInfo = false,
+		[Description("Include hidden-severity diagnostics.")] bool includeHidden = false,
+		[Description("Run the project's analyzers (NetAnalyzers / IDE rules) for a richer result; set false for a faster compiler-only pass.")] bool includeAnalyzers = true)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();

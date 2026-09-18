@@ -59,13 +59,13 @@ public sealed class GetMembersTool
 	public async Task<string> GetMembers(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Fully-qualified name of the type, e.g. 'MyNamespace.MyType'.")] string typeName,
-		[Description("Include members inherited from base types. Default false.")] bool includeInherited = false,
-		[Description("Optional case-insensitive filter on member name: a trailing '*' matches by prefix (e.g. 'Search*'), otherwise it is a substring match. Default null (no name filtering).")] string? nameFilter = null,
-		[Description("Include method members. Default true.")] bool includeMethods = true,
-		[Description("Include field members. Default true.")] bool includeFields = true,
-		[Description("Include property members. Default true.")] bool includeProperties = true,
-		[Description("Include event members. Default true.")] bool includeEvents = true,
-		[Description("Include nested type members. Default true.")] bool includeNestedTypes = true)
+		[Description("Include members inherited from base types.")] bool includeInherited = false,
+		[Description("Optional case-insensitive filter on member name: a trailing '*' matches by prefix (e.g. 'Search*'), otherwise it is a substring match; null applies no name filtering.")] string? nameFilter = null,
+		[Description("Include method members.")] bool includeMethods = true,
+		[Description("Include field members.")] bool includeFields = true,
+		[Description("Include property members.")] bool includeProperties = true,
+		[Description("Include event members.")] bool includeEvents = true,
+		[Description("Include nested type members.")] bool includeNestedTypes = true)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();

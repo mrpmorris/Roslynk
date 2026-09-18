@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -40,26 +41,20 @@ public class RoslynkToolTests
 	}
 
 	[Fact]
-	public void WhenTheSchemaHasNestedDefaults_ThenTheyAreStrippedToo()
+	public void WhenADefaultIsMovedIntoTheDescription_ThenTheCallerCanStillSeeIt()
 	{
-		JsonElement schema = JsonDocument.Parse(
-			"""
-			{
-			  "type": "object",
-			  "properties": {
-			    "items": {
-			      "type": "array",
-			      "default": null,
-			      "items": { "type": "object", "properties": { "size": { "type": "integer", "default": 1 } } }
-			    }
-			  }
-			}
-			""").RootElement;
+		McpServerTool inner = McpServerTool.Create(
+			([Description("Maximum results to return.")] int maxResults = 50) => maxResults,
+			new McpServerToolCreateOptions { Name = "sample" });
 
-		JsonElement rewritten = ToolSchemaCompatibility.Rewrite(schema);
+		var tool = new RoslynkTool(inner);
 
-		Assert.DoesNotContain("\"default\"", rewritten.GetRawText(), StringComparison.Ordinal);
-		Assert.True(rewritten.GetProperty("properties").GetProperty("items").TryGetProperty("items", out _));
+		string description = tool.ProtocolTool.InputSchema
+			.GetProperty("properties").GetProperty("maxResults").GetProperty("description").GetString()!;
+
+		// The default is generated from the C# default value, so the text cannot drift from the signature.
+		Assert.Contains("Maximum results to return.", description, StringComparison.Ordinal);
+		Assert.Contains("50", description, StringComparison.Ordinal);
 	}
 
 	[Fact]
