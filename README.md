@@ -193,6 +193,7 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > **Navigation:**
 > - `find_definition`: Go to definition from a cursor position. Parameters: `solutionId`, `filePath`, `line`, `column` (1-based).
 > - `get_symbol`: Identify a symbol and get its declaration. Parameters: `solutionId`, `symbolName` (fully-qualified).
+> - `get_symbol_body`: Read a symbol's complete source text, body included. Parameters: `solutionId`, `symbolName` (fully-qualified), `includeLeadingTrivia`.
 > - `get_members`: List a type's members with their locations. Parameters: `solutionId`, `typeName`, `includeInherited`, `nameFilter`, `includeMethods`/`includeFields`/`includeProperties`/`includeEvents`/`includeNestedTypes`.
 > - `search_symbols`: Find symbols by partial name. Parameters: `solutionId`, `query`, `maxResults`.
 >

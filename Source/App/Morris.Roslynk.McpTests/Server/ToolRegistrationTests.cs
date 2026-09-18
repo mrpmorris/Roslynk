@@ -22,6 +22,7 @@ public class ToolRegistrationTests
 		{
 			"open_solution",
 			"get_diagnostics",
+			"get_symbol_body",
 			"find_references",
 			"rename_symbol",
 			"apply_patch",
