@@ -60,7 +60,7 @@ public sealed class RoslynkTool : DelegatingMcpServerTool
 	/// <summary>
 	/// Maps an exception that escaped a tool onto the standard header-only failure result.
 	/// </summary>
-	public static CallToolResult ToErrorResult(Exception exception)
+	internal static CallToolResult ToErrorResult(Exception exception)
 	{
 		// A binding failure is the caller's fault and is reported as Invalid; anything else is a fault in
 		// the tool itself. Both are shaped like every other Roslynk failure so a caller never has to parse
