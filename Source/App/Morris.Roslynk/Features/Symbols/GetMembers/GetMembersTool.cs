@@ -76,14 +76,14 @@ public sealed class GetMembersTool
 		SolutionModel model,
 		RoslynInstance instance,
 		string typeName,
-		bool includeInherited,
-		string? nameFilter,
-		bool includeMethods,
-		bool includeFields,
-		bool includeProperties,
-		bool includeEvents,
-		bool includeNestedTypes,
-		CancellationToken token)
+		bool includeInherited = false,
+		string? nameFilter = null,
+		bool includeMethods = true,
+		bool includeFields = true,
+		bool includeProperties = true,
+		bool includeEvents = true,
+		bool includeNestedTypes = true,
+		CancellationToken token = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 

@@ -71,7 +71,7 @@ public sealed class GetSymbolBodyTool
 		return await GetSymbolBodyCoreAsync(model, instance, symbolName, includeLeadingTrivia, cancellationToken);
 	}
 
-	internal async Task<string> GetSymbolBodyCoreAsync(SolutionModel model, RoslynInstance instance, string symbolName, bool includeLeadingTrivia, CancellationToken cancellationToken)
+	internal async Task<string> GetSymbolBodyCoreAsync(SolutionModel model, RoslynInstance instance, string symbolName, bool includeLeadingTrivia = false, CancellationToken cancellationToken = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 

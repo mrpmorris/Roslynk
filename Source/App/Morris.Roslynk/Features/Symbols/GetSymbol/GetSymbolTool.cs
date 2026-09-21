@@ -62,7 +62,7 @@ public sealed class GetSymbolTool
 		return await GetSymbolCoreAsync(model, instance, symbolName, cancellationToken);
 	}
 
-	internal async Task<string> GetSymbolCoreAsync(SolutionModel model, RoslynInstance instance, string symbolName, CancellationToken cancellationToken)
+	internal async Task<string> GetSymbolCoreAsync(SolutionModel model, RoslynInstance instance, string symbolName, CancellationToken cancellationToken = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 

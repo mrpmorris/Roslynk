@@ -61,7 +61,7 @@ public sealed class GetTypeHierarchyTool
 		return await GetTypeHierarchyCoreAsync(model, instance, typeName, CancellationToken.None);
 	}
 
-	internal async Task<string> GetTypeHierarchyCoreAsync(SolutionModel model, RoslynInstance instance, string typeName, CancellationToken token)
+	internal async Task<string> GetTypeHierarchyCoreAsync(SolutionModel model, RoslynInstance instance, string typeName, CancellationToken token = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 

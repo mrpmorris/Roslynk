@@ -61,7 +61,7 @@ public sealed class GetCallersTool
 		return await GetCallersCoreAsync(model, instance, methodName, CancellationToken.None);
 	}
 
-	internal async Task<string> GetCallersCoreAsync(SolutionModel model, RoslynInstance instance, string methodName, CancellationToken token)
+	internal async Task<string> GetCallersCoreAsync(SolutionModel model, RoslynInstance instance, string methodName, CancellationToken token = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 

@@ -54,7 +54,7 @@ public sealed class FindDeadConditionalsTool
 		return await FindDeadConditionalsCoreAsync(model, instance, CancellationToken.None);
 	}
 
-	internal async Task<string> FindDeadConditionalsCoreAsync(SolutionModel model, RoslynInstance instance, CancellationToken token)
+	internal async Task<string> FindDeadConditionalsCoreAsync(SolutionModel model, RoslynInstance instance, CancellationToken token = default)
 	{
 		if (model.Solution is null)
 			return OutlineError.Format(Error.Indexing(), model.Status);
