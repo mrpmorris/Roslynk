@@ -136,7 +136,19 @@ internal static class MultiQueryCatalog
 			args[index] = Coerce(parameter.ParameterType, value, entry.ToolName, parameter.Name!);
 		}
 
-		object? result = core.Invoke(tool, args);
+		// MethodInfo.Invoke wraps any core exception in TargetInvocationException; unwrap it so the per-op
+		// boundary maps the core's own exception (and carries its message), not the reflection wrapper.
+		object? result;
+		try
+		{
+			result = core.Invoke(tool, args);
+		}
+		catch (TargetInvocationException invocation)
+			when (invocation.InnerException is not null)
+		{
+			System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(invocation.InnerException).Throw();
+			throw; // unreachable
+		}
 		return await ((Task<string>)result!).ConfigureAwait(false);
 	}
 
