@@ -28,5 +28,12 @@ public enum ErrorCode
 	Invalid,
 
 	/// <summary>The change could not be applied because it conflicts with the current state.</summary>
-	Conflict
+	Conflict,
+
+	/// <summary>
+	/// The request was larger than a single call carries: the op-count limit or the response budget was
+	/// crossed, and the unexecuted operations were returned as error slots rather than dropped. Re-send the
+	/// operations named by the truncated slots to continue.
+	/// </summary>
+	Truncated
 }

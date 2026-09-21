@@ -35,4 +35,10 @@ public sealed class Error
 
 	public static Error Conflict(string message) =>
 		new() { Code = ErrorCode.Conflict, Message = message };
+
+	public static Error Truncated(string message) =>
+		new() { Code = ErrorCode.Truncated, Message = message };
+
+	public static Error Stale(string message) =>
+		new() { Code = ErrorCode.Stale, Message = message, StaleFiles = [] };
 }
