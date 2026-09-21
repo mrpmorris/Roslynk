@@ -86,7 +86,11 @@ public sealed class FindDeadCodeTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
+		return await FindDeadCodeCoreAsync(model, instance, scope, includePublic, maxResults, CancellationToken.None);
+	}
 
+	internal async Task<string> FindDeadCodeCoreAsync(SolutionModel model, RoslynInstance instance, string? scope, bool includePublic, int maxResults, CancellationToken token)
+	{
 		if (model.Solution is null)
 			return OutlineError.Format(Error.Indexing(), model.Status);
 

@@ -2,6 +2,7 @@
 
 	<ItemGroup>
 		<InternalsVisibleTo Include="Morris.Roslynk.McpTests" />
+		<InternalsVisibleTo Include="Morris.Roslynk.Tests" />
 	</ItemGroup>
 
 	<ItemGroup>

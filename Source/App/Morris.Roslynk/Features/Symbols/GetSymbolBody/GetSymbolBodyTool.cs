@@ -68,7 +68,11 @@ public sealed class GetSymbolBodyTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
+		return await GetSymbolBodyCoreAsync(model, instance, symbolName, includeLeadingTrivia, cancellationToken);
+	}
 
+	internal async Task<string> GetSymbolBodyCoreAsync(SolutionModel model, RoslynInstance instance, string symbolName, bool includeLeadingTrivia, CancellationToken cancellationToken)
+	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)

@@ -53,7 +53,11 @@ public sealed class FindDefinitionTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
+		return await FindDefinitionCoreAsync(model, instance, filePath, line, column, CancellationToken.None);
+	}
 
+	internal async Task<string> FindDefinitionCoreAsync(SolutionModel model, RoslynInstance instance, string filePath, int line, int column, CancellationToken token)
+	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
