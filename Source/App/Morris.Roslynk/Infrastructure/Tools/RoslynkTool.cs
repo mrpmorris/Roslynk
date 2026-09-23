@@ -78,14 +78,23 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 		// A binding failure is the caller's fault and is reported as Invalid; anything else is a fault in
 		// the tool itself. Both are shaped like every other Roslynk failure so a caller never has to parse
 		// a transport-level exception.
-		Error error = exception is ArgumentException or FormatException or JsonException or NotSupportedException
-			? Error.Invalid(exception.Message)
-			: Error.Faulted(exception.Message);
-
+		Error error = ToError(exception);
 		return new CallToolResult
 		{
 			IsError = true,
 			Content = [new TextContentBlock { Text = OutlineError.Format(error, SolutionStatus.Ready) }]
 		};
 	}
+
+	/// <summary>
+	/// The shared exception-to-<see cref="Error"/> rule: a binding failure (bad argument type, unparseable
+	/// value) is the caller's fault and is Invalid; anything else is a fault in the tool itself and is
+	/// Faulted. An <see cref="OperationCanceledException"/> is deliberately not mapped - callers rethrow it,
+	/// matching every tool's cancellation behavior. multi_query reuses this per operation so a slot's error
+	/// block agrees exactly with what the standalone path would have returned.
+	/// </summary>
+	public static Error ToError(Exception exception) =>
+		exception is ArgumentException or FormatException or JsonException or NotSupportedException
+			? Error.Invalid(exception.Message)
+			: Error.Faulted(exception.Message);
 }

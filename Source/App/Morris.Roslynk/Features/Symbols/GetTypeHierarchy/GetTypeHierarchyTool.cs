@@ -58,7 +58,11 @@ public sealed class GetTypeHierarchyTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
+		return await GetTypeHierarchyCoreAsync(model, instance, typeName, CancellationToken.None);
+	}
 
+	internal async Task<string> GetTypeHierarchyCoreAsync(SolutionModel model, RoslynInstance instance, string typeName, CancellationToken token = default)
+	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)

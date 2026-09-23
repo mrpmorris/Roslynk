@@ -12,6 +12,7 @@ Detailed per-tool reference. Read the section you need; SKILL.md carries the wor
 - [Code actions: get_code_actions, apply_code_action, apply_code_fix](#code-actions)
 - [Editing: apply_patch, rename_symbol, change_signature, remove_unused_usings](#editing)
 - [Dead code: find_dead_code, find_dead_conditionals](#dead-code)
+- [Batching: multi_query](#batching)
 
 ## Shared conventions
 
@@ -22,7 +23,7 @@ Detailed per-tool reference. Read the section you need; SKILL.md carries the wor
 **Error shape** (header-only):
 
 ```
-error=<Indexing|Faulted|NotFound|Ambiguous|NotSupported|Stale|Invalid|Conflict>
+error=<Indexing|Faulted|NotFound|Ambiguous|NotSupported|Stale|Invalid|Conflict|Truncated>
 errorMessage=<text>
 candidate=<name>       (0+ lines: NotFound suggestions / Ambiguous matches)
 stale=<path>           (0+ lines, Stale only)
@@ -89,9 +90,9 @@ No parameters. Lists every solution loaded by the daemon (daemon-wide, not sessi
 ## Diagnostics
 
 ### get_diagnostics
-`solutionId`, `includeErrors`/`includeWarnings`/`includeInfo`/`includeHidden` (**all default false**), `targetFramework` (optional; pins a multi-targeted project to one compilation), `includeAnalyzers` (default true; `false` = faster compiler-only pass).
+`solutionId`, `includeErrors`/`includeWarnings`/`includeInfo`/`includeHidden` (**all default false**), `includeAnalyzers` (default true; `false` = faster compiler-only pass).
 
-Header always carries `errors=`, `warnings=`, `infos=`, `hidden=` counts regardless of include flags, so filtering is never silent — a bare call is a cheap compile check. Body (per included severity) nests file→severity→`<id>,<line:col>,<message>`. Ids that exist only to trigger a code fix (they carry no message and accompany a public rule, as IDE0005's does) are not listed; fix the public id instead. Results are cached per `(targetFramework, includeAnalyzers)` and invalidated on any write, so repeated calls are cheap. This replaces `dotnet build` for correctness checking.
+Header always carries `errors=`, `warnings=`, `infos=`, `hidden=` counts regardless of include flags, so filtering is never silent — a bare call is a cheap compile check. Body (per included severity) nests file→severity→`<id>,<line:col>,<message>`. Ids that exist only to trigger a code fix (they carry no message and accompany a public rule, as IDE0005's does) are not listed; fix the public id instead. Multi-targeted projects report diagnostics across their loaded target frameworks. Results are cached per `includeAnalyzers` and invalidated on any write, so repeated calls are cheap. This replaces `dotnet build` for correctness checking.
 
 ## Code actions
 
@@ -138,3 +139,32 @@ Leaf lines: `memberKind,memberName,loc,confidence,reason` with confidence `High|
 
 ### find_dead_conditionals
 `solutionId` only. Header `#deadConditionals=<n>`; body per file: `<line:col>,<directive>,<condition>` with directive ∈ `if|elif|else` (condition `(else)` for `#else`). Flags branches never compiled under any configuration Roslynk actually loaded (each project's defined symbols, and that set minus DEBUG, across TFMs). A branch used only by a configuration not loaded (CI-injected define, missing workload) is a false positive — treat as "possibly dead".
+
+## Batching
+
+### multi_query
+`solutionId`, `operations` (1-25 items), optional `expectSnapshot`.
+
+Each operation is `{ "tool": <name>, "arguments": { ... } }` where `tool` is one of the 11 read-only query tools (get_symbol, get_symbol_body, get_members, find_definition, find_implementations, find_references, get_callers, search_symbols, get_type_hierarchy, find_dead_code, find_dead_conditionals) and `arguments` uses exactly that tool's single-call parameter names - unknown or misspelled keys are rejected (`error=Invalid` naming the key), never ignored; omitted parameters take the tool's declared defaults. The schema's `tool` enum lists the legal names, so a write tool, get_diagnostics or get_solution_status is unrepresentable and fails the whole call at binding (`error=Invalid` naming the offending value and the permitted set).
+
+Everything runs against ONE snapshot of the solution, so results inside one response can never disagree with each other. The response is one envelope, not JSON:
+
+```
+operations=<n>
+snapshot=<32-hex id of the snapshot every slot was computed against>
+boundary=<32-hex, fresh per request>
+
+--<boundary>
+slot=<i> tool=<tool name>
+
+<that tool's own output format, verbatim - headers, blank line, tab-indented body, or its error= block>
+
+--<boundary>
+...
+
+--<boundary>--
+```
+
+A failing operation does not abort the batch: its slot carries its normal `error=` block (NotFound/Ambiguous/Invalid/...) and the other slots still deliver. Slot bodies are never cut mid-output.
+
+**Truncation and continuation.** More than 25 operations, or a total output over the response budget, truncates: unexecuted operations still get their numbered slot carrying `error=Truncated`, and the header carries `truncatedSlots=<n>`. To continue, re-send exactly the operations whose slots were Truncated - the slot meta line gives the index and tool name, but NOT the arguments, so rebuild the continuation from your own copy of the request (the server does not echo them back). Pass the first response's `snapshot=` value as `expectSnapshot` when you do: if the solution changed between the calls (another client, or the user saving a file) the continuation is refused with `error=Stale` naming both ids plus a `snapshot=<current id>` header - re-run the whole batch instead of stitching two generations. Consistency is guaranteed within one response, never across two. `get_diagnostics` and `get_solution_status` are deliberately not multi-queryable - call them directly.

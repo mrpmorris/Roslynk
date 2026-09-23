@@ -69,7 +69,22 @@ public sealed class GetMembersTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
+		return await GetMembersCoreAsync(model, instance, typeName, includeInherited, nameFilter, includeMethods, includeFields, includeProperties, includeEvents, includeNestedTypes, CancellationToken.None);
+	}
 
+	internal async Task<string> GetMembersCoreAsync(
+		SolutionModel model,
+		RoslynInstance instance,
+		string typeName,
+		bool includeInherited = false,
+		string? nameFilter = null,
+		bool includeMethods = true,
+		bool includeFields = true,
+		bool includeProperties = true,
+		bool includeEvents = true,
+		bool includeNestedTypes = true,
+		CancellationToken token = default)
+	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)

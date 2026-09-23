@@ -9,6 +9,21 @@ Roslynk is an MCP server that holds a live Roslyn compilation of a C# solution. 
 
 **Default to Roslynk for C# semantic work.** Fall back to plain file tools only for what Roslynk doesn't cover: non-C# files, file creation/deletion, and reading a method body once you know its location.
 
+**When you need several facts before making a change, send them as one `multi_query` call rather than as sequential calls.** `multi_query` runs several read-only tools in one round trip against a single snapshot of the solution — resolve a symbol, list its members, and find its references in one call. Worked example (argument names are each tool's own — `get_symbol` takes `symbolName`, `get_members` takes `typeName`):
+
+```json
+{
+  "solutionId": "C:/path/MySolution.slnx",
+  "operations": [
+    { "tool": "get_symbol",      "arguments": { "symbolName": "MyLib.Ledger" } },
+    { "tool": "get_members",     "arguments": { "typeName": "MyLib.Ledger" } },
+    { "tool": "find_references", "arguments": { "symbolName": "MyLib.Ledger", "maxResults": 200 } }
+  ]
+}
+```
+
+The permitted tools are exactly the 11 read-only query tools (the schema's `tool` enum lists them); operations are independent, one result comes back per operation in request order, and a failing operation returns its `error=` block in its own slot without aborting the batch. Write tools, `get_diagnostics` and `get_solution_status` are not multi-queryable (`get_diagnostics`/`get_solution_status` are ordinary single calls; a write tool is not expressible in the enum and fails the call at binding). Over 25 operations or the output budget, extra slots come back `error=Truncated` with `truncatedSlots=<n>` — re-send exactly those operations (from your own copy of the request; slots carry index and tool name, not the arguments) to continue. See the multi_query section of [references/tools.md](references/tools.md) for the envelope format.
+
 ## Getting started
 
 1. Call `open_solution` with the absolute path to the `.sln`/`.slnx`. It returns immediately and loads in the background; the `solutionId` it returns (which is just the solution path) is the handle every other tool needs.
@@ -61,7 +76,7 @@ Errors are header-only: `error=<code>` plus `errorMessage=`. Codes you'll act on
 
 Watch for `truncated=Y`: results were capped (`find_references` defaults to 100, `search_symbols` 50, `find_dead_code` 50). Raise `maxResults` or narrow the query if you need everything.
 
-**Results are snapshots.** The solution is edited live, so re-query rather than reusing an earlier response — especially after any write.
+**Results are snapshots.** The solution is edited live, so re-query rather than reusing an earlier response — especially after any write. Every slot in one `multi_query` response is computed against a single snapshot, so results inside one response can never disagree; across two responses they can — that is what the `snapshot=` header and the `expectSnapshot` parameter are for (a continuation naming a superseded snapshot is refused with `error=Stale`; re-run the whole batch).
 
 **Leave defaulted parameters alone** unless you specifically need the non-default behavior. One that surprises people: `get_diagnostics`' include flags all default to *false*, but the header always reports `errors=/warnings=/infos=/hidden=` counts — so a bare call is a cheap "does it compile?" check, and you opt into detail (`includeErrors=true`, ...) only when counts are non-zero.
 
@@ -101,8 +116,8 @@ Two paths:
 
 ## Limits to remember
 
-- Roslynk covers **.cs files compiled in the loaded solution** (plus Razor via its generated code, read-mostly — only `rename_symbol` writes back to `.razor`/`.cshtml`). Everything else — csproj, json, md, new files — is the host's job.
+- Roslynk covers **.cs files compiled in the loaded solution** (plus Razor via its generated code, read-mostly — only `rename_symbol` writes back to `.razor`/`.cshtml`). `apply_patch` can edit any *existing* text file under the solution folder (`.csproj`/`.json`/`.md` included), but only compiled `.cs`/`.razor` documents stay synced with the model; *creating* new files is the host's job.
 - `search_symbols` searches source-declared symbols only, not referenced assemblies; `get_symbol`/FQN resolution *does* reach metadata.
-- Multi-targeted projects: pin `get_diagnostics` with `targetFramework` if you need one TFM's view.
+- Multi-targeted projects report diagnostics across their loaded target frameworks.
 
 For exact parameter lists, output shapes, and per-tool gotchas, read [references/tools.md](references/tools.md).

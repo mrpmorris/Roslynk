@@ -62,7 +62,11 @@ public sealed class FindReferencesTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
+		return await FindReferencesCoreAsync(model, instance, symbolName, maxResults, cancellationToken);
+	}
 
+	internal async Task<string> FindReferencesCoreAsync(SolutionModel model, RoslynInstance instance, string symbolName, int maxResults = 100, CancellationToken cancellationToken = default)
+	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)

@@ -56,7 +56,11 @@ public sealed class FindImplementationsTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
+		return await FindImplementationsCoreAsync(model, instance, symbolName, CancellationToken.None);
+	}
 
+	internal async Task<string> FindImplementationsCoreAsync(SolutionModel model, RoslynInstance instance, string symbolName, CancellationToken token = default)
+	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)

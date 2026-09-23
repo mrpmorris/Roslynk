@@ -58,7 +58,11 @@ public sealed class GetCallersTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
+		return await GetCallersCoreAsync(model, instance, methodName, CancellationToken.None);
+	}
 
+	internal async Task<string> GetCallersCoreAsync(SolutionModel model, RoslynInstance instance, string methodName, CancellationToken token = default)
+	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)

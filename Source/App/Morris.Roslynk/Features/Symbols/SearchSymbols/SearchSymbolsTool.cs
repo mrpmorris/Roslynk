@@ -57,7 +57,11 @@ public sealed class SearchSymbolsTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
+		return await SearchSymbolsCoreAsync(model, instance, query, maxResults, CancellationToken.None);
+	}
 
+	internal async Task<string> SearchSymbolsCoreAsync(SolutionModel model, RoslynInstance instance, string query, int maxResults = 50, CancellationToken token = default)
+	{
 		if (model.Solution is null)
 			return OutlineError.Format(Error.Indexing(), model.Status);
 

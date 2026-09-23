@@ -11,6 +11,14 @@ namespace Morris.Roslynk.Infrastructure.Lifecycle;
 /// </summary>
 public sealed class SolutionModel
 {
+	/// <summary>
+	/// The generation this snapshot was published as. Fresh per swap, so two models carrying the same
+	/// <see cref="Solution"/> are still distinguishable generations. multi_query stamps envelopes with it
+	/// and lets a caller check it (expectSnapshot) before continuing a truncated batch, so a continuation
+	/// that would straddle two generations is refused (Stale) instead of silently stitching them.
+	/// </summary>
+	public Guid Id { get; init; } = Guid.NewGuid();
+
 	public required SolutionStatus Status { get; init; }
 	public Solution? Solution { get; init; }
 	public string? FaultMessage { get; init; }
