@@ -3,6 +3,7 @@
 ## 1.1.0
 
 - Multi query: batch multiple read-only tool calls in one request (Fixes #31)
+- New `get_callees` tool (Fixes #15)
 - Ambiguous requests: clarify before acting (Fixes #34)
 - New `get_symbol_body` tool (Fixes #35)
 - Fix analyzer diagnostics through the code-fix path (Fixes #9)

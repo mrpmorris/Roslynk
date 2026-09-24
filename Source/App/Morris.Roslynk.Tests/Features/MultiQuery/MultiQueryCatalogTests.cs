@@ -12,7 +12,7 @@ namespace Morris.Roslynk.Tests.Features.MultiQuery;
 public class MultiQueryCatalogTests
 {
 	[Fact]
-	public void WhenTheCatalogIsEnumerated_ThenItHoldsExactlyTheElevenQueryTools()
+	public void WhenTheCatalogIsEnumerated_ThenItHoldsExactlyTheTwelveQueryTools()
 	{
 		string[] expected =
 		[
@@ -23,6 +23,7 @@ public class MultiQueryCatalogTests
 			"find_implementations",
 			"find_references",
 			"get_callers",
+			"get_callees",
 			"search_symbols",
 			"get_type_hierarchy",
 			"find_dead_code",
