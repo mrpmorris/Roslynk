@@ -7,7 +7,7 @@ Detailed per-tool reference. Read the section you need; SKILL.md carries the wor
 - [Shared conventions](#shared-conventions)
 - [Lifecycle: open_solution, get_solution_status, reload_solution](#lifecycle)
 - [Navigation: find_definition, get_symbol, get_symbol_body, get_members, search_symbols](#navigation)
-- [Relationships: find_references, get_callers, find_implementations, get_type_hierarchy](#relationships)
+- [Relationships: find_references, get_callers, get_callees, find_implementations, get_type_hierarchy](#relationships)
 - [Diagnostics: get_diagnostics](#diagnostics)
 - [Code actions: get_code_actions, apply_code_action, apply_code_fix](#code-actions)
 - [Editing: apply_patch, rename_symbol, change_signature, remove_unused_usings](#editing)
@@ -42,7 +42,7 @@ same re-queryable form.
 
 **Defaults.** Don't pass a value for a defaulted parameter unless you need the non-default behavior.
 
-**`#if` projections.** Symbol tools (find_definition, find_implementations, get_members, get_symbol, get_symbol_body, get_type_hierarchy, find_references, get_callers, rename_symbol, search_symbols) also cover inactive `#if`/`#else` branches: Roslynk builds derived compilations toggling each uniformly-defined preprocessor symbol, and unions/dedupes results.
+**`#if` projections.** Symbol tools (find_definition, find_implementations, get_members, get_symbol, get_symbol_body, get_type_hierarchy, find_references, get_callers, get_callees, rename_symbol, search_symbols) also cover inactive `#if`/`#else` branches: Roslynk builds derived compilations toggling each uniformly-defined preprocessor symbol, and unions/dedupes results.
 
 ## Lifecycle
 
@@ -80,6 +80,9 @@ No parameters. Lists every solution loaded by the daemon (daemon-wide, not sessi
 
 ### get_callers
 `solutionId`, `methodName` (FQN). Callers grouped file→namespace→containing type→calling member with the caller's declaration `loc`. Target one overload by writing its parameter-type list.
+
+### get_callees
+`solutionId`, `methodName` (FQN), `maxResults` (default 100). Callees grouped file→namespace→containing type→called member with the callee's declaration `loc`. Target one overload by writing its parameter-type list. Only source-declared callees are listed — a framework or metadata method (e.g. from the BCL) is not; an implicitly-synthesized constructor (a class's default constructor) is listed at the location of its declaring type. Calls inside a nested lambda, anonymous method or local function are attributed to that nested body, not to the resolved method. `count=`/`truncated=Y` when capped.
 
 ### find_implementations
 `solutionId`, `symbolName` (FQN of interface, abstract member, or virtual member). Implementors/overrides across all projections, deduped.
@@ -145,7 +148,7 @@ Leaf lines: `memberKind,memberName,loc,confidence,reason` with confidence `High|
 ### multi_query
 `solutionId`, `operations` (1-25 items), optional `expectSnapshot`.
 
-Each operation is `{ "tool": <name>, "arguments": { ... } }` where `tool` is one of the 11 read-only query tools (get_symbol, get_symbol_body, get_members, find_definition, find_implementations, find_references, get_callers, search_symbols, get_type_hierarchy, find_dead_code, find_dead_conditionals) and `arguments` uses exactly that tool's single-call parameter names - unknown or misspelled keys are rejected (`error=Invalid` naming the key), never ignored; omitted parameters take the tool's declared defaults. The schema's `tool` enum lists the legal names, so a write tool, get_diagnostics or get_solution_status is unrepresentable and fails the whole call at binding (`error=Invalid` naming the offending value and the permitted set).
+Each operation is `{ "tool": <name>, "arguments": { ... } }` where `tool` is one of the 12 read-only query tools (get_symbol, get_symbol_body, get_members, find_definition, find_implementations, find_references, get_callers, get_callees, search_symbols, get_type_hierarchy, find_dead_code, find_dead_conditionals) and `arguments` uses exactly that tool's single-call parameter names - unknown or misspelled keys are rejected (`error=Invalid` naming the key), never ignored; omitted parameters take the tool's declared defaults. The schema's `tool` enum lists the legal names, so a write tool, get_diagnostics or get_solution_status is unrepresentable and fails the whole call at binding (`error=Invalid` naming the offending value and the permitted set).
 
 Everything runs against ONE snapshot of the solution, so results inside one response can never disagree with each other. The response is one envelope, not JSON:
 
