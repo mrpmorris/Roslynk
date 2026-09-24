@@ -43,6 +43,24 @@ public class MultiQueryTests
 	}
 
 	[Fact]
+	public async Task WhenMultiQueryRunsGetCallees_ThenItsSlotCarriesTheCalleesOutput()
+	{
+		(MultiQueryTool subject, _) = await CreateAsync();
+		var operations = new List<MultiQueryOperation>
+		{
+			new(MultiQueryOp.get_callees, Args(("methodName", Json("SimpleLibrary.Caller.Run")))),
+		};
+
+		string envelope = await subject.MultiQuery(TestSolutions.Simple, operations);
+
+		Assert.Contains("operations=1", envelope);
+		Assert.Contains("slot=1 tool=get_callees", envelope);
+		Assert.Contains("resolvedSymbol=SimpleLibrary.Caller.Run", envelope);
+		Assert.Contains("method,Greet,", envelope);   // the callee, returned through the batch
+		Assert.DoesNotContain("error=", envelope);
+	}
+
+	[Fact]
 	public async Task WhenAnOperationFailsTheBatchStillReturnsTheOtherResults_ThenTheErrorSitsInItsOwnSlot()
 	{
 		(MultiQueryTool subject, _) = await CreateAsync();
