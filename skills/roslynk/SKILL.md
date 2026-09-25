@@ -36,12 +36,14 @@ Each tool's exact contract — parameters, output format, limits, error codes �
 | Find a symbol by partial name | `search_symbols` | compiler-declared symbols |
 | Rename a symbol everywhere (incl. `.razor`/`.cshtml`) | `rename_symbol` | find-and-replace misses markup and same-named text |
 | Rename one parameter of a method/constructor/indexer | `rename_parameter` | also fixes named arguments, `<paramref>` docs and the override/interface family |
-| Fix a diagnostic `get_diagnostics` reported (incl. `.razor`/`.cshtml`) | `apply_code_fix` with that entry's id, `line` and `column`; on `error=Conflict`, `apply_code_action` with the chosen `candidate` actionId | hand-editing |
+| Fix a diagnostic `get_diagnostics` reported (incl. `.razor`/`.cshtml`) | `apply_code_fix` with that entry's id, `line` and `column`; on `error=Conflict`, ask the user which candidate, unless the request names one, then `apply_code_action` with its actionId | hand-editing |
 | Apply a refactoring, or choose among fixes at a position | `get_code_actions` + `apply_code_action` | hand-editing |
 | Add a parameter to a method and its callers (incl. `.razor`/`.cshtml`) | `change_signature` | hand-editing misses call sites in markup |
 | Extract statements or an expression into a new method (incl. `@code`/`@functions`) | `extract_method` | hand-cutting code misses parameters, `ref`/`out` and return values |
 | Edit source or text files | `apply_patch` | keeps the in-memory model in sync; stale-guarded |
 | Remove unused usings / find dead code | `remove_unused_usings`, `find_dead_code`, `find_dead_conditionals` | eyeballing |
+
+A fix must keep the code's declared intent: never hand-edit or `apply_patch` to make a diagnostic go away, and don't remove an interface, base type, member, attribute or other declaration to silence an error unless the user asks for that.
 
 All name arguments are fully-qualified (`Namespace.Type` or `Namespace.Type.Member`, with an optional parameter-type list to target one overload). A local function is a member of the method declaring it: `Namespace.Type.Method.local`, or `Namespace.Type.Method.outer.inner` when nested; put a parameter list on any segment to pick an overload (`Namespace.Type.Method(int).local`). On `error=Ambiguous` or `error=NotFound` the response lists `candidate=` lines that are exact names the same tool accepts — copy one back verbatim rather than guessing.
 
