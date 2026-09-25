@@ -12,7 +12,7 @@ workflows and the tool descriptions carry the concise contract for discovery.
 - [Relationships: find_references, get_callers, find_implementations, get_type_hierarchy](#relationships)
 - [Diagnostics: get_diagnostics](#diagnostics)
 - [Code actions: get_code_actions, apply_code_action, apply_code_fix](#code-actions)
-- [Editing: apply_patch, rename_symbol, change_signature, remove_unused_usings](#editing)
+- [Editing: apply_patch, rename_symbol, change_signature, extract_method, remove_unused_usings](#editing)
 - [Dead code: find_dead_code, find_dead_conditionals](#dead-code)
 - [Batching: multi_query](#batching)
 
@@ -128,6 +128,23 @@ All write tools: `checkOnly=true` previews changed files without writing; writes
 `solutionId`, `methodId` (FQN), `parameterType` (e.g. `System.Threading.CancellationToken`), `parameterName` (valid identifier), `defaultValue` (**required** — keeps the parameter optional, e.g. `default`, `null`, `0`), `callSiteArgument` (optional; when given, threaded into every call site as a named argument), `checkOnly`.
 
 v1 scope: appends one optional parameter to one ordinary method. `NotSupported` for virtual/override/abstract methods, interface members and implementations, partial methods, `params` methods, constructors/operators/accessors/local functions. An overloaded method is targeted by its parameter-type list; a bare name → `Ambiguous`. Only true invocation call sites are updated — method groups, `nameof`, and `cref` are left alone (still valid because the parameter is optional). Returns `updatedCallSites` count.
+
+### extract_method
+`solutionId`, `documentPath` (.cs, absolute or solution-relative), `startLine`, `startColumn`, `endLine`, `endColumn` (1-based; the end column is exclusive, so `endLine+1`, column `1` selects through the end of `endLine`), `methodName` (optional; defaults to Roslyn's own name, e.g. `NewMethod` or one derived from the code), `asLocalFunction` (default false), `checkOnly` (default false).
+
+Runs Roslyn's Extract Method refactoring (the same provider behind get_code_actions' "Extract method"/"Extract local function"), so parameters, `ref`/`out`, the return value, `static`/`async` modifiers and the call-site replacement all come from Roslyn's data-flow analysis - never text splicing. Whitespace at either end of the selection is ignored, so whole-line selections work. Roslyn may widen a partial expression to the enclosing complete expression. When `methodName` is given, the extracted symbol is renamed semantically before anything is written. Roslyn formats the new method and the edited call site with the project's formatting options (`.editorconfig`); the rest of the file is untouched.
+
+Returns `applied`, `method` (final name), `kind` (`Method`|`LocalFunction`), `signature` (the declaration header on one line, e.g. `private static int Total(int a, int b)`), `call` (the statement now containing the call), then the changed files. `checkOnly=true` returns the same preview without writing.
+
+Nothing is written on any failure:
+- Selection Roslyn cannot extract (spans members, partial statements, jumps out of the selection, `yield`, ...) → `NotSupported` with the constraints.
+- Roslyn flags the extraction as possibly changing behavior → `NotSupported` with Roslyn's warning.
+- The result would add compile errors to an edited file (e.g. a `methodName` equal to the type name, CS0542) → `NotSupported` listing up to five `id: message (line n)` entries. Errors already present are not counted.
+- The call would bind to another member, or the rename produced no declaration of that name → `Conflict`.
+- An edited file changed since the extraction was computed (in memory or on disk) → `Stale` with `stale=<path>`.
+- Unknown document → `NotFound`; generated `.g.cs` (incl. Razor output) or non-C# → `NotSupported`; out-of-range, empty or reversed selection, or an invalid/keyword `methodName` → `Invalid`.
+
+Prefer this over get_code_actions + apply_code_action for extraction: it is deterministic (no action-id round trip, no title matching), names the method in one step, and checks the result compiles. Not available in multi_query (it is a write tool).
 
 ### remove_unused_usings
 `solutionId`, `documentPath` (optional; omit to clean the whole solution), `checkOnly`. CS8019 finds the files to touch; each one is then rewritten by Roslyn's own IDE0005 fix, which preserves the surrounding trivia, falling back to a syntactic removal when the IDE0005 analyzer is not referenced. Nothing to remove → `applied=N`, `removedCount=0` (not an error). Safe to re-run (idempotent).

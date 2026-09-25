@@ -27,6 +27,7 @@ public class ToolRegistrationTests
 			"rename_symbol",
 			"apply_patch",
 			"change_signature",
+			"extract_method",
 			"find_dead_code",
 			"remove_unused_usings",
 			"multi_query",
