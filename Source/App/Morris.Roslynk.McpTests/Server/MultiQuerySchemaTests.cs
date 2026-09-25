@@ -15,8 +15,15 @@ namespace Morris.Roslynk.McpTests.Server;
 /// surface for callers. Without JsonStringEnumConverter the enum publishes as integers and callers would
 /// have to send a numeric tool code.
 /// </summary>
-public class MultiQuerySchemaTests
+public class MultiQuerySchemaTests : IClassFixture<ServerBuilder>
 {
+	private readonly IReadOnlyList<McpServerTool> Tools;
+
+	public MultiQuerySchemaTests(ServerBuilder server)
+	{
+		Tools = server.Tools;
+	}
+
 	[Fact]
 	public void WhenMultiQueryIsPublished_ThenItsSchemaRequiresSolutionIdAndOperations()
 	{
@@ -80,7 +87,7 @@ public class MultiQuerySchemaTests
 		Assert.DoesNotContain("operations=", text, StringComparison.Ordinal);
 	}
 
-	private static JsonElement Schema() =>
+	private JsonElement Schema() =>
 		PublishedMultiQuery().ProtocolTool.InputSchema;
 
 	/// <summary>
@@ -110,8 +117,8 @@ public class MultiQuerySchemaTests
 		public ValueTask DisposeAsync() => default;
 	}
 
-	private static McpServerTool PublishedMultiQuery() =>
-		ServerBuilder.BuildServer().Single(tool => tool.ProtocolTool.Name == MultiQueryTool.MultiQueryName);
+	private McpServerTool PublishedMultiQuery() =>
+		Tools.Single(tool => tool.ProtocolTool.Name == MultiQueryTool.MultiQueryName);
 
 	private static IReadOnlyDictionary<string, JsonElement> Properties(JsonElement schema) =>
 		schema.TryGetProperty("properties", out JsonElement properties)

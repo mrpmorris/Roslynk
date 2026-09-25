@@ -11,12 +11,19 @@ namespace Morris.Roslynk.McpTests.Server;
 /// argument name that drifts from a tool's published single-call signature is a broken recipe - these
 /// tests pin the recipe at the schema level, independent of any fixture solution.
 /// </summary>
-public class ImpactAnalysisRecipeTests
+public class ImpactAnalysisRecipeTests : IClassFixture<ServerBuilder>
 {
+	private readonly IReadOnlyList<McpServerTool> Tools;
+
+	public ImpactAnalysisRecipeTests(ServerBuilder server)
+	{
+		Tools = server.Tools;
+	}
+
 	[Fact]
 	public void WhenTheImpactRecipeIsDocumented_ThenEveryArgumentNameIsARealParameterOfItsOperation()
 	{
-		Dictionary<string, JsonElement> schemasByName = ServerBuilder.BuildServer()
+		Dictionary<string, JsonElement> schemasByName = Tools
 			.ToDictionary(tool => tool.ProtocolTool.Name, tool => tool.ProtocolTool.InputSchema, StringComparer.Ordinal);
 
 		// Exactly the recipe from the skill's "Impact analysis / find usages" section. Note the two

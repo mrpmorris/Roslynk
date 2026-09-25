@@ -5,18 +5,25 @@ using Morris.Roslynk;
 namespace Morris.Roslynk.McpTests.Server;
 
 /// <summary>
-/// Builds the published tool set exactly the way the real host does (AddRoslynk + WithRoslynkTools),
-/// shared by the schema tests. The provider is disposed after listing; the returned McpServerTool
-/// objects are published snapshots and stay valid without it.
+/// Builds the published tool set exactly the way the real host does (AddRoslynk +
+/// WithRoslynkTools) and owns the service provider for its lifetime. Shared as an IClassFixture:
+/// exactly one instance per test class, instantiated by xUnit, disposed after the class's tests
+/// complete - no test can ever witness a second instance.
 /// </summary>
-internal static class ServerBuilder
+public sealed class ServerBuilder : IDisposable
 {
-	public static IReadOnlyList<McpServerTool> BuildServer()
+	private readonly ServiceProvider Provider;
+
+	public ServerBuilder()
 	{
 		var services = new ServiceCollection();
 		services.AddRoslynk();
 		services.AddMcpServer().WithRoslynkTools();
-		using ServiceProvider provider = services.BuildServiceProvider();
-		return provider.GetServices<McpServerTool>().ToList();
+		Provider = services.BuildServiceProvider();
+		Tools = Provider.GetServices<McpServerTool>().ToList();
 	}
+
+	public IReadOnlyList<McpServerTool> Tools { get; }
+
+	public void Dispose() => Provider.Dispose();
 }
