@@ -1,6 +1,6 @@
 # Releases
 
-## 1.1.0
+## 1.2.0
 
 - Steer impact/usage questions to multi_query: impact-analysis recipe in the roslynk skill plus multi_query/find_references description hints and schema tests (Fixes #22)
 - Multi query: batch multiple read-only tool calls in one request (Fixes #31)
@@ -9,6 +9,9 @@
 - Fix analyzer diagnostics through the code-fix path (Fixes #9)
 - Defaulted tool parameters genuinely omittable (Fixes #30)
 - Docs: DeepSeek harness instructions, agent configuration section, manual mcp.json setup for non-Claude AI tools
+
+## 1.1.0
+- Allow apply_patch to work on any solution file
 
 ## 1.0.0
 
