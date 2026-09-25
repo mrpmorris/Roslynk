@@ -76,7 +76,7 @@ No parameters. Lists every solution loaded by the daemon (daemon-wide, not sessi
 ## Relationships
 
 ### find_references
-`solutionId`, `symbolName` (FQN), `maxResults` (default 100). Compiler-accurate: skips comments, strings, unrelated same-named members. References grouped file→namespace→type→member; pipe-delimited `loc`s on one line for multiple hits. Deduped across `#if` projections. `count=`/`truncated=Y` when capped.
+`solutionId`, `symbolName` (FQN), `maxResults` (default 100). Compiler-accurate: skips comments, strings, unrelated same-named members. References grouped file→namespace→type→member; pipe-delimited `loc`s on one line for multiple hits. Deduped across `#if` projections. `count=`/`truncated=Y` when capped. Prefer this over text search for usages in `*.cs`, `*.cshtml` and `*.razor`; combine with get_callers/find_implementations via multi_query for impact analysis.
 
 ### get_callers
 `solutionId`, `methodName` (FQN). Callers grouped file→namespace→containing type→calling member with the caller's declaration `loc`. Target one overload by writing its parameter-type list.
@@ -146,6 +146,8 @@ Leaf lines: `memberKind,memberName,loc,confidence,reason` with confidence `High|
 `solutionId`, `operations` (1-25 items), optional `expectSnapshot`.
 
 Each operation is `{ "tool": <name>, "arguments": { ... } }` where `tool` is one of the 11 read-only query tools (get_symbol, get_symbol_body, get_members, find_definition, find_implementations, find_references, get_callers, search_symbols, get_type_hierarchy, find_dead_code, find_dead_conditionals) and `arguments` uses exactly that tool's single-call parameter names - unknown or misspelled keys are rejected (`error=Invalid` naming the key), never ignored; omitted parameters take the tool's declared defaults. The schema's `tool` enum lists the legal names, so a write tool, get_diagnostics or get_solution_status is unrepresentable and fails the whole call at binding (`error=Invalid` naming the offending value and the permitted set).
+
+**Impact analysis.** To answer "what uses X / who calls X / what breaks if I change X", batch find_references (`symbolName`), get_callers (`methodName`), find_implementations (`symbolName`) and get_type_hierarchy (`typeName`) in one call instead of grepping - parameter names are each tool's own and a wrong key is an `Invalid` slot.
 
 Everything runs against ONE snapshot of the solution, so results inside one response can never disagree with each other. The response is one envelope, not JSON:
 

@@ -1,5 +1,9 @@
 # Releases
 
+## Unreleased
+
+- Steer impact/usage questions to multi_query: impact-analysis recipe in the roslynk skill plus multi_query/find_references description hints and schema tests (Fixes #22)
+
 ## 1.1.0
 
 - Multi query: batch multiple read-only tool calls in one request (Fixes #31)

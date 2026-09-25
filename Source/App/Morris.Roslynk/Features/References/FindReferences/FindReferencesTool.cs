@@ -50,9 +50,11 @@ public sealed class FindReferencesTool
 		  \t\t\t\t<typeKind>,<typeName>,<loc|loc|...>   (locations present only when the type declaration itself references the symbol)
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc|loc|...>
 		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.Loc}; {OutlineDescriptions.LocList}; {OutlineDescriptions.ListFieldQuoting}.
-		{OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over grepping: it matches the compiler's symbol, not text,
-		so it skips comments, strings and unrelated same-named members, and still finds usages in code-behind
-		and partial classes.
+		{OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} It matches the compiler's
+		symbol, not text, so it skips comments, strings and unrelated same-named members, and still finds
+		usages in code-behind and partial classes.
+		Prefer this over text search for usages in *.cs, *.cshtml and *.razor; combine with
+		get_callers/find_implementations via multi_query for impact analysis.
 		""")]
 	public async Task<string> FindReferences(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

@@ -111,16 +111,7 @@ public class MultiQuerySchemaTests
 	}
 
 	private static McpServerTool PublishedMultiQuery() =>
-		BuildServer().Single(tool => tool.ProtocolTool.Name == MultiQueryTool.MultiQueryName);
-
-	private static IReadOnlyList<McpServerTool> BuildServer()
-	{
-		var services = new ServiceCollection();
-		services.AddRoslynk();
-		services.AddMcpServer().WithRoslynkTools();
-		using ServiceProvider provider = services.BuildServiceProvider();
-		return provider.GetServices<McpServerTool>().ToList();
-	}
+		ServerBuilder.BuildServer().Single(tool => tool.ProtocolTool.Name == MultiQueryTool.MultiQueryName);
 
 	private static IReadOnlyDictionary<string, JsonElement> Properties(JsonElement schema) =>
 		schema.TryGetProperty("properties", out JsonElement properties)
