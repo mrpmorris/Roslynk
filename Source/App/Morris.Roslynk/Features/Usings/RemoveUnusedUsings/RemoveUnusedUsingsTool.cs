@@ -7,6 +7,7 @@ using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
 using Morris.Roslynk.Infrastructure.Writing;
@@ -57,8 +58,11 @@ public sealed class RemoveUnusedUsingsTool
 	[Description(
 		$"""
 		Removes unnecessary using directives (the compiler's CS8019) across the solution, or in one file when
-		documentPath is given; the recurring cleanup after moves and renames. A documentPath that is not a
-		solution-compiled .cs document is error=NotFound; if there is nothing to remove the call still
+		documentPath is given; the recurring cleanup after moves and renames. .razor and .cshtml files are
+		included: an unnecessary @using line written in the file is removed, while directives from imports files
+		(_Imports.razor, _ViewImports.cshtml) are left alone because other components share them. A documentPath
+		that is not a solution-compiled .cs, .razor or .cshtml document is error=NotFound; a file edited on disk
+		since it was loaded is error=Stale; if there is nothing to remove the call still
 		succeeds with applied=N and removedCount=0 (not an error, and safe to re-run). Returns a text result, not JSON:
 		'applied', 'removedCount', 'status' header, a blank line, then one solution-relative
 		changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} Written atomically through the same safe write path as the other tools. Pass
@@ -66,7 +70,7 @@ public sealed class RemoveUnusedUsingsTool
 		""")]
 	public async Task<string> RemoveUnusedUsings(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Optional path of a single .cs file to clean (absolute or relative to the solution folder). Omit to clean the whole solution.")] string? documentPath = null,
+		[Description("Optional path of a single .cs, .razor or .cshtml file to clean (absolute or relative to the solution folder). Omit to clean the whole solution.")] string? documentPath = null,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
@@ -92,12 +96,21 @@ public sealed class RemoveUnusedUsingsTool
 		}
 
 		HashSet<DocumentId>? targetDocuments = null;
+		RazorSourceDocument? targetRazor = null;
 		if (documentPath is not null)
 		{
-			Document? document = CodeActionService.FindDocument(solution, documentPath);
-			if (document is null)
-				return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs document."));
-			targetDocuments = [document.Id];
+			RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, documentPath, cancellationToken);
+			if (source is null)
+				return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs, .razor or .cshtml document."));
+			if (source.IsRazor)
+			{
+				targetRazor = source;
+				targetDocuments = [];
+			}
+			else
+			{
+				targetDocuments = [source.Document.Id];
+			}
 		}
 
 		Solution updated = solution;
@@ -136,14 +149,51 @@ public sealed class RemoveUnusedUsingsTool
 			}
 		}
 
+		// Razor-generated code never reports CS8019, so .razor/.cshtml files get their own @using analysis.
+		IEnumerable<RazorSourceDocument> razorSources = targetRazor is not null
+			? [targetRazor]
+			: documentPath is null ? await RazorSourcesAsync(solution, cancellationToken) : [];
+		foreach (RazorSourceDocument razorSource in razorSources)
+		{
+			(updated, int razorRemoved) = await RazorUnusedUsings.RemoveAsync(updated, razorSource, firstOnly: false, cancellationToken);
+			removed += razorRemoved;
+		}
+
 		if (removed == 0)
 			return Success(applied: false, [], 0);
 
 		if (checkOnly)
 			return Success(applied: false, ApplyPipeline.GetChangedFilePaths(solution, updated), removed);
 
-		IReadOnlyList<string> changed = await ApplyPipeline.ApplyAsync(instance, updated, cancellationToken);
+		IReadOnlyList<string> changed;
+		try
+		{
+			changed = await ApplyPipeline.ApplyAsync(instance, updated, basedOn: solution, cancellationToken);
+		}
+		catch (StaleWriteException exception)
+		{
+			return OutlineError.Format(
+				Error.Stale(exception.Message, [SolutionRelativePath.Of(solutionDirectory, exception.FilePath) ?? exception.FilePath]),
+				instance.CurrentModel.Status);
+		}
 		return Success(applied: true, changed, removed);
+	}
+
+	/// <summary>Every compiled .razor/.cshtml file in the solution (once per path), excluding imports files.</summary>
+	private static async Task<IReadOnlyList<RazorSourceDocument>> RazorSourcesAsync(Solution solution, CancellationToken cancellationToken)
+	{
+		var sources = new List<RazorSourceDocument>();
+		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+		foreach (TextDocument additional in solution.Projects.SelectMany(project => project.AdditionalDocuments))
+		{
+			if (additional.FilePath is not string path || !RazorSourceDocument.IsRazorSourcePath(path) || RazorUnusedUsings.IsImportsFile(path) || !seen.Add(path))
+				continue;
+
+			if (await RazorSourceDocument.ResolveAsync(solution, path, cancellationToken) is RazorSourceDocument source)
+				sources.Add(source);
+		}
+
+		return sources;
 	}
 
 	/// <summary>

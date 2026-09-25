@@ -6,6 +6,16 @@
 - Fully-qualified names now resolve explicitly declared constructors, written `Namespace.Type.Type(...)`
 - `rename_symbol` reports overlapping edits as `error=Conflict` instead of faulting
 - New `extract_method` tool: extract a selection of statements or an expression into a method or local function via Roslyn's Extract Method refactoring, with optional naming and preview; refuses without writing when Roslyn cannot extract the selection, flags a behavior change, or the result would add compile errors (Fixes #46)
+- `change_signature` supports methods declared in `.razor`/`.cshtml` `@code` blocks and call sites in Razor markup: edits are mapped back through `#line` directives and written to the Razor source. Previously they were reported as applied but never written to disk. Unmappable edits are refused without writing, and stale files return `error=Stale`
+- `get_code_actions`, `apply_code_action`, `apply_code_fix`, `extract_method` and `remove_unused_usings` work on `.razor` and `.cshtml` files: positions are given in the Razor file, Roslyn runs on the generated C#, and the result is written back to the Razor source in the file's own indentation. Edits to generated scaffolding with no Razor source are refused (`error=NotSupported`) with nothing written
+- `remove_unused_usings` (and `apply_code_fix` with `CS8019`/`IDE0005`) removes unnecessary `@using` lines from `.razor`/`.cshtml` files, including in a whole-solution run; `_Imports.razor`/`_ViewImports.cshtml` are never edited because other files share them
+- `extract_method` in a `.cshtml` view where Roslyn cannot add a new method suggests `asLocalFunction=true`
+- `apply_code_action`, `apply_code_fix` and `remove_unused_usings` report a file edited on disk since load as `error=Stale` instead of faulting
+- Local functions can be named: `Namespace.Type.Method.local`, or `Namespace.Type.Method.outer.inner` for one declared inside another, through any nesting of classes. Any segment may carry a parameter list to pick an overload (`Namespace.Type.Method(int).local`). Supported by every name-based tool (`get_symbol`, `get_symbol_body`, `find_references`, `get_callers`, `rename_symbol`, `rename_parameter`, `change_signature`, and the same operations in `multi_query`). Tools emit the fully signed form, and `Ambiguous` candidates for overloaded containers round-trip
+- `rename_parameter` and `change_signature` accept local functions
+- `search_symbols` finds local functions; outlines report them as kind `localfunction`, nested under their containing member, in `search_symbols`, `get_callers` and `find_references`, and `find_definition` returns their full name
+- `extract_method` reports the extracted method's full name in a new `symbolName` header
+- `get_members` lists each member's local functions nested beneath it, including local functions declared inside other local functions
 - Write pipeline can guard a precomputed update against an intervening edit to the same documents, without reverting unrelated intervening edits
 
 ## 1.2.0

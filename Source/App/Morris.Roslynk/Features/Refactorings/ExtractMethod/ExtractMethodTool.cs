@@ -11,6 +11,8 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Razor;
+using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
 using Morris.Roslynk.Infrastructure.Writing;
@@ -52,7 +54,8 @@ public sealed class ExtractMethodTool
 		data-flow analysis to decide parameters, ref/out, return value, static/async modifiers and the call
 		site; the deterministic equivalent of picking 'Extract method' from get_code_actions. Surrounding
 		whitespace in the selection is ignored. Returns a text result, not JSON: 'applied', 'method' (the
-		final name), 'kind' (Method or LocalFunction), 'signature' (the new declaration's header) and 'call'
+		final name), 'symbolName' (the extracted method's full name, e.g. 'N.T.M(int).NewMethod(string)' for a
+		local function, ready to pass to the name-based tools), 'kind' (Method or LocalFunction), 'signature' (the new declaration's header) and 'call'
 		(the statement now containing the call) headers, 'status', a blank line, then one solution-relative
 		changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} Before
 		anything is written the result is checked: a selection Roslyn cannot extract, or whose extraction
@@ -60,13 +63,17 @@ public sealed class ExtractMethodTool
 		would introduce compile errors is error=NotSupported listing them; a methodName that would bind a call
 		to a different member is error=Conflict; a file edited since the extraction was computed is
 		error=Stale. Nothing is written in any failure case. A documentPath that is not a solution-compiled
-		.cs document is error=NotFound; generated code (.g.cs, including Razor output) is error=NotSupported;
+		.cs, .razor or .cshtml document is error=NotFound; generated code (.g.cs, including Razor output) is
+		error=NotSupported. In a .razor/.cshtml file the selection must be inside C# (an @code block or
+		expression), otherwise error=NotSupported; the extraction is computed on the generated C# and mapped
+		back to the Razor source, and an edit that cannot be mapped (such as a method inserted outside the
+		@code block) is error=NotSupported, mismatched Razor text error=Conflict;
 		an out-of-range or empty selection, or an invalid methodName, is error=Invalid. Pass checkOnly to
 		preview the name, signature, call and changed files without writing.
 		""")]
 	public async Task<string> ExtractMethod(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Path of the .cs file; absolute, or relative to the solution folder.")] string documentPath,
+		[Description("Path of the .cs, .razor or .cshtml file; absolute, or relative to the solution folder.")] string documentPath,
 		[Description("1-based line where the selection starts.")] int startLine,
 		[Description("1-based column where the selection starts.")] int startColumn,
 		[Description("1-based line where the selection ends.")] int endLine,
@@ -90,21 +97,33 @@ public sealed class ExtractMethodTool
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
-		Document? document = CodeActionService.FindDocument(solution, documentPath);
-		if (document is null)
-			return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs document."));
-		if (document.FilePath?.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase) == true)
-			return Failure(Error.NotSupported("Extracting from generated code (.g.cs, including Razor output) is not supported; edit the source it was generated from."));
+		RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, documentPath, cancellationToken);
+		if (source is null)
+			return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs, .razor or .cshtml document."));
+		Document document = source.Document;
+		if (!source.IsRazor && document.FilePath?.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase) == true)
+			return Failure(Error.NotSupported("Extracting from generated code (.g.cs, including Razor output) is not supported; pass the .razor/.cshtml source it was generated from."));
 		if (document.Project.Language != LanguageNames.CSharp)
 			return Failure(Error.NotSupported("Only C# documents are supported."));
 
-		SourceText text = await document.GetTextAsync(cancellationToken);
-		if (!TryGetSelection(text, startLine, startColumn, endLine, endColumn, out TextSpan span, out string? invalid))
+		SourceText text = await source.GetSourceTextAsync(cancellationToken);
+		if (!TryGetSelection(text, startLine, startColumn, endLine, endColumn, out TextSpan sourceSpan, out string? invalid))
 			return Failure(Error.Invalid(invalid!));
+		if (await source.MapToDocumentAsync(sourceSpan, cancellationToken) is not TextSpan span)
+			return Failure(Error.NotSupported($"The selection {startLine}:{startColumn}-{endLine}:{endColumn} is not inside C# code (an @code block or expression) in '{documentPath}'."));
 
 		CodeAction? action = await FindActionAsync(document, span, asLocalFunction ? ExtractLocalFunctionKey : ExtractMethodKey, cancellationToken);
 		if (action is null)
 		{
+			// Roslyn will not add a member where generated code hides the insertion point (some Razor/MVC
+			// views), yet a local function still fits inside the containing member.
+			if (!asLocalFunction && await FindActionAsync(document, span, ExtractLocalFunctionKey, cancellationToken) is not null)
+			{
+				return Failure(Error.NotSupported(
+					"Roslyn cannot add a new method here (the generated code around the containing type is hidden, as in " +
+					"some .cshtml views); the selection can be extracted as a local function: retry with asLocalFunction=true."));
+			}
+
 			return Failure(Error.NotSupported(
 				"Roslyn cannot extract this selection. Select one complete expression, or one or more complete statements " +
 				"from the same block, that contain no jump (return/break/continue/goto) out of the selection unless the " +
@@ -170,6 +189,15 @@ public sealed class ExtractMethodTool
 		string signature = Signature(declaration);
 		string call = CallSite(calls[0]);
 
+		try
+		{
+			extracted = await RazorGeneratedChangeFolder.FoldAsync(solution, extracted, cancellationToken);
+		}
+		catch (RazorMappingException exception)
+		{
+			return Failure(RazorGeneratedChangeFolder.ErrorFor(exception));
+		}
+
 		IReadOnlyList<string> files;
 		if (checkOnly)
 		{
@@ -192,6 +220,8 @@ public sealed class ExtractMethodTool
 		var builder = new OutlineBuilder();
 		builder.Header("applied", !checkOnly);
 		builder.Header("method", finalName);
+		if (declared is not null)
+			builder.Header("symbolName", SymbolResolver.SignatureName(declared));
 		builder.Header("kind", declaration is LocalFunctionStatementSyntax ? "LocalFunction" : "Method");
 		builder.Header("signature", signature);
 		builder.Header("call", call);
@@ -342,7 +372,7 @@ public sealed class ExtractMethodTool
 						continue;
 					}
 
-					int line = diagnostic.Location.GetLineSpan().StartLinePosition.Line + 1;
+					int line = diagnostic.Location.GetDisplaySpan().StartLinePosition.Line + 1;
 					newErrors.Add($"{key} (line {line})");
 				}
 			}

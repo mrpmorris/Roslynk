@@ -9,7 +9,7 @@
 internal static class OutlineDescriptions
 {
 	/// <summary>The vocabulary a &lt;kind&gt; field can take.</summary>
-	public const string KindList = "method|property|field|event|class|struct|interface|enum|delegate";
+	public const string KindList = "method|localfunction|property|field|event|class|struct|interface|enum|delegate";
 
 	/// <summary>How a single &lt;loc&gt; is written.</summary>
 	public const string Loc = "a location is line:col, or startLine:startCol-endLine:endCol when it spans lines";
@@ -93,5 +93,8 @@ internal static class OutlineDescriptions
 		+ "'MyNamespace.MyType.MyMethod(int, string)' or 'MyNamespace.MyType.this[int]'; parameter names, "
 		+ "default values and nullable annotations are ignored, and fully-qualified parameter types are "
 		+ "accepted too. Written without a list the name matches every overload, which is reported as "
-		+ "error=Ambiguous with one candidate per overload.";
+		+ "error=Ambiguous with one candidate per overload. A local function is named as a member of the method "
+		+ "(or property, constructor, or outer local function) that declares it, e.g. 'MyNamespace.MyType.MyMethod.local' "
+		+ "or 'MyNamespace.MyType.MyMethod.outer.inner'; any segment may carry its own parameter list to pick an "
+		+ "overload, e.g. 'MyNamespace.MyType.MyMethod(int).local(string)'.";
 }

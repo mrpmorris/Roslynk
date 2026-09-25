@@ -9,6 +9,8 @@ Roslynk is an MCP server holding a live Roslyn compilation of a .NET solution. T
 
 **Default to Roslynk for all semantic work on `*.cs`, `*.cshtml` and `*.razor` files in the loaded solution.** Plain file tools remain only for what Roslynk doesn't cover: files outside the solution folder, file creation/deletion, and non-compiled files (`.csproj`, `.json`, `.md` — still editable safely via `apply_patch`).
 
+Tools that take a `documentPath` accept `.razor` and `.cshtml` files as well as `.cs`: give positions in the Razor file itself, inside its C# (`@code`/`@functions`, `@{ }`, expressions). Edits are written back to the Razor source in the file's own indentation. Analyzer (`IDE*`/`CA*`) fixes are not available in Razor files, and `_Imports.razor`/`_ViewImports.cshtml` usings are never removed. In a `.cshtml` view where a new method cannot be added, `extract_method` suggests `asLocalFunction=true`.
+
 Each tool's exact contract — parameters, output format, limits, error codes — lives in that tool's own MCP description. This skill covers *when* to use the tools and *how* to combine them; [references/tools.md](references/tools.md) holds the deeper reference (exact output envelopes, `#if` projection mechanics) for when a tool's behavior surprises you.
 
 ## Solution setup
@@ -26,18 +28,19 @@ Each tool's exact contract — parameters, output format, limits, error codes �
 | Find where a symbol is used, or who calls it | `find_references` / `get_callers` | text search finds false hits and misses partial classes, generated code, `#if` branches |
 | Jump from a usage to its declaration | `find_definition` | compiler binding; correct through overloads and shadowing |
 | Find implementations of an interface/abstract member | `find_implementations` | compiler's type graph |
-| See a type's members / what a name refers to | `get_members` / `get_symbol` | compiler's view; correct across partial classes |
+| See a type's members (and their local functions) / what a name refers to | `get_members` / `get_symbol` | compiler's view; correct across partial classes |
 | Read a member's implementation | `get_symbol_body` | returns the declaration verbatim |
 | Explore base/derived types | `get_type_hierarchy` | includes referenced-assembly base types |
 | Find a symbol by partial name | `search_symbols` | compiler-declared symbols |
 | Rename a symbol everywhere (incl. `.razor`/`.cshtml`) | `rename_symbol` | find-and-replace misses markup and same-named text |
 | Rename one parameter of a method/constructor/indexer | `rename_parameter` | also fixes named arguments, `<paramref>` docs and the override/interface family |
-| Apply a compiler-suggested fix | `get_code_actions` + `apply_code_action`, or `apply_code_fix` | hand-editing |
-| Extract statements or an expression into a new method | `extract_method` | hand-cutting code misses parameters, `ref`/`out` and return values |
+| Apply a compiler-suggested fix (incl. `.razor`/`.cshtml`) | `get_code_actions` + `apply_code_action`, or `apply_code_fix` | hand-editing |
+| Add a parameter to a method and its callers (incl. `.razor`/`.cshtml`) | `change_signature` | hand-editing misses call sites in markup |
+| Extract statements or an expression into a new method (incl. `@code`/`@functions`) | `extract_method` | hand-cutting code misses parameters, `ref`/`out` and return values |
 | Edit source or text files | `apply_patch` | keeps the in-memory model in sync; stale-guarded |
 | Remove unused usings / find dead code | `remove_unused_usings`, `find_dead_code`, `find_dead_conditionals` | eyeballing |
 
-All name arguments are fully-qualified (`Namespace.Type` or `Namespace.Type.Member`, with an optional parameter-type list to target one overload). On `error=Ambiguous` or `error=NotFound` the response lists `candidate=` lines that are exact names the same tool accepts — copy one back verbatim rather than guessing.
+All name arguments are fully-qualified (`Namespace.Type` or `Namespace.Type.Member`, with an optional parameter-type list to target one overload). A local function is a member of the method declaring it: `Namespace.Type.Method.local`, or `Namespace.Type.Method.outer.inner` when nested; put a parameter list on any segment to pick an overload (`Namespace.Type.Method(int).local`). On `error=Ambiguous` or `error=NotFound` the response lists `candidate=` lines that are exact names the same tool accepts — copy one back verbatim rather than guessing.
 
 ## Combine tools, don't chain calls
 

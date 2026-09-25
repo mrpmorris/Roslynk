@@ -7,6 +7,7 @@ using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -45,12 +46,15 @@ public sealed class ChangeSignatureTool
 		with its parameter types, identifying which overload was changed),
 		'updatedCallSites', 'status' header, a blank line, then one solution-relative changed-file
 		path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} The parameter must have a default so the change stays backward-compatible. v1 targets a
-		single ordinary method only: it refuses virtual/override/abstract methods, interface members and their
+		single ordinary method or local function only: it refuses virtual/override/abstract methods, interface members and their
 		implementations, partial methods, params methods, and constructors (returns error=NotSupported). Only
 		true invocation call sites are updated — method groups, nameof and cref references are left alone
 		(the parameter is optional, so they remain valid). An invalid parameter name, type or default value is
 		error=Invalid; a bare name that matches several overloads is error=Ambiguous with one candidate per
-		match. Pass checkOnly to preview the changed files without writing.
+		match. Methods declared in .razor/.cshtml @code blocks and call sites in Razor markup are supported: edits
+		are mapped back to the Razor source, and an edit that cannot be mapped is error=NotSupported (or
+		error=Conflict when the Razor text no longer matches), with nothing written. A file edited on disk
+		since it was loaded is error=Stale. Pass checkOnly to preview the changed files without writing.
 		""")]
 	public async Task<string> ChangeSignature(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
@@ -97,10 +101,16 @@ public sealed class ChangeSignatureTool
 			return Failure(Error.NotSupported(rejection));
 
 		SyntaxNode declarationNode = await method.DeclaringSyntaxReferences[0].GetSyntaxAsync();
-		if (declarationNode is not MethodDeclarationSyntax methodDeclaration)
-			return Failure(Error.NotSupported("The method is not an ordinary method declaration."));
+		ParameterListSyntax? parameterList = declarationNode switch
+		{
+			MethodDeclarationSyntax methodDeclaration => methodDeclaration.ParameterList,
+			LocalFunctionStatementSyntax localFunction => localFunction.ParameterList,
+			_ => null
+		};
+		if (parameterList is null)
+			return Failure(Error.NotSupported("The method is not an ordinary method or local function declaration."));
 
-		Document declarationDocument = solution.GetDocument(methodDeclaration.SyntaxTree)!;
+		Document declarationDocument = solution.GetDocument(declarationNode.SyntaxTree)!;
 
 		IReadOnlyList<CallSite> callSites = callSiteArgument is null
 			? []
@@ -108,11 +118,11 @@ public sealed class ChangeSignatureTool
 
 		ParameterSyntax parameter = ((ParameterListSyntax)SyntaxFactory.ParseParameterList(
 			$"({parameterType} {parameterName} = {defaultValue})")).Parameters[0].WithLeadingTrivia(SyntaxFactory.Space);
-		MethodDeclarationSyntax newDeclaration = methodDeclaration.WithParameterList(methodDeclaration.ParameterList.AddParameters(parameter));
-
 		var editor = new SolutionEditor(solution);
 		DocumentEditor declarationEditor = await editor.GetDocumentEditorAsync(declarationDocument.Id);
-		declarationEditor.ReplaceNode(methodDeclaration, newDeclaration);
+		// Replacing only the parameter list keeps the edit clear of the body, where call sites of a recursive
+		// method or of a local function's siblings are rewritten separately.
+		declarationEditor.ReplaceNode(parameterList, parameterList.AddParameters(parameter));
 
 		foreach (IGrouping<DocumentId, CallSite> group in callSites.GroupBy(callSite => callSite.DocumentId))
 		{
@@ -125,11 +135,34 @@ public sealed class ChangeSignatureTool
 			}
 		}
 
-		Solution updated = editor.GetChangedSolution();
+		Solution updated;
+		try
+		{
+			updated = await RazorGeneratedChangeFolder.FoldAsync(solution, editor.GetChangedSolution());
+		}
+		catch (RazorMappingException exception)
+		{
+			return Failure(RazorGeneratedChangeFolder.ErrorFor(exception));
+		}
 
-		IReadOnlyList<string> changed = checkOnly
-			? ApplyPipeline.GetChangedFilePaths(solution, updated)
-			: await ApplyPipeline.ApplyAsync(instance, updated);
+		IReadOnlyList<string> changed;
+		if (checkOnly)
+		{
+			changed = ApplyPipeline.GetChangedFilePaths(solution, updated);
+		}
+		else
+		{
+			try
+			{
+				changed = await ApplyPipeline.ApplyAsync(instance, updated, basedOn: solution);
+			}
+			catch (StaleWriteException exception)
+			{
+				return OutlineError.Format(
+					Error.Stale(exception.Message, [SolutionRelativePath.Of(solutionDirectory, exception.FilePath) ?? exception.FilePath]),
+					instance.CurrentModel.Status);
+			}
+		}
 
 		var builder = new OutlineBuilder();
 		builder.Header("applied", !checkOnly);
@@ -142,8 +175,8 @@ public sealed class ChangeSignatureTool
 
 	private static string? Reject(IMethodSymbol method, string parameterName)
 	{
-		if (method.MethodKind != MethodKind.Ordinary)
-			return "Only ordinary methods are supported (not constructors, operators, accessors, or local functions).";
+		if (method.MethodKind is not (MethodKind.Ordinary or MethodKind.LocalFunction))
+			return "Only ordinary methods and local functions are supported (not constructors, operators or accessors).";
 		if (method.IsVirtual || method.IsOverride || method.IsAbstract)
 			return "Virtual, override, and abstract methods are not supported; their signatures must change together across the hierarchy.";
 		if (method.ContainingType.TypeKind == TypeKind.Interface)

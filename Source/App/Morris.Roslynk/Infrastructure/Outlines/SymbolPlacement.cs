@@ -36,6 +36,10 @@ public static class SymbolPlacement
 		foreach (INamedTypeSymbol parent in parents)
 			node = node.Child($"{SymbolKindText.Of(parent)},{OutlineBuilder.Field(parent.Name)}");
 
+		// A local function nests under the member (and any outer local functions) declaring it.
+		foreach (ISymbol container in LocalFunctions.ContainerChain(symbol))
+			node = node.Child($"{SymbolKindText.Of(container)},{OutlineBuilder.Field(container.Name)}");
+
 		SymbolNode leaf = node.Child($"{SymbolKindText.Of(symbol)},{OutlineBuilder.Field(symbol.Name)}");
 
 		if (location is not null)

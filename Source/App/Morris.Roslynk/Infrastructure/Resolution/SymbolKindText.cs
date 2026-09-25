@@ -10,7 +10,10 @@ namespace Morris.Roslynk.Infrastructure.Resolution;
 public static class SymbolKindText
 {
 	public static string Of(ISymbol symbol) =>
-		symbol is INamedTypeSymbol type
-			? type.TypeKind.ToString().ToLowerInvariant()
-			: symbol.Kind.ToString().ToLowerInvariant();
+		symbol switch
+		{
+			INamedTypeSymbol type => type.TypeKind.ToString().ToLowerInvariant(),
+			IMethodSymbol { MethodKind: MethodKind.LocalFunction } => "localfunction",
+			_ => symbol.Kind.ToString().ToLowerInvariant()
+		};
 }
