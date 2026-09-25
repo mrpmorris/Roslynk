@@ -43,7 +43,16 @@ internal static class OutlineDescriptions
 		+ "prior response may be out of date; always re-query rather than reuse an earlier result.";
 
 	/// <summary>
-	/// The common preamble for outline-shaped tools: the output shape (a text block, not JSON) plus the
+	/// How symbol tools treat inactive #if/#else branches: Roslynk builds derived compilations toggling each
+	/// uniformly-defined preprocessor symbol and unions the results, so a symbol referenced only in an
+	/// inactive branch is still found (and still renamed).
+	/// </summary>
+	public const string ProjectionCoverage =
+		"Inactive #if/#else branches are covered: Roslynk builds derived compilations toggling each "
+		+ "uniformly-defined preprocessor symbol and unions the results, so a symbol used only in an "
+		+ "inactive branch is still found.";
+
+	/// <summary>The common preamble for outline-shaped tools: the output shape (a text block, not JSON) plus the
 	/// freshness contract.
 	/// </summary>
 	public const string CommonMethodInstructions =

@@ -38,7 +38,8 @@ public sealed class GetCodeActionsTool
 		title is free text and trails last). The actionId is opaque and must be passed back verbatim to
 		apply_code_action. Fixes are driven by the compiler and analyzer diagnostics at that span (so analyzer
 		ids such as IDE0005 are offered here too); refactorings by the span
-		itself. Line and column are 1-based. {OutlineDescriptions.ErrorBlock} Prefer discovering a fix here over editing by hand.
+		itself. Line and column are 1-based; the list is capped at 50 actions. A documentPath that is not a
+		solution-compiled .cs document is error=NotFound. {OutlineDescriptions.ErrorBlock} Prefer discovering a fix here over editing by hand.
 		""")]
 	public async Task<string> GetCodeActions(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

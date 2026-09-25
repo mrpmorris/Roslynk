@@ -37,6 +37,7 @@ public sealed class GetCallersTool
 	[Description(
 		$"""
 		Finds the methods that call the resolved method (by fully-qualified name).
+		{OutlineDescriptions.ProjectionCoverage}
 		{OutlineDescriptions.CommonMethodInstructions}
 		Callers are grouped file -> namespace -> containing type -> calling member, each leaf showing the
 		caller's declaration location:

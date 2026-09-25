@@ -38,6 +38,7 @@ public sealed class FindImplementationsTool
 		$"""
 		Finds the implementations or overrides of an interface, interface member, or abstract member, resolved
 		by fully-qualified name.
+		{OutlineDescriptions.ProjectionCoverage}
 		{OutlineDescriptions.CommonMethodInstructions}
 		Implementors are grouped file -> namespace, each as '<typeKind>,<typeName>,<loc>' where {OutlineDescriptions.Loc}:
 		  resolvedSymbol=<name, parameter types included for a method or indexer>

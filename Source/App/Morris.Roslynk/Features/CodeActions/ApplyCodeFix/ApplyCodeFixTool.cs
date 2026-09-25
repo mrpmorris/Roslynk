@@ -46,7 +46,10 @@ public sealed class ApplyCodeFixTool
 		$"""
 		Applies the code fix for the first occurrence of a diagnostic id (a compiler id such as CS0219, or an
 		analyzer id such as IDE0005) in a .cs file; the
-		quick path when you already know which diagnostic to clear, without first listing actions. Returns a
+		quick path when you already know which diagnostic to clear, without first listing actions. Errors: a
+		documentPath that is not a solution-compiled .cs document, or no such diagnostic in the file, is
+		error=NotFound; a diagnostic with no registered fix is error=NotSupported; a fix that produced no
+		changes is error=Conflict. Returns a
 		text result, not JSON: 'applied', 'action', 'status' header, a blank line, then one
 		solution-relative changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} Written atomically through the same safe write path. Pass
 		checkOnly to preview without writing. Prefer this over hand-editing the file to clear a diagnostic so

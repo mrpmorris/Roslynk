@@ -42,17 +42,24 @@ public sealed class RenameSymbolTool
 		OpenWorld = false)]
 	[Description(
 		$"""
-		Renames a symbol and all its references across the solution using Roslyn (correct across partial
-		classes and code-behind; string literals and comments are left untouched). Symbols declared or
-		referenced in .razor/.cshtml files are renamed by rewriting those files directly — edits computed
-		against the Razor-generated code are mapped back through the compiler's #line directives, covering
-		@code blocks, markup expressions, and component-attribute usages in other components' markup.
-		Returns a text result, not
-		JSON: 'applied', 'resolvedSymbol' (the name as resolved, before the rename), 'status' header, a blank line, then one
-		solution-relative changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} Refuses an invalid identifier and reports candidates when
-		the name is ambiguous. Pass checkOnly to preview the files that would change without writing. Prefer
-		this over a textual find/replace rename; it renames the symbol itself, so it never touches unrelated
-		same-named text.
+		Renames a symbol and all its references across the solution using Roslyn, resolved by the
+		fully-qualified symbolName (an overload is targeted by its parameter-type list). The rename is correct
+		across partial classes, code-behind, every #if/#else branch and every target framework; string
+		literals and comments are left untouched.
+		{OutlineDescriptions.ProjectionCoverage}
+		Symbols declared or referenced in .razor/.cshtml files are renamed by rewriting those files directly
+		— edits computed against the Razor-generated code are mapped back through the compiler's #line
+		directives, covering @code blocks, markup expressions, and component-attribute usages in other
+		components' markup. If a Razor edit cannot be mapped and verified, the rename aborts before anything
+		is written (error=Conflict or error=NotSupported).
+		Returns a text result, not JSON: 'applied' (N for a checkOnly preview), 'resolvedSymbol' (the name
+		as resolved, before the rename), 'status' header, a blank line, then one solution-relative
+		changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness}
+		Errors: an invalid identifier is refused; an ambiguous name returns one candidate= line per match,
+		and a name that matches nothing returns fuzzy suggestions — in either case copy a candidate back
+		verbatim to target a single symbol. Pass checkOnly to preview the files that would change without
+		writing. Prefer this over a textual find/replace rename; it renames the symbol itself, so it never
+		touches unrelated same-named text.
 		""")]
 	public async Task<string> RenameSymbol(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

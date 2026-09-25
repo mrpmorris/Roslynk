@@ -1,6 +1,8 @@
 # Roslynk tool reference
 
-Detailed per-tool reference. Read the section you need; SKILL.md carries the workflows.
+Deep per-tool reference: the operation-specific contract (exact envelopes, mechanics, edge cases) behind
+what each tool's published MCP description summarizes. Read the section you need; SKILL.md carries the
+workflows and the tool descriptions carry the concise contract for discovery.
 
 ## Contents
 

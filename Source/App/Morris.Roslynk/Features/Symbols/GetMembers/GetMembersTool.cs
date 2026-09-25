@@ -40,6 +40,7 @@ public sealed class GetMembersTool
 		$"""
 		Lists a type's members (methods, properties, fields, events, nested types), resolved by
 		fully-qualified name.
+		{OutlineDescriptions.ProjectionCoverage}
 		{OutlineDescriptions.CommonMethodInstructions}
 		Members are grouped by the file that declares them (or '<metadata>' for a referenced assembly), each as:
 		  resolvedType=<fully-qualified type>

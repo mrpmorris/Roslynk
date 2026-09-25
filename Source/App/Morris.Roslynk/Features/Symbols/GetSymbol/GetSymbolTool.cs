@@ -39,6 +39,7 @@ public sealed class GetSymbolTool
 	[Description(
 		$"""
 		Returns a symbol's declaration, resolved by fully-qualified name.
+		{OutlineDescriptions.ProjectionCoverage}
 		{OutlineDescriptions.CommonMethodInstructions}
 		A single source match returns a '#project=<project>', '#path=<relative/path.cs>' and
 		'#loc=<startLine:startCol-endLine:endCol>' header, a blank line, then the verbatim declaration cut

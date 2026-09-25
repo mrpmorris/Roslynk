@@ -57,7 +57,9 @@ public sealed class RemoveUnusedUsingsTool
 	[Description(
 		$"""
 		Removes unnecessary using directives (the compiler's CS8019) across the solution, or in one file when
-		documentPath is given; the recurring cleanup after moves and renames. Returns a text result, not JSON:
+		documentPath is given; the recurring cleanup after moves and renames. A documentPath that is not a
+		solution-compiled .cs document is error=NotFound; if there is nothing to remove the call still
+		succeeds with applied=N and removedCount=0 (not an error, and safe to re-run). Returns a text result, not JSON:
 		'applied', 'removedCount', 'status' header, a blank line, then one solution-relative
 		changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} Written atomically through the same safe write path as the other tools. Pass
 		checkOnly to preview the changed files without writing.

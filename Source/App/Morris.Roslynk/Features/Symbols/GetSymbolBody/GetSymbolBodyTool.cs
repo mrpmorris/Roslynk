@@ -43,6 +43,7 @@ public sealed class GetSymbolBodyTool
 		indexer, event, field, local function or type - resolved by fully-qualified name. Use this instead of
 		reading the file (or grepping it) when you need to see what a member actually does; get_symbol gives
 		only the signature, this gives the whole declaration including its body.
+		{OutlineDescriptions.ProjectionCoverage}
 		{OutlineDescriptions.CommonMethodInstructions}
 		A symbol with one declaration returns '#project=<project>', '#path=<relative/path.cs>',
 		and '#loc=<startLine:startCol-endLine:endCol>' headers, a blank line, then the

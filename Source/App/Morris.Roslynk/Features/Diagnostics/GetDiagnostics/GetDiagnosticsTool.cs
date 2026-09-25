@@ -54,6 +54,9 @@ public sealed class GetDiagnosticsTool
 		Analyzers (NetAnalyzers / IDE rules) run by default; set includeAnalyzers false for a faster compiler-only pass.
 		{OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to hunt for problems, and over running
 		`dotnet build`; it returns the compiler's and analyzers' own diagnostics with exact locations.
+		Multi-targeted projects report diagnostics across their loaded target frameworks. Diagnostic ids that
+		exist only to trigger a code fix (they carry no message and accompany a public rule, as IDE0005's
+		does) are not listed — fix the public id instead.
 		""")]
 	public async Task<string> GetDiagnostics(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

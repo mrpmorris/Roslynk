@@ -42,7 +42,8 @@ public sealed class ApplyPatchTool
 		unambiguous. Edits existing files only; creation/deletion, binary files, and paths outside the solution
 		folder are rejected as 'error=NotSupported' with 'rejected=<path>' lines. Pass baseVersions (the
 		documentVersion each file was read at) to be told if a file moved since (returned as 'error=Stale' with
-		'stale=<path>' lines); pass checkOnly to validate without writing.
+		'stale=<path>' lines); pass checkOnly to validate without writing. An unmatched or ambiguous hunk is
+		error=Conflict naming the file and reason; a patch with no file sections is error=Invalid.
 		""")]
 	public async Task<string> ApplyPatch(
 		[Description("Solution handle returned by open_solution.")] string solutionId,

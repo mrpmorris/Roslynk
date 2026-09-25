@@ -1,141 +1,56 @@
 ---
 name: roslynk
-description: How to use the Roslynk MCP tools (mcp__roslynk__*) effectively for C# work. Use this whenever a Roslynk server is connected and the task touches C# code in a solution — checking for compile errors or warnings, finding a symbol's definition, references, callers, or implementations, renaming symbols, applying code fixes or refactorings, finding dead code, or editing .cs files — even if the user never says "Roslynk". Consult it before reaching for grep, file reads, hand-written edits, or `dotnet build` on C# code: Roslynk's semantic tools are faster and more correct for all of those jobs.
+description: How to use the Roslynk MCP tools (mcp__roslynk__*) effectively for .NET work. Use this whenever a Roslynk server is connected and the task touches *.cs, *.cshtml or *.razor files in a solution — checking for compile errors or warnings, finding a symbol's definition, references, callers, or implementations, renaming symbols, applying code fixes or refactorings, finding dead code, or editing those files — even if the user never says "Roslynk". Consult it before reaching for grep, file reads, hand-written edits, or `dotnet build` on such files: Roslynk's semantic tools are faster and more correct for all of those jobs.
 ---
 
 # Using Roslynk
 
-Roslynk is an MCP server that holds a live Roslyn compilation of a C# solution. Every question you'd normally answer with grep, file reads, or `dotnet build` — "where is this used?", "does it compile?", "rename this safely" — it answers from the compiler's symbol model instead. That matters because text search lies: it hits comments, strings, and unrelated same-named members, and it misses partial classes, generated code, and `#if` branches. Roslynk doesn't.
+Roslynk is an MCP server holding a live Roslyn compilation of a .NET solution. The questions you'd normally answer with grep, file reads, or `dotnet build` — "where is this used?", "does it compile?", "rename this safely" — it answers from the compiler's symbol model instead. Text search lies: it hits comments, strings and unrelated same-named members, and misses partial classes, generated code and `#if` branches. Roslynk doesn't.
 
-**Default to Roslynk for C# semantic work.** Fall back to plain file tools only for what Roslynk doesn't cover: non-C# files, file creation/deletion, and reading a method body once you know its location.
+**Default to Roslynk for all semantic work on `*.cs`, `*.cshtml` and `*.razor` files in the loaded solution.** Plain file tools remain only for what Roslynk doesn't cover: files outside the solution folder, file creation/deletion, and non-compiled files (`.csproj`, `.json`, `.md` — still editable safely via `apply_patch`).
 
-**When you need several facts before making a change, send them as one `multi_query` call rather than as sequential calls.** `multi_query` runs several read-only tools in one round trip against a single snapshot of the solution — resolve a symbol, list its members, and find its references in one call. Worked example (argument names are each tool's own — `get_symbol` takes `symbolName`, `get_members` takes `typeName`):
+Each tool's exact contract — parameters, output format, limits, error codes — lives in that tool's own MCP description. This skill covers *when* to use the tools and *how* to combine them; [references/tools.md](references/tools.md) holds the deeper reference (exact output envelopes, `#if` projection mechanics) for when a tool's behavior surprises you.
 
-```json
-{
-  "solutionId": "C:/path/MySolution.slnx",
-  "operations": [
-    { "tool": "get_symbol",      "arguments": { "symbolName": "MyLib.Ledger" } },
-    { "tool": "get_members",     "arguments": { "typeName": "MyLib.Ledger" } },
-    { "tool": "find_references", "arguments": { "symbolName": "MyLib.Ledger", "maxResults": 200 } }
-  ]
-}
-```
+## Solution setup
 
-The permitted tools are exactly the 11 read-only query tools (the schema's `tool` enum lists them); operations are independent, one result comes back per operation in request order, and a failing operation returns its `error=` block in its own slot without aborting the batch. Write tools, `get_diagnostics` and `get_solution_status` are not multi-queryable (`get_diagnostics`/`get_solution_status` are ordinary single calls; a write tool is not expressible in the enum and fails the call at binding). Over 25 operations or the output budget, extra slots come back `error=Truncated` with `truncatedSlots=<n>` — re-send exactly those operations (from your own copy of the request; slots carry index and tool name, not the arguments) to continue. See the multi_query section of [references/tools.md](references/tools.md) for the envelope format.
+1. Call `open_solution` with the absolute path to the `.sln`/`.slnx`. It returns immediately and loads in the background; the returned `solutionId` is the handle every other tool needs.
+2. While loading, other tools return `error=Indexing` — retry the call shortly, or poll `get_solution_status` (~1s) and report progress. Do **not** fall back to reading or editing files directly; loading finishes within seconds to a minute.
+3. `open_solution` is idempotent and the daemon keeps solutions warm across sessions — calling it again is cheap and safe.
+4. Never call `reload_solution` on your own initiative: the file watcher picks up all changes, including your own edits. If results look stale (branch switch, `dotnet restore`, SDK/props change), *suggest* it to the user.
 
-## Getting started
+## Choose semantic tools over text search
 
-1. Call `open_solution` with the absolute path to the `.sln`/`.slnx`. It returns immediately and loads in the background; the `solutionId` it returns (which is just the solution path) is the handle every other tool needs.
-2. If a call returns `error=Indexing`, the load hasn't finished. Retry the same call shortly, or poll `get_solution_status` (~1s interval) and report loading progress. **Do not fall back to reading or editing files directly** — loading finishes within seconds to a minute.
-3. `open_solution` is idempotent and the daemon keeps solutions warm across sessions, so calling it again is cheap and safe.
-
-Never call `reload_solution` on your own initiative. File changes — including edits made by you, the user, or other tools — are picked up automatically by Roslynk's file watcher. If something looks stale (e.g. after a branch switch, `dotnet restore`, or an SDK/props change), *suggest* the user run reload; only call it when they explicitly say so.
-
-## Choosing the right tool
-
-| You want to... | Use | Not |
+| You want to... | Use | Why not grep / reading files |
 |---|---|---|
-| Check whether the code compiles / see warnings | `get_diagnostics` | `dotnet build` (minutes vs. instant) |
-| Find where a symbol is used | `find_references` | grep (false hits in strings/comments) |
-| Find who calls a method | `get_callers` | grep |
-| Jump from a usage to its declaration | `find_definition` (file + line + column) | scrolling files |
-| Find implementations of an interface/abstract member | `find_implementations` | grep |
-| See a type's members and where they're declared | `get_members` | reading the whole file |
-| Identify what a name refers to / get its signature | `get_symbol` | reading files |
-| Read a member's implementation / body | `get_symbol_body` | grepping or reading the file |
-| Explore base types / derived types | `get_type_hierarchy` | manual tracing |
-| Find a symbol by partial name | `search_symbols` | grep across the repo |
-| Rename a symbol everywhere (incl. `.razor`) | `rename_symbol` | find-and-replace |
-| Apply a compiler-suggested fix | `apply_code_fix` / `get_code_actions` → `apply_code_action` | hand-editing |
-| Edit source/text files | `apply_patch` (unified diff) | host editor Write/Edit |
-| Remove unused `using` directives | `remove_unused_usings` | hand-editing |
-| Add an optional parameter to a method | `change_signature` | hand-editing call sites |
-| Find unused members / dead `#if` branches | `find_dead_code` / `find_dead_conditionals` | eyeballing |
+| Check it compiles / see warnings | `get_diagnostics` | instant vs `dotnet build` |
+| Find where a symbol is used, or who calls it | `find_references` / `get_callers` | text search finds false hits and misses partial classes, generated code, `#if` branches |
+| Jump from a usage to its declaration | `find_definition` | compiler binding; correct through overloads and shadowing |
+| Find implementations of an interface/abstract member | `find_implementations` | compiler's type graph |
+| See a type's members / what a name refers to | `get_members` / `get_symbol` | compiler's view; correct across partial classes |
+| Read a member's implementation | `get_symbol_body` | returns the declaration verbatim |
+| Explore base/derived types | `get_type_hierarchy` | includes referenced-assembly base types |
+| Find a symbol by partial name | `search_symbols` | compiler-declared symbols |
+| Rename a symbol everywhere (incl. `.razor`/`.cshtml`) | `rename_symbol` | find-and-replace misses markup and same-named text |
+| Apply a compiler-suggested fix | `get_code_actions` + `apply_code_action`, or `apply_code_fix` | hand-editing |
+| Edit source or text files | `apply_patch` | keeps the in-memory model in sync; stale-guarded |
+| Remove unused usings / find dead code | `remove_unused_usings`, `find_dead_code`, `find_dead_conditionals` | eyeballing |
 
-To read a method's *body*, use `get_symbol_body` — it returns the whole declaration verbatim, so no file read is needed. Pass `includeLeadingTrivia: true` when you also want its XML docs and preceding comments. `get_members`/`get_symbol` still give you the file path and span when you want the location rather than the text.
+All name arguments are fully-qualified (`Namespace.Type` or `Namespace.Type.Member`, with an optional parameter-type list to target one overload). On `error=Ambiguous` or `error=NotFound` the response lists `candidate=` lines that are exact names the same tool accepts — copy one back verbatim rather than guessing.
 
-## Impact analysis / find usages
+## Combine tools, don't chain calls
 
-Trigger phrases: "what uses X", "find usages", "who calls X", "what breaks if I change X", "is X still used" — and always before renaming a symbol or changing a signature. Answer with Roslynk, not with grep/rg/Grep over `*.cs`, `*.cshtml` or `*.razor`: text search misses partial classes, generated code and overloads, and wrongly matches identically-named symbols, while the compiler model finds real usages (including inactive `#if` branches).
+When you need several facts before making a change, send them as **one `multi_query`** call instead of sequential calls: every operation runs against a single snapshot, so the facts can never disagree with each other. `multi_query` accepts only the read-only query tools, and each operation uses exactly that tool's own parameter names — a wrong key is `error=Invalid` naming the key, never silently ignored. Over 25 operations or the output budget, remaining slots return `error=Truncated` with `truncatedSlots=<n>`: re-send exactly those operations, passing the response's `snapshot=` value as `expectSnapshot`, so a continuation that would straddle a solution change is refused with `error=Stale` instead of mixing states. The envelope format is in the multi_query section of [references/tools.md](references/tools.md).
 
-Send the whole analysis as ONE `multi_query` call so every section reads the same snapshot:
+**Impact analysis** — before renaming a symbol or changing a signature, and whenever someone asks "what uses X", "who calls X", "what breaks if I change X": batch `get_symbol` + `find_references` + `get_callers` + `find_implementations` + `get_type_hierarchy` in one call, pointing each at the member or type you're changing (`get_callers` takes `methodName`, `get_type_hierarchy` takes `typeName`, the others `symbolName`). Then follow each reference with `get_symbol_body` to read the calling convention before editing. Answer with Roslynk, never with grep over `*.cs`/`*.cshtml`/`*.razor` — text search both misses real usages and wrongly matches identically-named symbols.
 
-```json
-{ "solutionId": "C:/path/MySolution.slnx", "operations": [
-  { "tool": "get_symbol",           "arguments": { "symbolName": "MyLib.Ledger" } },
-  { "tool": "find_references",      "arguments": { "symbolName": "MyLib.Ledger" } },
-  { "tool": "get_callers",          "arguments": { "methodName": "MyLib.Ledger.SetTotal" } },
-  { "tool": "find_implementations", "arguments": { "symbolName": "MyLib.ILedger" } },
-  { "tool": "get_type_hierarchy",   "arguments": { "typeName": "MyLib.Ledger" } }
-]}
-```
+Results are **snapshots** of a solution that is edited live: re-query after any write rather than reusing an earlier response.
 
-Each operation takes that tool's own parameter names — `get_callers` is `methodName`, `get_type_hierarchy` is `typeName`, the others are `symbolName` — and a wrong or misspelled name is rejected (`error=Invalid`), so copy them exactly and never send `solutionId` inside an operation. Point `find_references`/`get_callers` at the member you're changing, `find_implementations` at the interface/abstract member, and `get_type_hierarchy` at the type. For "what breaks if I change X", follow each reference with `get_symbol_body` to read the calling convention before editing.
+## Preview broad edits before writing
 
-## Addressing symbols
+Every write tool takes `checkOnly=true`, which returns the changed-file list without writing anything. Use it whenever a change might be broad — a rename of a widely-used symbol, a whole-solution cleanup — and confirm the scope before applying. Write tools are atomic and stale-guarded: if a target file changed on disk since Roslynk read it, the whole operation is rejected with `error=Stale` and nothing is written — recompute from current state and retry. Writes go straight to disk and advance the in-memory model immediately, so no reload or rebuild is ever needed afterwards.
 
-Most tools take a **fully-qualified name**: `Namespace.Type` or `Namespace.Type.Member` (no `global::` prefix). Names also resolve against referenced assemblies, so `System.String.Substring` works.
+## Check diagnostics after every change
 
-A method or indexer may carry a parameter-type list to target one overload: `Namespace.Type.Method(int, string)`, `Namespace.Type.this[int]`, `Namespace.Type.Method<T>(T)`. Parameter names, default values and nullable annotations are ignored, and fully-qualified parameter types work too, so `Method(System.Int32)` and `Method(int value = 0)` both hit `Method(int)`. Written *without* a list the name matches every overload, which is reported as `error=Ambiguous`.
+The core edit cycle: make the change (any write tool) → `get_diagnostics` (bare call; the header always reports error/warning/info/hidden counts) → if counts are non-zero, re-call with `includeErrors=true` to see the details → fix via `apply_code_fix` (you already know the id) or `get_code_actions` + `apply_code_action` → repeat until clean. This replaces `dotnet build` during development. Pass `includeAnalyzers=false` for a faster compiler-only pass when style rules don't matter yet.
 
-The intended loop when a name doesn't resolve cleanly:
-
-- `error=Ambiguous` → the response lists one `candidate=` line per match, each distinguishable. A candidate is exactly what the same tool accepts: copy one back verbatim as the name and it resolves to that one symbol.
-- `error=NotFound` → `candidate=` lines carry fuzzy suggestions. If none fit, try `search_symbols` with a substring.
-
-Two tools are position-based instead (file path + 1-based line and column): `find_definition` (you have a cursor location, not a name) and `get_code_actions` (actions are inherently positional).
-
-## Reading results
-
-Every tool returns a compact text outline, not JSON: `key=value` header lines, then a blank line, then a tab-indented body (project → folders → file → namespace → type → member, with `kind,name,line:col` leaves). Booleans are `Y`/`N`. A `status=` header appears only when the solution isn't Ready — its absence means Ready.
-
-Errors are header-only: `error=<code>` plus `errorMessage=`. Codes you'll act on: `Indexing` (retry same call), `Ambiguous`/`NotFound` (use the `candidate=` lines), `Stale` (re-read the file, recompute your edit), `Conflict` (re-run the discovery step, e.g. `get_code_actions`), `NotSupported`, `Invalid`.
-
-Watch for `truncated=Y`: results were capped (`find_references` defaults to 100, `search_symbols` 50, `find_dead_code` 50). Raise `maxResults` or narrow the query if you need everything.
-
-**Results are snapshots.** The solution is edited live, so re-query rather than reusing an earlier response — especially after any write. Every slot in one `multi_query` response is computed against a single snapshot, so results inside one response can never disagree; across two responses they can — that is what the `snapshot=` header and the `expectSnapshot` parameter are for (a continuation naming a superseded snapshot is refused with `error=Stale`; re-run the whole batch).
-
-**Leave defaulted parameters alone** unless you specifically need the non-default behavior. One that surprises people: `get_diagnostics`' include flags all default to *false*, but the header always reports `errors=/warnings=/infos=/hidden=` counts — so a bare call is a cheap "does it compile?" check, and you opt into detail (`includeErrors=true`, ...) only when counts are non-zero.
-
-## Editing code
-
-All write tools (`apply_patch`, `rename_symbol`, `apply_code_action`, `apply_code_fix`, `remove_unused_usings`, `change_signature`) share these behaviors:
-
-- **`checkOnly=true` previews** the changed-file list without writing. Use it when a change might be broad (a rename of a widely-used symbol) or when you want to confirm scope before committing.
-- Writes are **atomic and stale-guarded**: if a target file changed on disk since Roslynk read it, the whole batch is rejected with `error=Stale` rather than clobbering the concurrent edit. On `Stale`, just recompute from current state and retry.
-- Writes go straight to disk and the in-memory model advances with them, so a `get_diagnostics` immediately after a write reflects the change — no reload, no rebuild step.
-
-Prefer `apply_patch` over the host editor's Write/Edit for files inside the solution folder — it keeps Roslynk's model in sync for compiled files and gets you the stale-write protection. Its rules:
-
-- Standard git unified diff, but hunks are **content-anchored, not line-number-anchored** — include enough surrounding context that each hunk matches exactly one place, or you'll get `error=Conflict`.
-- Targets any **existing text file inside the solution folder**: compiled `.cs` and `.razor`/`.cshtml` documents stay in sync with the model; other files (`.csproj`, `.json`, `.md`, ...) are written to disk only. File creation, deletion, binary files, `obj`/`bin` paths, and anything outside the solution folder are rejected (`error=NotSupported`).
-
-### The diagnostics loop
-
-The core edit cycle: make a change (via any write tool) → `get_diagnostics` (bare call, read the counts) → if errors appeared, `includeErrors=true` to see them → fix → repeat. This replaces `dotnet build` entirely during development; results are effectively instant because the compilation is already in memory. Pass `includeAnalyzers=false` for an even faster compiler-only pass when you don't care about style rules yet.
-
-### Fixing diagnostics
-
-Two paths:
-
-- **Quick path** — you already know the diagnostic ID (from `get_diagnostics`): `apply_code_fix(documentPath, diagnosticId)` fixes the first occurrence of that ID in the file. One call, no handle juggling. Analyzer IDs work too (`IDE0005` and the like), not just `CS*`.
-- **Full path** — you want to see what's on offer at a location: `get_code_actions(documentPath, line, column)` lists fixes and refactorings with opaque `actionId`s; pass one verbatim to `apply_code_action`. Action IDs aren't cached server-side — if the code changed in between, you'll get `error=Conflict`; re-run `get_code_actions` and pick again.
-
-### Rename and signature changes
-
-`rename_symbol` is compiler-correct across partial classes, all `#if` branches, every target framework, and **Razor**: usages in `.razor`/`.cshtml` markup and `@code` blocks are rewritten in the actual Razor source. Trust it over any textual replace. The new name must be a valid C# identifier.
-
-`change_signature` (v1) does exactly one thing: append a single *optional* parameter to an ordinary method, optionally threading an argument into every call site. It refuses virtual/override/abstract/interface/partial methods, constructors, and operators — for those, fall back to `apply_patch` plus `find_references` to update call sites yourself.
-
-### Dead-code cleanup
-
-`find_dead_code` reports candidates with `High`/`Medium` confidence and a reason — it never deletes. It already excludes interface implementations, overrides, test methods, generated code, and DI-attributed members, but treat results as *candidates*: public API may be used externally, reflection can hide uses. Confirm intent with the user before bulk-deleting. The reported `loc` is the full declaration span, ready to hand to `apply_patch` for removal. Each unused overload is reported as its own leaf, told apart by its `loc` — the leaf name carries no parameter list, so passing it to `get_symbol_body` returns `error=Ambiguous` and you pick from the candidates. On large solutions pass `scope` (an FQN prefix) — the scan is per-symbol and whole-solution scans are slow. `find_dead_conditionals` similarly flags `#if` branches never compiled under any loaded configuration, with the caveat that configurations Roslynk hasn't loaded (CI-only defines, missing workloads) can produce false positives.
-
-## Limits to remember
-
-- Roslynk covers **.cs files compiled in the loaded solution** (plus Razor via its generated code, read-mostly — only `rename_symbol` writes back to `.razor`/`.cshtml`). `apply_patch` can edit any *existing* text file under the solution folder (`.csproj`/`.json`/`.md` included), but only compiled `.cs`/`.razor` documents stay synced with the model; *creating* new files is the host's job.
-- `search_symbols` searches source-declared symbols only, not referenced assemblies; `get_symbol`/FQN resolution *does* reach metadata.
-- Multi-targeted projects report diagnostics across their loaded target frameworks.
-
-For exact parameter lists, output shapes, and per-tool gotchas, read [references/tools.md](references/tools.md).
+`find_dead_code` and `find_dead_conditionals` never delete anything — treat the results as candidates (public or reflection-used API can be a false positive), confirm intent with the user before bulk-removing, and hand each reported `loc` span to `apply_patch`.
