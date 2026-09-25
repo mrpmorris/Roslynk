@@ -56,7 +56,7 @@ public sealed class CodeActionService
 					continue;
 				}
 
-				foreach (CodeAction action in registered)
+				foreach (CodeAction action in registered.SelectMany(Leaves))
 					discovered.Add(new DiscoveredAction(action, "Fix", CodeActionCatalog.PublicId(diagnostic.Id)));
 			}
 		}
@@ -74,7 +74,7 @@ public sealed class CodeActionService
 				continue;
 			}
 
-			foreach (CodeAction action in registered)
+			foreach (CodeAction action in registered.SelectMany(Leaves))
 				discovered.Add(new DiscoveredAction(action, "Refactoring", null));
 		}
 
@@ -163,5 +163,13 @@ public sealed class CodeActionService
 		return textLine.Start + character;
 	}
 
-	private static string KeyOf(CodeAction action) => action.EquivalenceKey ?? action.Title;
+	/// <summary>
+	/// The applicable actions under <paramref name="action"/>: itself, or - for a group such as "Add using"
+	/// offering several namespaces - its nested actions, since a group produces no changes of its own.
+	/// </summary>
+	private static IEnumerable<CodeAction> Leaves(CodeAction action) =>
+		action.NestedActions.IsDefaultOrEmpty ? [action] : action.NestedActions.SelectMany(Leaves);
+
+	/// <summary>The identity an actionId carries for an action: its equivalence key, or its title when it has none.</summary>
+	public static string KeyOf(CodeAction action) => action.EquivalenceKey ?? action.Title;
 }

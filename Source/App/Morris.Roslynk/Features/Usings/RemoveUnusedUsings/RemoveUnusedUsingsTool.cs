@@ -155,7 +155,7 @@ public sealed class RemoveUnusedUsingsTool
 			: documentPath is null ? await RazorSourcesAsync(solution, cancellationToken) : [];
 		foreach (RazorSourceDocument razorSource in razorSources)
 		{
-			(updated, int razorRemoved) = await RazorUnusedUsings.RemoveAsync(updated, razorSource, firstOnly: false, cancellationToken);
+			(updated, int razorRemoved) = await RazorUnusedUsings.RemoveAsync(updated, razorSource, line: null, cancellationToken);
 			removed += razorRemoved;
 		}
 

@@ -152,15 +152,25 @@ Every tool that takes a `documentPath` (`get_code_actions`, `apply_code_fix`, `e
 ## Code actions
 
 ### get_code_actions
-`solutionId`, `documentPath` (.cs, .razor or .cshtml, absolute or solution-relative), `line`, `column` (1-based), `endLine`/`endColumn` (optional, for a selection span). Returns lines `<actionId>,<kind>,<diagnosticId> <title>`; `kind` ∈ `Fix|Refactoring`; `diagnosticId` is `-` for refactorings. Fixes cover analyzer diagnostics as well as compiler ones, so `IDE*` and `CA*` ids appear here when the project references the analyzer that reports them. Capped at 50. `actionId` is opaque — pass it back verbatim. In a `.razor`/`.cshtml` file the position must be inside C# (see [Razor and CSHTML](#razor-and-cshtml)); a position in markup → `NotSupported`. Actions are listed before their edits are computed, so an action whose edits cannot be mapped back to the Razor file is only refused when applied.
+`solutionId`, `documentPath` (.cs, .razor or .cshtml, absolute or solution-relative), `line`, `column` (1-based), `endLine`/`endColumn` (optional, for a selection span). Returns lines `<actionId>,<kind>,<diagnosticId> <title>`; a grouped action (such as the choices under "Generate type") is listed as its individual actions; `kind` ∈ `Fix|Refactoring`; `diagnosticId` is `-` for refactorings. Fixes cover analyzer diagnostics as well as compiler ones, so `IDE*` and `CA*` ids appear here when the project references the analyzer that reports them. Capped at 50. `actionId` is opaque — pass it back verbatim. In a `.razor`/`.cshtml` file the position must be inside C# (see [Razor and CSHTML](#razor-and-cshtml)); a position in markup → `NotSupported`. Actions are listed before their edits are computed, so an action whose edits cannot be mapped back to the Razor file is only refused when applied.
 
 ### apply_code_action
 `solutionId`, `actionId` (from get_code_actions), `checkOnly` (default false). The action is re-resolved at apply time, not cached — if the code changed since discovery, `error=Conflict`: re-run `get_code_actions`. Malformed id → `error=Invalid`. Returns `applied`, `action`, changed files. For an action discovered in a `.razor`/`.cshtml` file the edits are written to the Razor source; an unmappable edit → `NotSupported`, mismatched Razor text → `Conflict`, nothing written. External edit since load → `Stale`.
 
 ### apply_code_fix
-`solutionId`, `documentPath` (.cs, .razor or .cshtml), `diagnosticId` (a compiler id such as `CS0219`, or an analyzer id such as `IDE0005`), `checkOnly` (default false). Quick path: fixes the first occurrence of that diagnostic in the file without an actionId round-trip. No such diagnostic in the file → `NotFound`; no registered fix → `NotSupported`; fix produced no changes → `Conflict`; external edit since load → `Stale`.
+`solutionId`, `documentPath` (.cs, .razor or .cshtml), `diagnosticId` (a compiler id such as `CS0219`, or an analyzer id such as `IDE0005`), `line`, `column` (**required**, 1-based), `checkOnly` (default false). Quick path from `get_diagnostics`: pass an entry's id and its `line:col` unchanged, and the diagnostic with that id whose span contains the position (start and end included) is fixed, without an actionId round-trip. Other occurrences of the same id are left alone.
 
-In a `.razor`/`.cshtml` file only diagnostics located in that file count, and the fix is written to the Razor source (unmappable → `NotSupported`, mismatched text → `Conflict`). `CS8019`/`IDE0005` remove the file's first unnecessary `@using` line, the same analysis as `remove_unused_usings`.
+- No diagnostic with that id at the position → `NotFound`; `line` or `column` below 1 → `Invalid`; no registered fix → `NotSupported`; fix produced no changes → `Conflict` (no candidates); external edit since load → `Stale`.
+- **Several fixes → hand off to `apply_code_action`.** When the diagnostic has more than one distinct fix (e.g. `CS0535`: implement interface / implement all members explicitly; `CS0246`: add a `using` / fully qualify / generate the type), nothing is written and the result is `error=Conflict` with one `candidate=<actionId>,Fix,<diagnosticId> <title>` header per fix. Choose the one whose title matches your intent and call `apply_code_action` with its actionId (the text before the first comma). Do not call `apply_code_fix` again for it: it will return the same Conflict. `checkOnly` returns the same Conflict.
+
+  ```
+  error=Conflict
+  errorMessage=CS0535 at 9:22 has 2 fixes; apply the chosen candidate's actionId with apply_code_action.
+  candidate=eyJEb2N1...,Fix,CS0535 Implement interface
+  candidate=eyJEb2N1...,Fix,CS0535 Implement all members explicitly
+  ```
+
+In a `.razor`/`.cshtml` file the position is in the Razor file, only diagnostics located in that file count, and the fix is written to the Razor source (unmappable → `NotSupported`, mismatched text → `Conflict`). `CS8019`/`IDE0005` remove the unnecessary `@using` on that line, the same analysis as `remove_unused_usings`; a used `@using` there → `NotFound`.
 
 Analyzer ids are only reported — and so only fixable — when the project actually references the analyzer. `IDE*` rules come from the CodeStyle analyzers, which a project pulls in with `EnforceCodeStyleInBuild` or an explicit `Microsoft.CodeAnalysis.CSharp.CodeStyle` package reference; an SDK copy built against a newer compiler than Roslynk's is skipped.
 

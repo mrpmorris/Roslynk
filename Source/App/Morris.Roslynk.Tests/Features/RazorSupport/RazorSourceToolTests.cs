@@ -120,7 +120,9 @@ public class RazorSourceToolTests
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
 
-		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, CounterRelativePath, "CS0219");
+		(int line, int column) = await PositionOfAsync(solutionPath, CounterRelativePath, "unused");
+
+		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, CounterRelativePath, "CS0219", line, column);
 
 		Assert.Contains("applied=Y", result);
 		Assert.DoesNotContain("unused", await ReadAsync(solutionPath, CounterRelativePath));
@@ -133,8 +135,9 @@ public class RazorSourceToolTests
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
 		string before = await ReadAsync(solutionPath, IndexRelativePath);
+		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "unused");
 
-		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", checkOnly: true);
+		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", line, column, checkOnly: true);
 
 		Assert.Contains("applied=N", result);
 		Assert.Contains(result.Split('\n'), entry => entry.TrimStart('\t') == "Index.cshtml");
@@ -147,26 +150,56 @@ public class RazorSourceToolTests
 		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
+		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "unused");
 
-		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219");
+		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", line, column);
 
 		Assert.Contains("applied=Y", result);
 		Assert.DoesNotContain("unused", await ReadAsync(solutionPath, IndexRelativePath));
 	}
 
 	[Fact]
-	public async Task WhenFixingIDE0005InACshtmlFile_ThenTheFirstUnusedUsingLineIsRemoved()
+	public async Task WhenFixingIDE0005InACshtmlFile_ThenTheUnusedUsingLineAtThePositionIsRemoved()
 	{
 		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
+		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "System.CodeDom");
 
-		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "IDE0005");
+		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "IDE0005", line, column);
 
 		Assert.Contains("applied=Y", result);
 		string index = await ReadAsync(solutionPath, IndexRelativePath);
 		Assert.DoesNotContain("@using System.CodeDom", index);
 		Assert.Contains("@using System.Text", index);
+	}
+
+	[Fact]
+	public async Task WhenFixingIDE0005OnAUsedCshtmlUsingLine_ThenItIsNotFoundAndNothingIsWritten()
+	{
+		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		string before = await ReadAsync(solutionPath, IndexRelativePath);
+		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "System.Text");
+
+		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "IDE0005", line, column);
+
+		Assert.Contains("error=NotFound", result);
+		Assert.Equal(before, await ReadAsync(solutionPath, IndexRelativePath));
+	}
+
+	[Fact]
+	public async Task WhenFixingARazorDiagnosticAwayFromItsPosition_ThenItIsNotFound()
+	{
+		string solutionPath = await CreateRazorSolutionAsync();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		(int line, _) = await PositionOfAsync(solutionPath, CounterRelativePath, "@code");
+
+		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, CounterRelativePath, "CS0219", line, 1);
+
+		Assert.Contains("error=NotFound", result);
 	}
 
 	[Fact]
@@ -176,7 +209,9 @@ public class RazorSourceToolTests
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
 
-		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, CounterRelativePath, "CS0168");
+		(int line, int column) = await PositionOfAsync(solutionPath, CounterRelativePath, "unused");
+
+		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, CounterRelativePath, "CS0168", line, column);
 
 		Assert.Contains("error=NotFound", result);
 	}
@@ -297,7 +332,8 @@ public class RazorSourceToolTests
 		(int startLine, int startColumn, int endLine, int endColumn) = await GreetingSelectionAsync(solutionPath);
 
 		string extracted = await extract.ExtractMethod(solutionPath, IndexRelativePath, startLine, startColumn, endLine, endColumn, methodName: "AppendGreeting", asLocalFunction: true);
-		string fixedResult = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219");
+		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "unused");
+		string fixedResult = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", line, column);
 
 		Assert.Contains("applied=Y", extracted);
 		Assert.True(fixedResult.Contains("applied=Y"), fixedResult);

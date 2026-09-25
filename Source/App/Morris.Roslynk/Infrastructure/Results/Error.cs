@@ -33,8 +33,8 @@ public sealed class Error
 	public static Error Invalid(string message) =>
 		new() { Code = ErrorCode.Invalid, Message = message };
 
-	public static Error Conflict(string message) =>
-		new() { Code = ErrorCode.Conflict, Message = message };
+	public static Error Conflict(string message, IReadOnlyList<string>? candidates = null) =>
+		new() { Code = ErrorCode.Conflict, Message = message, Candidates = candidates };
 
 	public static Error Truncated(string message) =>
 		new() { Code = ErrorCode.Truncated, Message = message };
