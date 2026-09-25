@@ -2,6 +2,7 @@
 
 # Unreleased
 
+- New `get_expression_info` tool: position-based compiler facts about an expression in a `.cs`, `.razor` or `.cshtml` file — its type and converted type, the symbol it binds to (with the overload selected, generic/extension instantiation, and candidates when unresolved), nullable annotation and flow state, constant value, implicit conversion kind, source/metadata origin and XML-doc summary. Unavailable facts are reported as `none`; a position on a declared name (local, parameter, field, member, type) reports the declared symbol and its type like an editor hover; a keyword, punctuation, comment or whitespace is `error=NotFound`. Available in `multi_query` (Fixes #26)
 - New `rename_parameter` tool: rename one parameter of a method, constructor or indexer overload via Roslyn rename, updating named arguments and `<paramref>` docs and cascading across override/interface groups; reports related declarations left unchanged, and refuses on name conflicts (Fixes #44)
 - Fully-qualified names now resolve explicitly declared constructors, written `Namespace.Type.Type(...)`
 - `rename_symbol` reports overlapping edits as `error=Conflict` instead of faulting

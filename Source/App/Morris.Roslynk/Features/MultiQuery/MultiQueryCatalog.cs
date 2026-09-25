@@ -8,6 +8,7 @@ using Morris.Roslynk.Features.Symbols.GetSymbol;
 using Morris.Roslynk.Features.Symbols.GetSymbolBody;
 using Morris.Roslynk.Features.Symbols.GetMembers;
 using Morris.Roslynk.Features.Symbols.FindDefinition;
+using Morris.Roslynk.Features.Symbols.GetExpressionInfo;
 using Morris.Roslynk.Features.Symbols.FindImplementations;
 using Morris.Roslynk.Features.Symbols.GetTypeHierarchy;
 using Morris.Roslynk.Features.Symbols.SearchSymbols;
@@ -67,6 +68,7 @@ internal static class MultiQueryCatalog
 		[GetTypeHierarchyTool.GetTypeHierarchyName] = new(GetTypeHierarchyTool.GetTypeHierarchyName, typeof(GetTypeHierarchyTool), nameof(GetTypeHierarchyTool.GetTypeHierarchyCoreAsync)),
 		[FindDeadCodeTool.FindDeadCodeName] = new(FindDeadCodeTool.FindDeadCodeName, typeof(FindDeadCodeTool), nameof(FindDeadCodeTool.FindDeadCodeCoreAsync)),
 		[FindDeadConditionalsTool.FindDeadConditionalsName] = new(FindDeadConditionalsTool.FindDeadConditionalsName, typeof(FindDeadConditionalsTool), nameof(FindDeadConditionalsTool.FindDeadConditionalsCoreAsync)),
+		[GetExpressionInfoTool.GetExpressionInfoName] = new(GetExpressionInfoTool.GetExpressionInfoName, typeof(GetExpressionInfoTool), nameof(GetExpressionInfoTool.GetExpressionInfoCoreAsync)),
 	}.ToFrozenDictionary(StringComparer.Ordinal);
 
 	/// <summary>

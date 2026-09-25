@@ -26,6 +26,7 @@ public enum MultiQueryOp
 	get_type_hierarchy,
 	find_dead_code,
 	find_dead_conditionals,
+	get_expression_info,
 }
 
 /// <summary>
