@@ -2,6 +2,7 @@
 
 # Unreleased
 
+- `rename_symbol` no longer overwrites edits made while it was computing: only the documents it changed are replayed onto the latest model, edits to other files are kept, and a changed file it touches, or a file changed on disk, returns `error=Stale` with a `stale=` path instead of `error=Faulted`. The tool can now be cancelled (Fixes #54)
 - **Breaking:** `apply_code_fix` now requires `line` and `column` (1-based, as `get_diagnostics` prints them) and fixes the diagnostic at that position, instead of the first occurrence of the id in the file. No diagnostic with that id at the position → `error=NotFound`. In `.razor`/`.cshtml` the position is in the Razor file; `CS8019`/`IDE0005` remove the unnecessary `@using` on that line (Fixes #53)
 - `apply_code_fix` no longer picks one fix arbitrarily when a diagnostic has several (e.g. `CS0535` implement vs implement explicitly, `CS0246` add using vs generate type): it writes nothing and returns `error=Conflict` with a `candidate=<actionId>,Fix,<diagnosticId> <title>` header per distinct fix, to be applied with `apply_code_action` (Fixes #53)
 - `get_code_actions` lists the individual fixes and refactorings inside a grouped action (such as the choices under a "Generate type" group) instead of the group itself, which produced no changes when applied

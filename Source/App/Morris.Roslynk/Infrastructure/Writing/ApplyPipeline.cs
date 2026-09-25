@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -56,6 +56,17 @@ public sealed class ApplyPipeline
 		{
 			foreach (DocumentId documentId in projectChanges.GetChangedDocuments())
 			{
+				Document baseDocument = basedOn.GetDocument(documentId)!;
+				if (baseDocument.FilePath is string generatedPath && IsGenerated(generatedPath))
+				{
+					// A generated document is never written to disk, so a regeneration since the edit was computed
+					// is not a conflict: keep the regenerated text instead of replaying the in-memory edit onto it.
+					Document? currentGenerated = current.GetDocument(documentId);
+					if (currentGenerated is not null && (await currentGenerated.GetTextAsync(cancellationToken)).ContentEquals(await baseDocument.GetTextAsync(cancellationToken)))
+						target = target.WithDocumentText(documentId, await updated.GetDocument(documentId)!.GetTextAsync(cancellationToken));
+					continue;
+				}
+
 				await EnsureUnchangedAsync(current.GetDocument(documentId), basedOn.GetDocument(documentId)!, cancellationToken);
 				target = target.WithDocumentText(documentId, await updated.GetDocument(documentId)!.GetTextAsync(cancellationToken));
 			}

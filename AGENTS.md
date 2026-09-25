@@ -96,7 +96,7 @@ After persistence, it updates all matching ordinary/additional documents in the 
 
 ### Existing guard limitations
 
-Most write tools (`apply_code_action`, `apply_code_fix`, `extract_method`, `change_signature`, `rename_parameter`, `remove_unused_usings`) pass `basedOn`. `rename_symbol` still calls the overload without it, so there the disk guard alone does not prove that its precomputed solution was derived from the latest in-memory model. Also, `StaleWriteException` is an ordinary exception: the general MCP wrapper maps uncaught exceptions to `Faulted`; it does not automatically translate this type to `Stale`. When adding a write tool, deliberately format its stale failure and test the public response. Do not copy an older caller assuming it exercises every protection.
+All semantic write tools (`apply_code_action`, `apply_code_fix`, `extract_method`, `change_signature`, `rename_symbol`, `rename_parameter`, `remove_unused_usings`) pass `basedOn`. During rebase, generated `.g.cs` documents are never a conflict: if one was regenerated since the edit was computed, the regenerated text is kept. Also, `StaleWriteException` is an ordinary exception: the general MCP wrapper maps uncaught exceptions to `Faulted`; it does not automatically translate this type to `Stale`. When adding a write tool, deliberately format its stale failure and test the public response. Do not copy an older caller assuming it exercises every protection.
 
 ## File watching and freshness
 
