@@ -26,7 +26,7 @@ This is a source-based implementation guide for future changes. Paths below are 
 | `Source/App/Morris.Roslynk.AppHost` | Aspire development host. |
 | `Source/App/Morris.Roslynk.Tests` | Engine, feature, concurrency, file synchronization and writing tests. |
 | `Source/App/Morris.Roslynk.McpTests` | Host composition, published MCP schemas, tool invocation and transport-facing tests. |
-| `Source/TestFixtures` | Small independent solutions: Simple, Broken, References, Conditional, Razor, CodeStyle and Generator. |
+| `Source/TestFixtures` | Small independent solutions: Simple, Broken, References, Conditional, Razor, Cshtml, LocalFunction, CodeStyle and Generator. |
 | `skills/roslynk` | User-facing agent skill and detailed tool contracts. Update when tool behavior changes. |
 | `README.md`, `releases.md` | Setup/tool guidance and release history. |
 
@@ -120,6 +120,16 @@ Watcher exception handling is best-effort; disk stale validation is a separate c
 
 `SymbolResolver`, `SymbolSignature`, `SymbolAmbiguity` and `EnclosingDeclaration` centralize names, overload parsing, candidate rendering and enclosing declaration identity. Use them instead of ad hoc `ToDisplayString()` identities or string matching. Candidate strings must round-trip into the same tool and resolve the intended overload. The signature renderer progressively adds ref kinds and qualified parameter types when needed; parameter names/defaults and nullable spellings are handled by the parser. Preserve overload, generic, indexer and partial-declaration tests.
 
+Local functions are named as members of their declaring member: `N.Outer.Type.Method.local`, and `N.T.M.outer.inner` for nested local functions. Roslyn gives them no qualified display name (`ToDisplayString()` is the bare `local`; the documentation ID flattens to `M:N.T.local`), so never use either as identity. `LocalFunctions` owns the rules:
+
+- `NamedContainer` walks past lambdas/anonymous methods and maps accessors to their property/event. `ContainerChain` gives the outer-to-inner containers for outline nesting.
+- `SymbolResolver.FullyQualifiedName` and `SymbolSignature.Of` build the name from that container. `Of` always renders the container's own parameter list (`N.T.M(int).local(string)`), so `KeyOf` and candidates stay unique across overloaded containers and round-trip.
+- Any segment of a query may carry a parameter list. `SymbolSignature.TryGetContainer` splits at the last top-level dot, and `NameMatches` matches a local function's container recursively as a name in its own right, not by flattened text.
+- Local functions are not in `SymbolFinder`'s declaration index. `FindByFullyQualifiedNameAsync` searches for them only when no ordinary symbol matched: it resolves the container name recursively, then scans that container's syntax (`FindInAsync`). A bare name scans the whole solution (`FindAllAsync`). This fallback is sound because C# forbids a nested type and a member of the same name in one type (CS0102), so a dotted name cannot mean both. Keep the fallback lazy: it walks syntax.
+- `SymbolKindText` reports `localfunction`. `SymbolPlacement`, `EnclosingDeclaration` and `get_members` nest local functions under their containers.
+
+Regression tests: `Morris.Roslynk.Tests/Features/LocalFunctions` against `TestFixtures/LocalFunctionSolution` (nested class, local-in-local, overloaded container).
+
 `ProjectionService.BuildAsync` creates the base solution plus variants toggling each condition symbol that is uniformly defined or uniformly undefined across C# projects. Symbols with mixed definitions across loaded projects are skipped. **This is not exhaustive enumeration of combinations**; a branch needing multiple simultaneous toggles may remain uncovered. Resolve/query within each projection's own solution, then deduplicate using `ProjectionService.KeyOf` (the shared fully qualified signature with ref kinds). This key intentionally collapses identical qualified signatures across projects; it is not assembly-qualified identity.
 
 `RenameSymbolTool` is a useful example of multi-projection editing: run semantic rename per projection, collect/deduplicate physical-file text changes by span, then apply the union to every matching document in the base solution. Preserve inactive-branch and multi-target consistency when adding similar operations.
@@ -132,6 +142,12 @@ Razor has two representations: real `.razor`/`.cshtml` additional documents and 
 - Once augmentation supplies generated documents, it removes the native Razor generator reference to prevent duplicate partial members and bindings to an immutable duplicate.
 - Use `RazorMapping.GetDisplaySpan` for user-facing source positions. `RazorChangeMapper` maps pre-edit generated spans through `#line` directives, obtains Razor text from the captured solution, validates bounds and exact old text, and rejects unmappable/mismatched changes before writes.
 - Rename keeps generated C# changes in memory while writing the corresponding additional documents. One generated document can map to several Razor files (including imports); duplicate/conflicting mapped edits need handling. Never write generated C# to disk as the rename result.
+- Other tools that edit or take positions in `.razor`/`.cshtml` go through two seams:
+  - `RazorSourceDocument` resolves a user path to the generated document and maps Razor positions into it. Each mapped position is verified by mapping it forward again. Action IDs store the Razor path, because generated paths mix separators.
+  - `RazorGeneratedChangeFolder.FoldAsync` writes the result back region by region, not edit by edit, because formatting operations re-indent to the generated class and move whitespace across `#line` boundaries. Text outside regions may differ only in whitespace, otherwise the fold throws. Lines Roslyn formatted (space-indented) are re-based onto the file's indentation, and untouched lines are kept verbatim. The in-memory generated regions are rewritten to the reconciled Razor text, so a following operation still maps before the watcher rebuilds.
+- Add new Razor-capable write tools through these two seams, and map `RazorMappingException` with `RazorGeneratedChangeFolder.ErrorFor`.
+- Analyzers skip generated code, and the compiler never reports CS8019 there. `RazorUnusedUsings` therefore re-parses the generated document as ordinary code to find unused `@using` lines, and never edits `_Imports.razor`/`_ViewImports.cshtml`.
+- Regression tests: `Features/RazorSupport` against `RazorSolution` and `CshtmlSolution`.
 
 ## Diagnostics and code actions
 
