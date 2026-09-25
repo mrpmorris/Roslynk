@@ -2,6 +2,9 @@
 
 # Unreleased
 
+- New `rename_parameter` tool: rename one parameter of a method, constructor or indexer overload via Roslyn rename, updating named arguments and `<paramref>` docs and cascading across override/interface groups; reports related declarations left unchanged, and refuses on name conflicts (Fixes #44)
+- Fully-qualified names now resolve explicitly declared constructors, written `Namespace.Type.Type(...)`
+- `rename_symbol` reports overlapping edits as `error=Conflict` instead of faulting
 - New `extract_method` tool: extract a selection of statements or an expression into a method or local function via Roslyn's Extract Method refactoring, with optional naming and preview; refuses without writing when Roslyn cannot extract the selection, flags a behavior change, or the result would add compile errors (Fixes #46)
 - Write pipeline can guard a precomputed update against an intervening edit to the same documents, without reverting unrelated intervening edits
 

@@ -25,6 +25,7 @@ public class ToolRegistrationTests
 			"get_symbol_body",
 			"find_references",
 			"rename_symbol",
+			"rename_parameter",
 			"apply_patch",
 			"change_signature",
 			"extract_method",

@@ -12,7 +12,7 @@ workflows and the tool descriptions carry the concise contract for discovery.
 - [Relationships: find_references, get_callers, find_implementations, get_type_hierarchy](#relationships)
 - [Diagnostics: get_diagnostics](#diagnostics)
 - [Code actions: get_code_actions, apply_code_action, apply_code_fix](#code-actions)
-- [Editing: apply_patch, rename_symbol, change_signature, extract_method, remove_unused_usings](#editing)
+- [Editing: apply_patch, rename_symbol, rename_parameter, change_signature, extract_method, remove_unused_usings](#editing)
 - [Dead code: find_dead_code, find_dead_conditionals](#dead-code)
 - [Batching: multi_query](#batching)
 
@@ -123,6 +123,9 @@ All write tools: `checkOnly=true` previews changed files without writing; writes
 
 ### rename_symbol
 `solutionId`, `symbolName` (FQN), `newName` (must be a valid C# identifier), `checkOnly`. Renames across partial classes, all `#if` projections, all TFMs, and Razor: edits computed against generated `.g.cs` are mapped back through `#line` directives and written to the real `.razor`/`.cshtml` (covering `@code` blocks, markup expressions, and component attributes in other components). Unverifiable mapping aborts the whole rename before writing. Ambiguous → `error=Ambiguous` with candidates; retry with one verbatim to rename a single overload.
+
+### rename_parameter
+`solutionId`, `methodId` (FQN of the method, constructor — written `Namespace.Type.Type(...)` — or indexer; add a parameter-type list to pick one overload), `parameterName` (existing name), `newName` (valid C# identifier, different from `parameterName`), `checkOnly`. Uses Roslyn's semantic rename on the parameter: declaration, body uses, named arguments at call sites and `<paramref>`/`<param>` doc references; strings and comments untouched. Covers all `#if` projections, TFMs and Razor like `rename_symbol`. Cascades across the override/interface group (overridden/overriding members, interface members and implementations, both partial-method parts) when the related declaration is in source and its parameter at the same position has the same old name; related members with a different name, or in metadata, are left alone and listed. Headers: `applied`, `resolvedMethod` (before the rename), `parameter` (old name), `renamedMembers` (declarations renamed, including the target), `unchangedRelated` (`; `-separated, omitted when empty), then changed files. Errors: invalid/unchanged `newName` → `error=Invalid`; overloads → `error=Ambiguous` with candidates; unknown member → `error=NotFound` with suggestions; unknown `parameterName` → `error=NotFound` listing the member's parameters; `newName` already declared in a renamed member (parameter, local, local function, lambda/query variable, type parameter) → `error=Conflict` naming the member; not a method/constructor/indexer, positional record constructor, or metadata-only member → `error=NotSupported`; changed on disk → `error=Stale`. Nothing written on any error. Not available in `multi_query`.
 
 ### change_signature
 `solutionId`, `methodId` (FQN), `parameterType` (e.g. `System.Threading.CancellationToken`), `parameterName` (valid identifier), `defaultValue` (**required** — keeps the parameter optional, e.g. `default`, `null`, `0`), `callSiteArgument` (optional; when given, threaded into every call site as a named argument), `checkOnly`.

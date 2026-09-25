@@ -89,12 +89,18 @@ public sealed class SymbolResolver
 
 	/// <summary>
 	/// The symbols a declaration hit stands for: itself, plus — for a bracketed query, whose search was for
-	/// the containing type — that type's indexers.
+	/// the containing type — that type's indexers. A type hit also stands for its explicitly declared
+	/// constructors, which a declaration search cannot find by name ('.ctor') but which render as
+	/// <c>N.Type.Type(...)</c>.
 	/// </summary>
 	private static IEnumerable<ISymbol> Expand(ISymbol symbol, SymbolSignatureQuery query)
 	{
 		if (query.ListKind != ParameterListKind.Brackets)
-			return [symbol];
+		{
+			return symbol is INamedTypeSymbol constructed
+				? [symbol, .. constructed.InstanceConstructors.Where(constructor => !constructor.IsImplicitlyDeclared)]
+				: [symbol];
+		}
 
 		return symbol is INamedTypeSymbol type
 			? type.GetMembers().OfType<IPropertySymbol>().Where(member => member.IsIndexer)
