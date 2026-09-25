@@ -1,9 +1,12 @@
 # Releases
 
-## 1.3.0
+## 2.0.0
 
-- `rename_symbol` no longer overwrites edits made while it was computing: only the documents it changed are replayed onto the latest model, edits to other files are kept, and a changed file it touches, or a file changed on disk, returns `error=Stale` with a `stale=` path instead of `error=Faulted`. The tool can now be cancelled (Fixes #54)
+**Important** Tell your agent
+`Reimport SKILL.md and tools.md for Roslynk from https://github.com/mrpmorris/Roslynk/tree/07b64a6eaaf1b3af946ba1b3b8d92c1978168b96/skills/roslynk`
+
 - **Breaking:** `apply_code_fix` now requires `line` and `column` (1-based, as `get_diagnostics` prints them) and fixes the diagnostic at that position, instead of the first occurrence of the id in the file. No diagnostic with that id at the position → `error=NotFound`. In `.razor`/`.cshtml` the position is in the Razor file; `CS8019`/`IDE0005` remove the unnecessary `@using` on that line (Fixes #53)
+- `rename_symbol` no longer overwrites edits made while it was computing: only the documents it changed are replayed onto the latest model, edits to other files are kept, and a changed file it touches, or a file changed on disk, returns `error=Stale` with a `stale=` path instead of `error=Faulted`. The tool can now be cancelled (Fixes #54)
 - `apply_code_fix` no longer picks one fix arbitrarily when a diagnostic has several (e.g. `CS0535` implement vs implement explicitly, `CS0246` add using vs generate type): it writes nothing and returns `error=Conflict` with a `candidate=<actionId>,Fix,<diagnosticId> <title>` header per distinct fix, to be applied with `apply_code_action` (Fixes #53)
 - `get_code_actions` lists the individual fixes and refactorings inside a grouped action (such as the choices under a "Generate type" group) instead of the group itself, which produced no changes when applied
 - New `find_reads` and `find_writes` tools: semantic reads/writes of a field, property or parameter (addressed as `Namespace.Type.Member:parameter`), each location tagged `read`, `assign`, `compound`, `increment`, `ref`, `out` or `init`. Dual read/write accesses (`compound`, `increment`, `ref`) appear in both tools. Output follows `find_references` with one location per leaf. Available in `multi_query` (Fixes #27)
