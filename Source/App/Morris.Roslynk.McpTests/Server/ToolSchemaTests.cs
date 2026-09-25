@@ -44,6 +44,18 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 	}
 
 	[Fact]
+	public void WhenApplyCodeFixIsPublished_ThenItsPositionIsRequired()
+	{
+		JsonElement schema = Tools.Single(tool => tool.ProtocolTool.Name == "apply_code_fix").ProtocolTool.InputSchema;
+
+		IReadOnlyCollection<string> required = Required(schema);
+
+		Assert.Contains("line", required);
+		Assert.Contains("column", required);
+		Assert.DoesNotContain("checkOnly", required);
+	}
+
+	[Fact]
 	public void WhenAToolParameterHasADefaultValue_ThenTheSchemaMarksItOptional()
 	{
 		Dictionary<string, JsonElement> schemasByToolName = Tools

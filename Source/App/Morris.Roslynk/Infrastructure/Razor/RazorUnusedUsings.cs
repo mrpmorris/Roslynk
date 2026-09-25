@@ -31,22 +31,22 @@ public static partial class RazorUnusedUsings
 
 	/// <summary>
 	/// Returns <paramref name="updated"/> with the unnecessary <c>@using</c> lines of <paramref name="source"/>
-	/// removed (only the first when <paramref name="firstOnly"/>), and how many were removed.
+	/// removed (only the one on the 0-based <paramref name="line"/> when given), and how many were removed.
 	/// </summary>
 	public static async Task<(Solution Updated, int Removed)> RemoveAsync(
 		Solution updated,
 		RazorSourceDocument source,
-		bool firstOnly,
+		int? line,
 		CancellationToken cancellationToken = default)
 	{
 		if (source.RazorPath is not string razorPath || source.RazorText is not SourceText razorText || IsImportsFile(razorPath))
 			return (updated, 0);
 
 		IReadOnlyList<TextSpan> lines = await FindUnusedLinesAsync(source, razorPath, razorText, cancellationToken);
+		if (line is int target)
+			lines = lines.Where(span => razorText.Lines.GetLineFromPosition(span.Start).LineNumber == target).ToArray();
 		if (lines.Count == 0)
 			return (updated, 0);
-		if (firstOnly)
-			lines = [lines[0]];
 
 		SourceText rewritten = razorText.WithChanges(lines.Select(line => new TextChange(line, "")));
 		foreach (DocumentId documentId in updated.GetDocumentIdsWithFilePath(razorPath))

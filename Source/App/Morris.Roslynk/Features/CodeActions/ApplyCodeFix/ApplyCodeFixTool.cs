@@ -48,25 +48,33 @@ public sealed class ApplyCodeFixTool
 		OpenWorld = false)]
 	[Description(
 		$"""
-		Applies the code fix for the first occurrence of a diagnostic id (a compiler id such as CS0219, or an
-		analyzer id such as IDE0005) in a .cs, .razor or .cshtml file; the
-		quick path when you already know which diagnostic to clear, without first listing actions. Errors: a
-		documentPath that is not a solution-compiled .cs, .razor or .cshtml document, or no such diagnostic in
-		the file, is error=NotFound; a diagnostic with no registered fix is error=NotSupported; a fix that
-		produced no changes is error=Conflict. In a .razor/.cshtml file the fix is computed on the generated C#
-		and mapped back to the Razor source: an unmappable edit is error=NotSupported, mismatched Razor text
-		error=Conflict, nothing written. Analyzers do not run on Razor-generated code, so Razor supports
-		compiler diagnostics, plus CS8019/IDE0005, which remove the file's first unnecessary @using line. A file
-		edited on disk since it was loaded is error=Stale. Returns a
-		text result, not JSON: 'applied', 'action', 'status' header, a blank line, then one
-		solution-relative changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} Written atomically through the same safe write path. Pass
-		checkOnly to preview without writing. Prefer this over hand-editing the file to clear a diagnostic so
-		the in-memory model stays in sync.
+		Applies the code fix for the diagnostic with this id (a compiler id such as CS0219, or an analyzer id
+		such as IDE0005) at line:column in a .cs, .razor or .cshtml file; the quick path when get_diagnostics
+		has already told you the id and position, without first listing actions. Pass the 1-based line and
+		column get_diagnostics printed for that entry; the diagnostic whose span contains that position is
+		fixed. When the diagnostic has more than one distinct fix (for example several namespaces to import,
+		or make-nullable versus add-required), nothing is written and the result is error=Conflict with one
+		'candidate=<actionId>,Fix,<diagnosticId> <title>' header per fix: choose the fix whose title matches
+		your intent and pass its actionId to apply_code_action; do not call apply_code_fix again for it.
+		Errors: a documentPath that is not a solution-compiled .cs, .razor or .cshtml document, or no such
+		diagnostic at that position, is error=NotFound; a line or column below 1 is error=Invalid; a diagnostic
+		with no registered fix is error=NotSupported; a fix that produced no changes is error=Conflict (without
+		candidates). In a .razor/.cshtml file the position is in the Razor file, the fix is computed on the
+		generated C# and mapped back to the Razor source: an unmappable edit is error=NotSupported, mismatched
+		Razor text error=Conflict, nothing written. Analyzers do not run on Razor-generated code, so Razor
+		supports compiler diagnostics, plus CS8019/IDE0005, which remove the unnecessary @using on that line.
+		A file edited on disk since it was loaded is error=Stale. Returns a text result, not JSON: 'applied',
+		'action', 'status' header, a blank line, then one solution-relative changed-file path per line.
+		{OutlineDescriptions.Project} {OutlineDescriptions.Freshness} Written atomically through the same safe
+		write path. Pass checkOnly to preview without writing. Prefer this over hand-editing the file to clear
+		a diagnostic so the in-memory model stays in sync.
 		""")]
 	public async Task<string> ApplyCodeFix(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Path of the .cs, .razor or .cshtml file; absolute, or relative to the solution folder.")] string documentPath,
 		[Description("The diagnostic id to fix, e.g. CS0219 or IDE0005.")] string diagnosticId,
+		[Description("1-based line of the diagnostic, as get_diagnostics reports it.")] int line,
+		[Description("1-based column of the diagnostic, as get_diagnostics reports it.")] int column,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
@@ -77,6 +85,8 @@ public sealed class ApplyCodeFixTool
 
 		if (model.Solution is null)
 			return Failure(Error.Indexing());
+		if (line < 1 || column < 1)
+			return Failure(Error.Invalid("line and column are 1-based and must be at least 1."));
 
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
@@ -86,32 +96,49 @@ public sealed class ApplyCodeFixTool
 			return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs, .razor or .cshtml document."));
 		Document document = source.Document;
 
+		var position = new LinePosition(line - 1, column - 1);
+		string notFound = $"No {diagnosticId} diagnostic was found at {line}:{column} in '{documentPath}'.";
+
 		string title;
 		Solution? changed;
 		if (source.IsRazor && UnnecessaryImportIds.Contains(diagnosticId))
 		{
 			// The compiler reports neither id in generated code, so Razor @using lines get their own analysis.
-			(changed, int removed) = await RazorUnusedUsings.RemoveAsync(solution, source, firstOnly: true, cancellationToken);
+			(changed, int removed) = await RazorUnusedUsings.RemoveAsync(solution, source, line: position.Line, cancellationToken);
 			if (removed == 0)
-				return Failure(Error.NotFound($"No {diagnosticId} diagnostic was found in '{documentPath}'."));
+				return Failure(Error.NotFound(notFound));
 			title = "Remove unnecessary usings";
 		}
 		else
 		{
 			ImmutableArray<Diagnostic> diagnostics = await DocumentDiagnostics.GetForDocumentAsync(document, cancellationToken);
 			Diagnostic? diagnostic = diagnostics
-				.Where(candidate => candidate.Id == diagnosticId && source.MapsToSource(candidate.Location))
-				.OrderBy(candidate => candidate.Location.SourceSpan.Start)
+				.Where(candidate => candidate.Id == diagnosticId && source.MapsToSource(candidate.Location) && Contains(source, candidate.Location, position))
+				.OrderBy(candidate => candidate.Location.SourceSpan.Length)
 				.FirstOrDefault();
 			if (diagnostic is null)
-				return Failure(Error.NotFound($"No {diagnosticId} diagnostic was found in '{documentPath}'."));
+				return Failure(Error.NotFound(notFound));
 
 			TextSpan span = diagnostic.Location.SourceSpan;
-			IReadOnlyList<DiscoveredAction> actions = await CodeActionService.DiscoverAsync(document, span, cancellationToken);
-			DiscoveredAction? fix = actions.FirstOrDefault(action => action.DiagnosticId == diagnosticId);
-			if (fix is null)
+			DiscoveredAction[] fixes = (await CodeActionService.DiscoverAsync(document, span, cancellationToken))
+				.Where(action => action.DiagnosticId == diagnosticId)
+				.DistinctBy(action => CodeActionService.KeyOf(action.Action), StringComparer.Ordinal)
+				.ToArray();
+			if (fixes.Length == 0)
 				return Failure(Error.NotSupported($"No fix is available for {diagnosticId}."));
+			if (fixes.Length > 1)
+			{
+				// A Razor action is re-resolved through its .razor/.cshtml source, not the generated document's path.
+				string actionPath = source.RazorPath ?? document.FilePath!;
+				string[] candidates = fixes
+					.Select(fix => $"{CodeActionService.EncodeId(actionPath, span, fix)},{fix.Kind},{diagnosticId} {fix.Action.Title}")
+					.ToArray();
+				return Failure(Error.Conflict(
+					$"{diagnosticId} at {line}:{column} has {fixes.Length} fixes; apply the chosen candidate's actionId with apply_code_action.",
+					candidates));
+			}
 
+			DiscoveredAction fix = fixes[0];
 			changed = await CodeActionService.ChangedSolutionAsync(fix.Action, cancellationToken);
 			if (changed is null)
 				return Failure(Error.Conflict("The fix produced no changes."));
@@ -152,5 +179,15 @@ public sealed class ApplyCodeFixTool
 		builder.Status(instance.CurrentModel.Status);
 		ChangedFilesOutline.Write(builder, files, instance.CurrentSolution, solutionDirectory);
 		return builder.ToString();
+	}
+
+	/// <summary>
+	/// Whether <paramref name="position"/> (0-based, in the file the caller named) lies within the diagnostic,
+	/// ends included: the Razor position for a Razor file, via the generated code's #line mapping.
+	/// </summary>
+	private static bool Contains(RazorSourceDocument source, Location location, LinePosition position)
+	{
+		FileLinePositionSpan span = source.IsRazor ? location.GetMappedLineSpan() : location.GetLineSpan();
+		return span.StartLinePosition <= position && position <= span.EndLinePosition;
 	}
 }

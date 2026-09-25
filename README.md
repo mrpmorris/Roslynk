@@ -212,7 +212,7 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > **Code actions:**
 > - `get_code_actions`: List fixes and refactorings at a position. Parameters: `solutionId`, `documentPath`, `line`, `column`, `endLine`, `endColumn`.
 > - `apply_code_action`: Apply one by its opaque `actionId` (pass it back verbatim). Parameters: `solutionId`, `actionId`, `checkOnly`.
-> - `apply_code_fix`: Fix the first occurrence of a diagnostic id (compiler or analyzer, e.g. `CS0219` or `IDE0005`) in a file, no round-trip. Parameters: `solutionId`, `documentPath`, `diagnosticId`, `checkOnly`.
+> - `apply_code_fix`: Fix the diagnostic (compiler or analyzer, e.g. `CS0219` or `IDE0005`) at a position `get_diagnostics` reported, no round-trip. Parameters: `solutionId`, `documentPath`, `diagnosticId`, `line`, `column` (required), `checkOnly`. When the diagnostic has several fixes it writes nothing and returns `error=Conflict` with a `candidate` actionId per fix; apply the chosen one with `apply_code_action`.
 >
 > **Editing:**
 > - `apply_patch`: Edit text files with a git unified diff. Parameters: `solutionId`, `patch`, `baseVersions`, `checkOnly`. Hunks are content-anchored, not line-number-anchored — include enough context that each matches exactly one place.
@@ -246,7 +246,8 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > `get_diagnostics` straight afterwards reflects the change — no reload, no rebuild.
 >
 > **The edit loop:** make a change → `get_diagnostics` (bare call, read the counts) → if errors
-> appeared, re-call with `includeErrors=true` → fix with `apply_code_fix` or `apply_patch` → repeat.
+> appeared, re-call with `includeErrors=true` → fix with `apply_code_fix` at each entry's `line`/`column`
+> (or `apply_code_action` with a `candidate` it offers) or `apply_patch` → repeat.
 
 ## Run the daemon manually (Linux / WSL / macOS)
 

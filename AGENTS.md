@@ -73,7 +73,7 @@ Sources: `Infrastructure/Writing` and `Features/Patching/ApplyPatch/ApplyPatchTo
 Semantic edits normally compute an immutable updated solution and call `ApplyPipeline.ApplyAsync`:
 
 - The pipeline enqueues the operation on `RoslynInstance`, so validation and persistence execute under the single writer.
-- The transform receives the latest solution, but `updated` was computed by the caller. For a new feature, explicitly handle an intervening publication: compute from the queue's `current` solution, or add and test a captured-base identity guard before persisting a precomputed result. The inspected final `ApplyAsync` signature does not expose an expected-snapshot argument.
+- The transform receives the latest solution, but `updated` was computed by the caller. Pass the snapshot it was computed from as `ApplyAsync(instance, updated, basedOn: solution, ...)`: inside the queue, `RebaseAsync` replays only the documents `updated` changed relative to `basedOn` onto the latest `current`, and throws `StaleWriteException` if an intervening publication (watcher fold or another write) changed any of those documents. Intervening edits to other documents are kept, not reverted. Without `basedOn` (the older overload), `updated` is persisted as-is and can silently revert an intervening publication. New write tools must pass `basedOn` and test the intervening-edit case.
 - `BuildWritesAsync` enumerates changed ordinary and additional documents. Every physical path is written once, even if multiple target frameworks/projects share it. The computation must therefore update every document sharing that path consistently.
 - Before any file is written, each loaded text is compared with current disk text using `FileHash` (SHA-256). A mismatch throws `StaleWriteException`. Additional documents, including Razor source, receive this check too.
 - Generated paths ending in `.g.cs` are excluded from persistence. This is a broad suffix rule, not just a Razor check.
@@ -96,7 +96,7 @@ After persistence, it updates all matching ordinary/additional documents in the 
 
 ### Existing guard limitations
 
-The inspected rename and apply-code-action paths compute an updated solution before calling the pipeline. The disk guard does not by itself prove that this precomputed solution was derived from the latest in-memory model. Also, `StaleWriteException` is an ordinary exception: the general MCP wrapper maps uncaught exceptions to `Faulted`; it does not automatically translate this type to `Stale`. When adding a write tool, deliberately format its stale failure and test the public response. Do not copy an older caller assuming it exercises every protection.
+Most write tools (`apply_code_action`, `apply_code_fix`, `extract_method`, `change_signature`, `rename_parameter`, `remove_unused_usings`) pass `basedOn`. `rename_symbol` still calls the overload without it, so there the disk guard alone does not prove that its precomputed solution was derived from the latest in-memory model. Also, `StaleWriteException` is an ordinary exception: the general MCP wrapper maps uncaught exceptions to `Faulted`; it does not automatically translate this type to `Stale`. When adding a write tool, deliberately format its stale failure and test the public response. Do not copy an older caller assuming it exercises every protection.
 
 ## File watching and freshness
 

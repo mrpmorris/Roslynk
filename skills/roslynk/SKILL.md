@@ -36,7 +36,8 @@ Each tool's exact contract — parameters, output format, limits, error codes �
 | Find a symbol by partial name | `search_symbols` | compiler-declared symbols |
 | Rename a symbol everywhere (incl. `.razor`/`.cshtml`) | `rename_symbol` | find-and-replace misses markup and same-named text |
 | Rename one parameter of a method/constructor/indexer | `rename_parameter` | also fixes named arguments, `<paramref>` docs and the override/interface family |
-| Apply a compiler-suggested fix (incl. `.razor`/`.cshtml`) | `get_code_actions` + `apply_code_action`, or `apply_code_fix` | hand-editing |
+| Fix a diagnostic `get_diagnostics` reported (incl. `.razor`/`.cshtml`) | `apply_code_fix` with that entry's id, `line` and `column`; on `error=Conflict`, `apply_code_action` with the chosen `candidate` actionId | hand-editing |
+| Apply a refactoring, or choose among fixes at a position | `get_code_actions` + `apply_code_action` | hand-editing |
 | Add a parameter to a method and its callers (incl. `.razor`/`.cshtml`) | `change_signature` | hand-editing misses call sites in markup |
 | Extract statements or an expression into a new method (incl. `@code`/`@functions`) | `extract_method` | hand-cutting code misses parameters, `ref`/`out` and return values |
 | Edit source or text files | `apply_patch` | keeps the in-memory model in sync; stale-guarded |
@@ -68,6 +69,6 @@ To pull code into its own method, call `extract_method` with the selection (1-ba
 
 ## Check diagnostics after every change
 
-The core edit cycle: make the change (any write tool) → `get_diagnostics` (bare call; the header always reports error/warning/info/hidden counts) → if counts are non-zero, re-call with `includeErrors=true` to see the details → fix via `apply_code_fix` (you already know the id) or `get_code_actions` + `apply_code_action` → repeat until clean. This replaces `dotnet build` during development. Pass `includeAnalyzers=false` for a faster compiler-only pass when style rules don't matter yet.
+The core edit cycle: make the change (any write tool) → `get_diagnostics` (bare call; the header always reports error/warning/info/hidden counts) → if counts are non-zero, re-call with `includeErrors=true` to see the details → fix each entry via `apply_code_fix` with its id, `line` and `column` → if that returns `error=Conflict` with `candidate=` lines, the diagnostic has several fixes: pick the one whose title matches your intent and pass its actionId (the text before the first comma) to `apply_code_action`; do not retry `apply_code_fix` → repeat until clean. This replaces `dotnet build` during development. Pass `includeAnalyzers=false` for a faster compiler-only pass when style rules don't matter yet.
 
 `find_dead_code` and `find_dead_conditionals` never delete anything — treat the results as candidates (public or reflection-used API can be a false positive), confirm intent with the user before bulk-removing, and hand each reported `loc` span to `apply_patch`.
