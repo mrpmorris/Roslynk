@@ -1,6 +1,6 @@
 # Releases
 
-# Unreleased
+# 1.3.0
 
 - `rename_symbol` no longer overwrites edits made while it was computing: only the documents it changed are replayed onto the latest model, edits to other files are kept, and a changed file it touches, or a file changed on disk, returns `error=Stale` with a `stale=` path instead of `error=Faulted`. The tool can now be cancelled (Fixes #54)
 - **Breaking:** `apply_code_fix` now requires `line` and `column` (1-based, as `get_diagnostics` prints them) and fixes the diagnostic at that position, instead of the first occurrence of the id in the file. No diagnostic with that id at the position → `error=NotFound`. In `.razor`/`.cshtml` the position is in the Razor file; `CS8019`/`IDE0005` remove the unnecessary `@using` on that line (Fixes #53)
