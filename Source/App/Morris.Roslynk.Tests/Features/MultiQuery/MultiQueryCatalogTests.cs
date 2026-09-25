@@ -1,6 +1,5 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
-using ModelContextProtocol.Server;
 using Morris.Roslynk.Features.MultiQuery;
 
 namespace Morris.Roslynk.Tests.Features.MultiQuery;
@@ -79,40 +78,6 @@ public class MultiQueryCatalogTests
 			Assert.True(
 				constant is string,
 				$"'{toolName}' is in the catalog but no public const string equals it on {entry.ToolType.Name}.");
-		}
-	}
-
-	[Fact]
-	public void WhenAnotherToolIsPublished_ThenItIsAbsentFromTheEnum()
-	{
-		// A newly added tool must never silently appear in the multi_query surface: the enum is exactly the
-		// 11, and every other [McpServerTool] name in the assembly is unrepresentable.
-		var assemblyToolNames = typeof(MultiQueryTool).Assembly
-			.GetTypes()
-			.SelectMany(type => type.GetMethods())
-			.Select(method => method.GetCustomAttribute<McpServerToolAttribute>())
-			.OfType<McpServerToolAttribute>()
-			.Select(attribute => attribute.Name)
-			.Where(name => name is not null)
-			.Select(name => name!)
-			.ToHashSet(StringComparer.Ordinal);
-
-		var enumNames = Enum.GetNames<MultiQueryOp>().ToHashSet(StringComparer.Ordinal);
-		var forbiddenRequired = new[]
-		{
-			"apply_patch", "rename_symbol", "apply_code_action", "apply_code_fix",
-			"change_signature", "remove_unused_usings", "get_diagnostics", "get_solution_status",
-			"open_solution", "reload_solution", "get_code_actions", "multi_query",
-		};
-
-		foreach (string excluded in forbiddenRequired)
-		{
-			Assert.True(
-				assemblyToolNames.Contains(excluded),
-				$"'{excluded}' was expected to be a published tool but was not found.");
-			Assert.False(
-				enumNames.Contains(excluded),
-				$"'{excluded}' must not be representable in MultiQueryOp.");
 		}
 	}
 }

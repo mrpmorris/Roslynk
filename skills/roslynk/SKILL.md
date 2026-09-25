@@ -32,6 +32,7 @@ Each tool's exact contract — parameters, output format, limits, error codes �
 | Find a symbol by partial name | `search_symbols` | compiler-declared symbols |
 | Rename a symbol everywhere (incl. `.razor`/`.cshtml`) | `rename_symbol` | find-and-replace misses markup and same-named text |
 | Apply a compiler-suggested fix | `get_code_actions` + `apply_code_action`, or `apply_code_fix` | hand-editing |
+| Extract statements or an expression into a new method | `extract_method` | hand-cutting code misses parameters, `ref`/`out` and return values |
 | Edit source or text files | `apply_patch` | keeps the in-memory model in sync; stale-guarded |
 | Remove unused usings / find dead code | `remove_unused_usings`, `find_dead_code`, `find_dead_conditionals` | eyeballing |
 
@@ -48,6 +49,10 @@ Results are **snapshots** of a solution that is edited live: re-query after any 
 ## Preview broad edits before writing
 
 Every write tool takes `checkOnly=true`, which returns the changed-file list without writing anything. Use it whenever a change might be broad — a rename of a widely-used symbol, a whole-solution cleanup — and confirm the scope before applying. Write tools are atomic and stale-guarded: if a target file changed on disk since Roslynk read it, the whole operation is rejected with `error=Stale` and nothing is written — recompute from current state and retry. Writes go straight to disk and advance the in-memory model immediately, so no reload or rebuild is ever needed afterwards.
+
+## Extract methods with Roslyn
+
+To pull code into its own method, call `extract_method` with the selection (1-based; end column exclusive - `endLine+1`, column `1` takes whole lines) and a `methodName`; add `asLocalFunction=true` for a local function. Preview with `checkOnly=true` to see the `signature` and `call` Roslyn chose. It writes nothing when the selection cannot be extracted safely or the result would not compile - read the `NotSupported` reason and adjust the selection (whole statements from one block, or one complete expression) rather than extracting by hand.
 
 ## Check diagnostics after every change
 

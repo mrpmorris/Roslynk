@@ -1,5 +1,10 @@
 # Releases
 
+# Unreleased
+
+- New `extract_method` tool: extract a selection of statements or an expression into a method or local function via Roslyn's Extract Method refactoring, with optional naming and preview; refuses without writing when Roslyn cannot extract the selection, flags a behavior change, or the result would add compile errors (Fixes #46)
+- Write pipeline can guard a precomputed update against an intervening edit to the same documents, without reverting unrelated intervening edits
+
 ## 1.2.0
 
 - Steer impact/usage questions to multi_query: impact-analysis recipe in the roslynk skill plus multi_query/find_references description hints and schema tests (Fixes #22)

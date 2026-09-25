@@ -13,4 +13,10 @@ public sealed class StaleWriteException : Exception
 	{
 		FilePath = filePath;
 	}
+
+	public StaleWriteException(string filePath, string message)
+		: base(message)
+	{
+		FilePath = filePath;
+	}
 }

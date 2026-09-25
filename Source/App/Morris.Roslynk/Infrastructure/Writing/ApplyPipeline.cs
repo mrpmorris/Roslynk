@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Observability;
 
@@ -13,7 +14,17 @@ namespace Morris.Roslynk.Infrastructure.Writing;
 /// </summary>
 public sealed class ApplyPipeline
 {
-	public Task<IReadOnlyList<string>> ApplyAsync(RoslynInstance instance, Solution updated, CancellationToken cancellationToken = default)
+	public Task<IReadOnlyList<string>> ApplyAsync(RoslynInstance instance, Solution updated, CancellationToken cancellationToken = default) =>
+		ApplyAsync(instance, updated, basedOn: null, cancellationToken);
+
+	/// <summary>
+	/// Persists <paramref name="updated"/>. When <paramref name="basedOn"/> (the snapshot the update was
+	/// computed from) is given, only the documents the update changed relative to it are applied, onto the
+	/// latest snapshot: an intervening publication that edited one of those documents (a watcher fold or
+	/// another write) is refused with a <see cref="StaleWriteException"/>, while intervening edits to other
+	/// documents are kept rather than reverted.
+	/// </summary>
+	public Task<IReadOnlyList<string>> ApplyAsync(RoslynInstance instance, Solution updated, Solution? basedOn, CancellationToken cancellationToken = default)
 	{
 		if (instance is null)
 			throw new ArgumentNullException(nameof(instance));
@@ -25,11 +36,50 @@ public sealed class ApplyPipeline
 		return instance.EnqueueWriteAsync(async (current, token) =>
 		{
 			using Activity? activity = RoslynkActivitySource.Instance.StartActivity("apply_changes");
-			IReadOnlyList<PendingWrite> writes = await BuildWritesAsync(current, updated, token);
+			Solution target = basedOn is null ? updated : await RebaseAsync(current, basedOn, updated, token);
+			IReadOnlyList<PendingWrite> writes = await BuildWritesAsync(current, target, token);
 			await AtomicFileWriter.WriteAllAsync(writes, token);
 			activity?.SetTag("roslynk.changed.count", writes.Count);
-			return new WriteResult(updated, writes.Select(write => write.FilePath).ToArray());
+			return new WriteResult(target, writes.Select(write => write.FilePath).ToArray());
 		}, cancellationToken);
+	}
+
+	/// <summary>
+	/// Replays the document edits <paramref name="updated"/> made to <paramref name="basedOn"/> onto
+	/// <paramref name="current"/>, refusing any document whose text in <paramref name="current"/> is no longer
+	/// the text the edit was computed from.
+	/// </summary>
+	private static async Task<Solution> RebaseAsync(Solution current, Solution basedOn, Solution updated, CancellationToken cancellationToken)
+	{
+		Solution target = current;
+		foreach (ProjectChanges projectChanges in updated.GetChanges(basedOn).GetProjectChanges())
+		{
+			foreach (DocumentId documentId in projectChanges.GetChangedDocuments())
+			{
+				await EnsureUnchangedAsync(current.GetDocument(documentId), basedOn.GetDocument(documentId)!, cancellationToken);
+				target = target.WithDocumentText(documentId, await updated.GetDocument(documentId)!.GetTextAsync(cancellationToken));
+			}
+
+			foreach (DocumentId documentId in projectChanges.GetChangedAdditionalDocuments())
+			{
+				await EnsureUnchangedAsync(current.GetAdditionalDocument(documentId), basedOn.GetAdditionalDocument(documentId)!, cancellationToken);
+				target = target.WithAdditionalDocumentText(documentId, await updated.GetAdditionalDocument(documentId)!.GetTextAsync(cancellationToken));
+			}
+		}
+
+		return target;
+	}
+
+	private static async Task EnsureUnchangedAsync(TextDocument? currentDocument, TextDocument baseDocument, CancellationToken cancellationToken)
+	{
+		string path = baseDocument.FilePath ?? baseDocument.Name;
+		if (currentDocument is null)
+			throw new StaleWriteException(path, $"'{path}' was removed from the solution since the edit was computed; the edit was not applied.");
+
+		SourceText currentText = await currentDocument.GetTextAsync(cancellationToken);
+		SourceText baseText = await baseDocument.GetTextAsync(cancellationToken);
+		if (!currentText.ContentEquals(baseText))
+			throw new StaleWriteException(path, $"'{path}' changed since the edit was computed; the edit was not applied.");
 	}
 
 	/// <summary>The files an update would change, without writing anything (for previews / checkOnly).</summary>
