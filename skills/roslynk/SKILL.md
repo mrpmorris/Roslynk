@@ -55,6 +55,24 @@ Never call `reload_solution` on your own initiative. File changes — including 
 
 To read a method's *body*, use `get_symbol_body` — it returns the whole declaration verbatim, so no file read is needed. Pass `includeLeadingTrivia: true` when you also want its XML docs and preceding comments. `get_members`/`get_symbol` still give you the file path and span when you want the location rather than the text.
 
+## Impact analysis / find usages
+
+Trigger phrases: "what uses X", "find usages", "who calls X", "what breaks if I change X", "is X still used" — and always before renaming a symbol or changing a signature. Answer with Roslynk, not with grep/rg/Grep over `*.cs`, `*.cshtml` or `*.razor`: text search misses partial classes, generated code and overloads, and wrongly matches identically-named symbols, while the compiler model finds real usages (including inactive `#if` branches).
+
+Send the whole analysis as ONE `multi_query` call so every section reads the same snapshot:
+
+```json
+{ "solutionId": "C:/path/MySolution.slnx", "operations": [
+  { "tool": "get_symbol",           "arguments": { "symbolName": "MyLib.Ledger" } },
+  { "tool": "find_references",      "arguments": { "symbolName": "MyLib.Ledger" } },
+  { "tool": "get_callers",          "arguments": { "methodName": "MyLib.Ledger.SetTotal" } },
+  { "tool": "find_implementations", "arguments": { "symbolName": "MyLib.ILedger" } },
+  { "tool": "get_type_hierarchy",   "arguments": { "typeName": "MyLib.Ledger" } }
+]}
+```
+
+Each operation takes that tool's own parameter names — `get_callers` is `methodName`, `get_type_hierarchy` is `typeName`, the others are `symbolName` — and a wrong or misspelled name is rejected (`error=Invalid`), so copy them exactly and never send `solutionId` inside an operation. Point `find_references`/`get_callers` at the member you're changing, `find_implementations` at the interface/abstract member, and `get_type_hierarchy` at the type. For "what breaks if I change X", follow each reference with `get_symbol_body` to read the calling convention before editing.
+
 ## Addressing symbols
 
 Most tools take a **fully-qualified name**: `Namespace.Type` or `Namespace.Type.Member` (no `global::` prefix). Names also resolve against referenced assemblies, so `System.String.Substring` works.

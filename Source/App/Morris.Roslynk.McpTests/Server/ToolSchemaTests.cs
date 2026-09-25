@@ -1,19 +1,25 @@
 using System.Reflection;
 using System.Text.Json;
-using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
 using Morris.Roslynk;
 
 namespace Morris.Roslynk.McpTests.Server;
 
-public class ToolSchemaTests
+public class ToolSchemaTests : IClassFixture<ServerBuilder>
 {
+	private readonly IReadOnlyList<McpServerTool> Tools;
+
+	public ToolSchemaTests(ServerBuilder server)
+	{
+		Tools = server.Tools;
+	}
+
 	[Fact]
 	public void WhenAToolIsPublished_ThenItsSchemaCarriesNoDefaultKeyword()
 	{
 		// A "default" makes several clients treat the property as one that must be present, which is exactly
 		// what makes a documented-as-optional parameter unusable.
-		foreach (McpServerTool tool in BuildServer())
+		foreach (McpServerTool tool in Tools)
 		{
 			Assert.DoesNotContain(
 				"\"default\"",
@@ -25,7 +31,7 @@ public class ToolSchemaTests
 	[Fact]
 	public void WhenAToolTakesSolutionId_ThenItIsRequired()
 	{
-		foreach (McpServerTool tool in BuildServer())
+		foreach (McpServerTool tool in Tools)
 		{
 			JsonElement schema = tool.ProtocolTool.InputSchema;
 			if (!Properties(schema).ContainsKey("solutionId"))
@@ -40,7 +46,7 @@ public class ToolSchemaTests
 	[Fact]
 	public void WhenAToolParameterHasADefaultValue_ThenTheSchemaMarksItOptional()
 	{
-		Dictionary<string, JsonElement> schemasByToolName = BuildServer()
+		Dictionary<string, JsonElement> schemasByToolName = Tools
 			.ToDictionary(tool => tool.ProtocolTool.Name, tool => tool.ProtocolTool.InputSchema, StringComparer.Ordinal);
 
 		foreach ((string toolName, MethodInfo method) in ToolMethods())
@@ -70,7 +76,7 @@ public class ToolSchemaTests
 	{
 		// This is the call a caller writes when it follows the documentation: the arguments with no default,
 		// and nothing else. Anything extra in "required" is a parameter the caller cannot omit.
-		Dictionary<string, JsonElement> schemasByToolName = BuildServer()
+		Dictionary<string, JsonElement> schemasByToolName = Tools
 			.ToDictionary(tool => tool.ProtocolTool.Name, tool => tool.ProtocolTool.InputSchema, StringComparer.Ordinal);
 
 		foreach ((string toolName, MethodInfo method) in ToolMethods())
@@ -90,13 +96,25 @@ public class ToolSchemaTests
 		}
 	}
 
-	private static IReadOnlyList<McpServerTool> BuildServer()
+	[Fact]
+	public void WhenTheImpactAnalysisHintsAreExpected_ThenMultiQueryAndFindReferencesDescriptionsCarryThem()
 	{
-		var services = new ServiceCollection();
-		services.AddRoslynk();
-		services.AddMcpServer().WithRoslynkTools();
-		using ServiceProvider provider = services.BuildServiceProvider();
-		return provider.GetServices<McpServerTool>().ToList();
+		// Issue #22: the roslynk skill steers impact/usage questions to multi_query, and the tool
+		// descriptions carry the same hint so clients without skill support (and subagents) see it too.
+		// Pinning the exact sentences makes a future reword a deliberate decision, not a silent drift.
+		Dictionary<string, string> descriptions = Tools
+			.ToDictionary(tool => tool.ProtocolTool.Name, tool => tool.ProtocolTool.Description ?? "", StringComparer.Ordinal);
+
+		string Normalize(string text) => string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+		Assert.Contains(
+			"For usage/impact questions, batch find_references, get_callers, find_implementations and get_type_hierarchy in one call.",
+			Normalize(descriptions["multi_query"]),
+			StringComparison.Ordinal);
+		Assert.Contains(
+			"Prefer this over text search for usages in *.cs, *.cshtml and *.razor; combine with get_callers/find_implementations via multi_query for impact analysis.",
+			Normalize(descriptions["find_references"]),
+			StringComparison.Ordinal);
 	}
 
 	private static IEnumerable<(string ToolName, MethodInfo Method)> ToolMethods()

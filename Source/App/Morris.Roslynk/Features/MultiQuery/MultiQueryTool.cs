@@ -53,6 +53,8 @@ public sealed class MultiQueryTool
 		operation may reference another's output.
 		When you need several facts before making a change, send them as one multi_query call rather than as
 		sequential calls.
+		For usage/impact questions, batch find_references, get_callers, find_implementations and
+		get_type_hierarchy in one call.
 		Read-only query tools only: get_symbol, get_symbol_body, get_members, find_definition,
 		find_implementations, find_references, get_callers, search_symbols, get_type_hierarchy, find_dead_code,
 		find_dead_conditionals. Write tools, get_diagnostics and get_solution_status are not multi-queryable;
