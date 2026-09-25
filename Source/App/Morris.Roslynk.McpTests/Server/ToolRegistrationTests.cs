@@ -30,7 +30,6 @@ public class ToolRegistrationTests
 			"find_dead_code",
 			"remove_unused_usings",
 			"multi_query",
-			"get_callees",
 		})
 		{
 			Assert.Contains(expected, toolNames);

@@ -54,9 +54,9 @@ public sealed class MultiQueryTool
 		When you need several facts before making a change, send them as one multi_query call rather than as
 		sequential calls.
 		Read-only query tools only: get_symbol, get_symbol_body, get_members, find_definition,
-		find_implementations, find_references, get_callers, get_callees, search_symbols, get_type_hierarchy,
-		find_dead_code, find_dead_conditionals. Write tools, get_diagnostics and get_solution_status are not
-		multi-queryable; get_diagnostics and get_solution_status are ordinary single calls.
+		find_implementations, find_references, get_callers, search_symbols, get_type_hierarchy, find_dead_code,
+		find_dead_conditionals. Write tools, get_diagnostics and get_solution_status are not multi-queryable;
+		get_diagnostics and get_solution_status are ordinary single calls.
 		Each operation takes exactly that tool's single-call parameter names; unknown or misspelled parameters
 		are rejected rather than ignored, and omitted parameters take the tool's declared defaults.
 		The batch carries at most 25 operations: more are not run and their slots return

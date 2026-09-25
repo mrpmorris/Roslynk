@@ -22,7 +22,7 @@ Roslynk is an MCP server that holds a live Roslyn compilation of a C# solution. 
 }
 ```
 
-The permitted tools are exactly the 12 read-only query tools (the schema's `tool` enum lists them); operations are independent, one result comes back per operation in request order, and a failing operation returns its `error=` block in its own slot without aborting the batch. Write tools, `get_diagnostics` and `get_solution_status` are not multi-queryable (`get_diagnostics`/`get_solution_status` are ordinary single calls; a write tool is not expressible in the enum and fails the call at binding). Over 25 operations or the output budget, extra slots come back `error=Truncated` with `truncatedSlots=<n>` — re-send exactly those operations (from your own copy of the request; slots carry index and tool name, not the arguments) to continue. See the multi_query section of [references/tools.md](references/tools.md) for the envelope format.
+The permitted tools are exactly the 11 read-only query tools (the schema's `tool` enum lists them); operations are independent, one result comes back per operation in request order, and a failing operation returns its `error=` block in its own slot without aborting the batch. Write tools, `get_diagnostics` and `get_solution_status` are not multi-queryable (`get_diagnostics`/`get_solution_status` are ordinary single calls; a write tool is not expressible in the enum and fails the call at binding). Over 25 operations or the output budget, extra slots come back `error=Truncated` with `truncatedSlots=<n>` — re-send exactly those operations (from your own copy of the request; slots carry index and tool name, not the arguments) to continue. See the multi_query section of [references/tools.md](references/tools.md) for the envelope format.
 
 ## Getting started
 
@@ -39,7 +39,6 @@ Never call `reload_solution` on your own initiative. File changes — including 
 | Check whether the code compiles / see warnings | `get_diagnostics` | `dotnet build` (minutes vs. instant) |
 | Find where a symbol is used | `find_references` | grep (false hits in strings/comments) |
 | Find who calls a method | `get_callers` | grep |
-| Find what a method calls | `get_callees` | grep/reading the body |
 | Jump from a usage to its declaration | `find_definition` (file + line + column) | scrolling files |
 | Find implementations of an interface/abstract member | `find_implementations` | grep |
 | See a type's members and where they're declared | `get_members` | reading the whole file |

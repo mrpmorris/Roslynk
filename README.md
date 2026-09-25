@@ -201,7 +201,6 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > **Relationships:**
 > - `find_references`: Every usage of a symbol. Parameters: `solutionId`, `symbolName`, `maxResults`.
 > - `get_callers`: Who calls a method, overloads resolved. Parameters: `solutionId`, `methodName`.
-> - `get_callees`: What a method calls, overloads resolved. Parameters: `solutionId`, `methodName`, `maxResults` (default 100).
 > - `find_implementations`: Implementors/overrides of an interface, abstract or virtual member. Parameters: `solutionId`, `symbolName`.
 > - `get_type_hierarchy`: Base types, interfaces and derived types. Parameters: `solutionId`, `typeName`.
 >
