@@ -4,6 +4,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
 using Morris.Roslynk.Infrastructure.Writing;
@@ -41,7 +42,10 @@ public sealed class ApplyCodeActionTool
 		held between calls), then written atomically through the same safe write path as the other tools. If
 		the code changed since discovery, the re-resolution no longer finds the action and the result is
 		error=Conflict — re-run get_code_actions and pick again; a malformed actionId is error=Invalid. Pass
-		checkOnly to preview the changed files without writing. Prefer applying Roslyn's action over
+		checkOnly to preview the changed files without writing. For an action discovered in a .razor/.cshtml file,
+		the edits are mapped back to the Razor source; an edit that cannot be mapped (for example a using or
+		member added to generated scaffolding) is error=NotSupported, mismatched Razor text error=Conflict, and
+		nothing is written. A file edited on disk since it was loaded is error=Stale. Prefer applying Roslyn's action over
 		re-implementing the change by hand so the in-memory model stays in sync.
 		""")]
 	public async Task<string> ApplyCodeAction(
@@ -64,17 +68,41 @@ public sealed class ApplyCodeActionTool
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
-		Document? document = CodeActionService.FindDocument(solution, actionRef.DocumentPath);
-		if (document is null)
+		RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, actionRef.DocumentPath, cancellationToken);
+		if (source is null)
 			return Failure(Error.NotFound($"'{actionRef.DocumentPath}' is no longer a solution document."));
 
-		Solution? changed = await CodeActionService.ComputeChangedSolutionAsync(document, actionRef, cancellationToken);
+		Solution? changed = await CodeActionService.ComputeChangedSolutionAsync(source.Document, actionRef, cancellationToken);
 		if (changed is null)
 			return Failure(Error.Conflict("The action is no longer available; the code may have changed. Re-run get_code_actions."));
 
-		IReadOnlyList<string> files = checkOnly
-			? ApplyPipeline.GetChangedFilePaths(solution, changed)
-			: await ApplyPipeline.ApplyAsync(instance, changed, cancellationToken);
+		try
+		{
+			changed = await RazorGeneratedChangeFolder.FoldAsync(solution, changed, cancellationToken);
+		}
+		catch (RazorMappingException exception)
+		{
+			return Failure(RazorGeneratedChangeFolder.ErrorFor(exception));
+		}
+
+		IReadOnlyList<string> files;
+		if (checkOnly)
+		{
+			files = ApplyPipeline.GetChangedFilePaths(solution, changed);
+		}
+		else
+		{
+			try
+			{
+				files = await ApplyPipeline.ApplyAsync(instance, changed, basedOn: solution, cancellationToken);
+			}
+			catch (StaleWriteException exception)
+			{
+				return OutlineError.Format(
+					Error.Stale(exception.Message, [SolutionRelativePath.Of(solutionDirectory, exception.FilePath) ?? exception.FilePath]),
+					instance.CurrentModel.Status);
+			}
+		}
 
 		var builder = new OutlineBuilder();
 		builder.Header("applied", !checkOnly);

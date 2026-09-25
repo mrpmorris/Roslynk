@@ -49,6 +49,10 @@ public sealed class GetMembersTool
 		  \t<relative/forward-slash/folder>
 		  \t\t<file.cs|file.razor>
 		  \t\t\t<memberKind>,<name>,<loc>,<paramType|paramType|...>
+		  \t\t\t\tlocalfunction,<name>,<loc>,<paramType|...>
+		A member's local functions are listed beneath it in declaration order, each one level deeper, with a local
+		function declared inside another nested one level further; name a local function as a member of the
+		member declaring it, e.g. 'MyNamespace.MyType.MyMethod.local'.
 		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; the loc is empty for a metadata member; the trailing signature is a pipe-delimited list of minimally-qualified parameter types, present only for methods that take parameters. To read a member's
 		body, resolve its path against the solution folder and read startLine through endLine. All
 		accessibilities including private are listed; inherited members are excluded unless requested; narrow
@@ -140,7 +144,7 @@ public sealed class GetMembersTool
 		// Union members across every projection instance of the type, deduped by stable identity so a member
 		// in shared code is listed once while a member declared only in an inactive branch still appears.
 		var seen = new HashSet<string>(StringComparer.Ordinal);
-		var entries = new List<(string? Project, string File, int Order, string Line)>();
+		var entries = new List<(string? Project, string File, int Order, string Line, IReadOnlyList<(int Depth, string Line)> LocalFunctions)>();
 		foreach ((INamedTypeSymbol typeInstance, Solution typeSolution) in typeInstances)
 		{
 			foreach (ISymbol member in Collect(typeInstance, includeInherited)
@@ -148,8 +152,13 @@ public sealed class GetMembersTool
 				.Where(KindIncluded)
 				.Where(member => NameMatches(member.Name)))
 			{
-				if (seen.Add(ProjectionService.KeyOf(member)))
-					entries.Add(Render(member, typeSolution, solutionDirectory));
+				if (!seen.Add(ProjectionService.KeyOf(member)))
+					continue;
+
+				(string? project, string file, int order, string line) = Render(member, typeSolution, solutionDirectory);
+				var localFunctions = new List<(int Depth, string Line)>();
+				await AddLocalFunctionsAsync(localFunctions, member, depth: 1, typeSolution, solutionDirectory, token);
+				entries.Add((project, file, order, line, localFunctions));
 			}
 		}
 
@@ -175,11 +184,39 @@ public sealed class GetMembersTool
 			FolderFiles.Write(builder, fileDepth, project, entry => entry.File, (memberDepth, file) =>
 			{
 				foreach (var entry in file.OrderBy(item => item.Order).ThenBy(item => item.Line, StringComparer.Ordinal))
+				{
 					builder.Line(memberDepth, entry.Line);
+					foreach ((int depth, string localLine) in entry.LocalFunctions)
+						builder.Line(memberDepth + depth, localLine);
+				}
 			});
 		}
 
 		return builder.ToString();
+	}
+
+	/// <summary>
+	/// Appends the local functions declared in <paramref name="container"/>, each followed by its own, in
+	/// declaration order, one level deeper per nesting.
+	/// </summary>
+	private static async Task AddLocalFunctionsAsync(
+		List<(int Depth, string Line)> lines,
+		ISymbol container,
+		int depth,
+		Solution solution,
+		string? solutionDirectory,
+		CancellationToken cancellationToken)
+	{
+		if (container is not (IMethodSymbol or IPropertySymbol or IEventSymbol) || container.DeclaringSyntaxReferences.IsEmpty)
+			return;
+
+		IEnumerable<IMethodSymbol> declared = (await LocalFunctions.FindAllInAsync(solution, container, cancellationToken))
+			.OrderBy(local => local.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0);
+		foreach (IMethodSymbol local in declared)
+		{
+			lines.Add((depth, Render(local, solution, solutionDirectory).Line));
+			await AddLocalFunctionsAsync(lines, local, depth + 1, solution, solutionDirectory, cancellationToken);
+		}
 	}
 
 	private static (string? Project, string File, int Order, string Line) Render(ISymbol member, Solution solution, string? solutionDirectory)

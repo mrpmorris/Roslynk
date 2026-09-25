@@ -41,9 +41,11 @@ public static class RazorChangeMapper
 		var mapped = new List<(string RazorPath, TextChange Change)>(changes.Count);
 		var razorTexts = new Dictionary<string, SourceText?>(StringComparer.OrdinalIgnoreCase);
 
-		foreach (TextChange change in changes)
+		foreach (TextChange original in changes)
 		{
 			cancellationToken.ThrowIfCancellationRequested();
+
+			TextChange change = Trim(generatedText, original);
 
 			FileLinePositionSpan mappedSpan = syntaxTree.GetMappedLineSpan(change.Span, cancellationToken);
 			if (!mappedSpan.HasMappedPath || !IsRazorSourcePath(mappedSpan.Path))
@@ -78,6 +80,33 @@ public static class RazorChangeMapper
 		}
 
 		return mapped;
+	}
+
+	/// <summary>
+	/// Narrows a change to the text that actually differs by dropping the prefix and suffix its old and new
+	/// text share. Text diffs can sweep unchanged neighbouring lines into one change, and those lines may lie
+	/// in generated scaffolding with no Razor mapping; the narrowed change is equivalent but maps cleanly.
+	/// </summary>
+	private static TextChange Trim(SourceText generatedText, TextChange change)
+	{
+		string oldText = generatedText.ToString(change.Span);
+		string newText = change.NewText ?? "";
+
+		int prefix = 0;
+		int maxPrefix = Math.Min(oldText.Length, newText.Length);
+		while (prefix < maxPrefix && oldText[prefix] == newText[prefix])
+			prefix++;
+
+		int suffix = 0;
+		int maxSuffix = Math.Min(oldText.Length, newText.Length) - prefix;
+		while (suffix < maxSuffix && oldText[oldText.Length - 1 - suffix] == newText[newText.Length - 1 - suffix])
+			suffix++;
+
+		if (prefix == 0 && suffix == 0)
+			return change;
+
+		var span = TextSpan.FromBounds(change.Span.Start + prefix, change.Span.End - suffix);
+		return new TextChange(span, newText.Substring(prefix, newText.Length - prefix - suffix));
 	}
 
 	private static bool IsRazorSourcePath(string path) =>

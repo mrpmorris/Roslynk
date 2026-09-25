@@ -44,7 +44,7 @@ public sealed class RenameParameterTool
 		OpenWorld = false)]
 	[Description(
 		$"""
-		Renames one parameter of one method, constructor or indexer overload using Roslyn's semantic rename:
+		Renames one parameter of one method, local function, constructor or indexer overload using Roslyn's semantic rename:
 		the declaration, every use in the body, named arguments at call sites and <paramref> documentation
 		references are updated; string literals, comments and same-named text elsewhere are left untouched.
 		The rename cascades across the member's override/interface group — overridden and overriding members,
@@ -62,14 +62,14 @@ public sealed class RenameParameterTool
 		suggestions (copy a candidate back verbatim); a parameterName the member does not declare is
 		error=NotFound listing its parameters; a newName already used by another parameter, local, local
 		function, lambda/query variable or type parameter inside a renamed declaration is error=Conflict naming
-		the member; a symbol that is not a method, constructor or indexer, a positional record parameter, or a
+		the member; a symbol that is not a method, local function, constructor or indexer, a positional record parameter, or a
 		member declared only in metadata is error=NotSupported; a file edited on disk since it was loaded is
 		error=Stale. Nothing is written in any failure case. Pass checkOnly to preview the files that would
 		change without writing.
 		""")]
 	public async Task<string> RenameParameter(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description($"Fully-qualified name of the method, constructor or indexer that declares the parameter. {OutlineDescriptions.SymbolNameGrammar}")] string methodId,
+		[Description($"Fully-qualified name of the method, local function, constructor or indexer that declares the parameter. {OutlineDescriptions.SymbolNameGrammar}")] string methodId,
 		[Description("The parameter's current name.")] string parameterName,
 		[Description("The new name (must be a valid C# identifier).")] string newName,
 		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
@@ -106,7 +106,7 @@ public sealed class RenameParameterTool
 		string resolvedName = SymbolResolver.SignatureName(member);
 
 		if (ParametersOf(member) is not ImmutableArray<IParameterSymbol> parameters)
-			return Failure(Error.NotSupported($"'{resolvedName}' is not a method, constructor or indexer."));
+			return Failure(Error.NotSupported($"'{resolvedName}' is not a method, local function, constructor or indexer."));
 		if (!member.Locations.Any(location => location.IsInSource))
 			return Failure(Error.NotSupported($"'{resolvedName}' is declared only in metadata, so its parameters cannot be renamed."));
 		if (member is IMethodSymbol { MethodKind: MethodKind.Constructor, ContainingType.IsRecord: true } constructor
@@ -203,7 +203,7 @@ public sealed class RenameParameterTool
 		symbol switch
 		{
 			IMethodSymbol method when method.MethodKind is MethodKind.Ordinary or MethodKind.Constructor or MethodKind.ExplicitInterfaceImplementation
-				or MethodKind.UserDefinedOperator or MethodKind.Conversion => method.Parameters,
+				or MethodKind.UserDefinedOperator or MethodKind.Conversion or MethodKind.LocalFunction => method.Parameters,
 			IPropertySymbol { IsIndexer: true } indexer => indexer.Parameters,
 			_ => null
 		};

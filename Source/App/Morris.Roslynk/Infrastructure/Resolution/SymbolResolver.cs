@@ -19,9 +19,15 @@ public sealed class SymbolResolver
 		genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
 		memberOptions: SymbolDisplayMemberOptions.IncludeContainingType);
 
-	/// <summary>The namespace-qualified name (no <c>global::</c> prefix) used as a symbol's identity.</summary>
+	/// <summary>
+	/// The namespace-qualified name (no <c>global::</c> prefix) used as a symbol's identity. A local function is
+	/// named as a member of the member declaring it, <c>N.T.Method.local</c>, which Roslyn's own display (the
+	/// bare <c>local</c>) does not do.
+	/// </summary>
 	public static string FullyQualifiedName(ISymbol symbol) =>
-		symbol.ToDisplayString(FullyQualifiedFormat);
+		symbol is IMethodSymbol local && LocalFunctions.IsLocalFunction(local)
+			? $"{FullyQualifiedName(LocalFunctions.NamedContainer(local))}.{local.ToDisplayString(FullyQualifiedFormat)}"
+			: symbol.ToDisplayString(FullyQualifiedFormat);
 
 	/// <summary>
 	/// The name a caller should send to reach this exact symbol: <see cref="FullyQualifiedName"/> plus a
@@ -68,10 +74,44 @@ public sealed class SymbolResolver
 				}
 			}
 
+			// Local functions are not in the declaration index. C# forbids a nested type and a member of the same
+			// name in one type, so a name that found no member can only mean a local function.
+			if (matches.Count == 0)
+			{
+				foreach (IMethodSymbol local in await FindLocalFunctionsAsync(solution, query, cancellationToken))
+				{
+					if (SymbolSignature.Matches(local, query) && seen.Add(local))
+						matches.Add(local);
+				}
+			}
+
 			IReadOnlyList<ISymbol> narrowed = SymbolSignature.Narrow(matches, query);
 			activity?.SetTag("roslynk.match.count", narrowed.Count);
 			return narrowed;
 		}
+	}
+
+	/// <summary>
+	/// The local functions a query could name: for <c>N.T.M.local</c>, those named <c>local</c> declared in
+	/// whatever <c>N.T.M</c> resolves to (itself possibly a local function, for <c>N.T.M.outer.local</c>); for a
+	/// bare <c>local</c>, every local function of that name in the solution.
+	/// </summary>
+	private async Task<IReadOnlyList<IMethodSymbol>> FindLocalFunctionsAsync(Solution solution, SymbolSignatureQuery query, CancellationToken cancellationToken)
+	{
+		if (query.ListKind == ParameterListKind.Brackets)
+			return [];
+
+		if (!SymbolSignature.TryGetContainer(query, out string containerName))
+			return await LocalFunctions.FindAllAsync(solution, name => string.Equals(name, query.SimpleName, StringComparison.Ordinal), cancellationToken);
+
+		var found = new List<IMethodSymbol>();
+		foreach (ISymbol container in await FindByFullyQualifiedNameAsync(solution, containerName, cancellationToken))
+		{
+			if (container is IMethodSymbol or IPropertySymbol or IEventSymbol)
+				found.AddRange(await LocalFunctions.FindInAsync(solution, container, query.SimpleName, cancellationToken));
+		}
+
+		return found;
 	}
 
 	/// <summary>
@@ -185,6 +225,14 @@ public sealed class SymbolResolver
 				if (!best.TryGetValue(fullyQualified, out int existing) || score < existing)
 					best[fullyQualified] = score;
 			}
+		}
+
+		foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(solution, candidate => IsCandidate(candidate, simpleName), cancellationToken))
+		{
+			string fullyQualified = FullyQualifiedName(local);
+			int score = Score(local.Name, simpleName);
+			if (!best.TryGetValue(fullyQualified, out int existing) || score < existing)
+				best[fullyQualified] = score;
 		}
 
 		return best

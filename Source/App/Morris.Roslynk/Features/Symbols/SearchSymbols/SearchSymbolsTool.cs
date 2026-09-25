@@ -38,7 +38,8 @@ public sealed class SearchSymbolsTool
 		solution.
 		{OutlineDescriptions.ProjectionCoverage}
 		{OutlineDescriptions.CommonMethodInstructions}
-		Matches are grouped file -> namespace -> type -> member, a
+		Local functions are included, nesting under the member (and any outer local functions) that declares
+		them. Matches are grouped file -> namespace -> type -> member, a
 		matched member nesting under its (parent-only) type:
 
 		  <project>
@@ -79,6 +80,13 @@ public sealed class SearchSymbolsTool
 			{
 				if (seen.Add(SymbolSignature.Of(symbol, SignatureTier.FullyQualifiedWithRefKinds)))
 					matched.Add((symbol, projection.Solution));
+			}
+
+			// Local functions are not in the declaration index, so they are found by walking the syntax.
+			foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(projection.Solution, name => name.Contains(query, StringComparison.OrdinalIgnoreCase), token))
+			{
+				if (seen.Add(SymbolSignature.Of(local, SignatureTier.FullyQualifiedWithRefKinds)))
+					matched.Add((local, projection.Solution));
 			}
 		}
 

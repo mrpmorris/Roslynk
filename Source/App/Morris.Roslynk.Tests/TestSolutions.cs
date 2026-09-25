@@ -14,6 +14,7 @@ internal static class TestSolutions
 	private static readonly Lazy<string> ReferencesSolutionPath = new(() => Prepare("ReferencesSolution", "ReferencesSolution.slnx"));
 	private static readonly Lazy<string> CodeStyleSolutionPath = new(() => Prepare("CodeStyleSolution", "CodeStyleSolution.slnx"));
 	private static readonly Lazy<string> ConditionalSolutionPath = new(() => Prepare("ConditionalSolution", "ConditionalSolution.slnx"));
+	private static readonly Lazy<string> LocalFunctionSolutionPath = new(() => Prepare("LocalFunctionSolution", "LocalFunctionSolution.slnx"));
 	private static readonly Lazy<string> GeneratorSolutionPath = new(() =>
 	{
 		string path = Prepare("GeneratorSolution", "GeneratorSolution.slnx");
@@ -104,6 +105,22 @@ internal static class TestSolutions
 
 	/// <summary>A writable scratch copy of the RazorSolution fixture, for tests that rename/edit its .razor files.</summary>
 	public static string CreateScratchRazorSolution() => CreateScratch("RazorSolution", "RazorSolution.slnx");
+
+	/// <summary>
+	/// A writable scratch copy of the CshtmlSolution fixture: an MVC view (Views/Home/Index.cshtml) with a used
+	/// and an unused @using, a CS0219 unused local in its @functions block, and a _ViewImports.cshtml whose
+	/// unused @using is shared and must be left alone.
+	/// </summary>
+	public static string CreateScratchCshtmlSolution() => CreateScratch("CshtmlSolution", "CshtmlSolution.slnx");
+
+	/// <summary>
+	/// A nested class (ParentClass.Widget) whose Method1 declares a local function holding another local function,
+	/// and whose overloaded Method2 declares a same-named local function in each overload.
+	/// </summary>
+	public static string LocalFunctions => LocalFunctionSolutionPath.Value;
+
+	/// <summary>A writable scratch copy of the LocalFunctionSolution fixture, for tests that rename or edit it.</summary>
+	public static string CreateScratchLocalFunctionSolution() => CreateScratch("LocalFunctionSolution", "LocalFunctionSolution.slnx");
 
 	/// <summary>
 	/// A scratch copy of the GeneratorSolution fixture whose generator DLL has deliberately NOT been

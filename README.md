@@ -224,8 +224,12 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > - `find_dead_code`: Unreferenced members with a confidence and a reason — candidates, never verdicts; it deletes nothing. Parameters: `solutionId`, `scope` (FQN prefix; use it on large solutions), `includePublic`, `maxResults`.
 > - `find_dead_conditionals`: `#if` branches never compiled under any loaded configuration. Parameter: `solutionId`.
 >
-> **Conventions:** most tools take a fully-qualified `Namespace.Type.Member` name (no `global::`);
-> `find_definition` and `get_code_actions` are position-based instead. Responses are a compact
+> **Conventions:** most tools take a fully-qualified `Namespace.Type.Member` name (no `global::`); a local
+> function is named as a member of the method declaring it (`Namespace.Type.Method.local`, nesting further
+> for one inside another);
+> `find_definition` and `get_code_actions` are position-based instead. Every tool that takes a
+> `documentPath`, and every write tool, works on `.razor` and `.cshtml` files as well as `.cs`: positions
+> are given in the Razor file, and edits are written back to it in its own indentation. Responses are a compact
 > `key=value` header block, a blank line, then a tab-indented outline; booleans are `Y`/`N`. Errors
 > are header-only: `error=Indexing` (retry), `Ambiguous`/`NotFound` (pick from the `candidate=`
 > lines), `Stale` (re-read and recompute), `Conflict` (re-run the discovery step). Watch for

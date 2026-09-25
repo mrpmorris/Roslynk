@@ -44,6 +44,10 @@ public static class SymbolSignature
 		genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters,
 		miscellaneousOptions: SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
+	/// <summary>A local function's own name segment, with any type-parameter list: <c>local</c> or <c>local&lt;T&gt;</c>.</summary>
+	private static readonly SymbolDisplayFormat LocalNameFormat = new(
+		genericsOptions: SymbolDisplayGenericsOptions.IncludeTypeParameters);
+
 	private static readonly SignatureTier[] Tiers =
 	[
 		SignatureTier.Minimal,
@@ -64,6 +68,11 @@ public static class SymbolSignature
 	public static string Of(ISymbol symbol, SignatureTier tier = SignatureTier.Minimal)
 	{
 		ArgumentNullException.ThrowIfNull(symbol);
+
+		// A local function carries its container's full signature, so the name stays unique when the container
+		// is overloaded (N.T.M(int).local(string) vs N.T.M(string).local(string)) and round-trips as a candidate.
+		if (symbol is IMethodSymbol local && LocalFunctions.IsLocalFunction(local))
+			return $"{Of(LocalFunctions.NamedContainer(local), tier)}.{local.ToDisplayString(LocalNameFormat)}({RenderParameters(local.Parameters, tier)})";
 
 		string head = SymbolResolver.FullyQualifiedName(symbol);
 		return symbol switch
@@ -191,6 +200,19 @@ public static class SymbolSignature
 	}
 
 	/// <summary>
+	/// The part of a qualified query before its last segment, parameter lists included: <c>N.T.M(int)</c> for
+	/// <c>N.T.M(int).local(string)</c>. False for an unqualified query.
+	/// </summary>
+	public static bool TryGetContainer(SymbolSignatureQuery query, out string container)
+	{
+		ArgumentNullException.ThrowIfNull(query);
+
+		int lastDot = LastTopLevelDot(query.QualifiedName);
+		container = lastDot > 0 ? query.QualifiedName[..lastDot].TrimEnd() : "";
+		return container.Length > 0;
+	}
+
+	/// <summary>
 	/// Whether the symbol is what the parsed name asked for. A query with no parameter list matches a member
 	/// of any signature; a query with one matches only a method or indexer whose parameters line up.
 	/// </summary>
@@ -235,6 +257,16 @@ public static class SymbolSignature
 	{
 		if (!query.Qualified)
 			return string.Equals(symbol.Name, query.SimpleName, StringComparison.Ordinal);
+
+		// A local function's container segment may carry its own parameter list (N.T.M(int).local), so the
+		// container is matched as a name in its own right rather than by comparing flattened text.
+		if (symbol is IMethodSymbol local && LocalFunctions.IsLocalFunction(local))
+		{
+			return string.Equals(local.Name, query.SimpleName, StringComparison.Ordinal)
+				&& TryGetContainer(query, out string container)
+				&& TryParse(container, out SymbolSignatureQuery containerQuery)
+				&& Matches(LocalFunctions.NamedContainer(local), containerQuery);
+		}
 
 		string head = SymbolResolver.FullyQualifiedName(symbol);
 		if (string.Equals(head, query.QualifiedName, StringComparison.Ordinal))

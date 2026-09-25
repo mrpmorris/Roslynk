@@ -25,9 +25,8 @@ public static class EnclosingDeclaration
 			return None;
 
 		SyntaxNode root = await location.SourceTree.GetRootAsync(cancellationToken);
-		MemberDeclarationSyntax? declaration = root
-			.FindNode(location.SourceSpan, getInnermostNodeForTie: true)
-			.FirstAncestorOrSelf<MemberDeclarationSyntax>();
+		SyntaxNode node = root.FindNode(location.SourceSpan, getInnermostNodeForTie: true);
+		MemberDeclarationSyntax? declaration = node.FirstAncestorOrSelf<MemberDeclarationSyntax>();
 		if (declaration is null)
 			return None;
 
@@ -46,6 +45,13 @@ public static class EnclosingDeclaration
 		var segments = new List<EnclosingSegment> { new(SymbolKindText.Of(symbol), symbol.Name) };
 		for (INamedTypeSymbol? containingType = symbol.ContainingType; containingType is not null; containingType = containingType.ContainingType)
 			segments.Insert(0, new EnclosingSegment(SymbolKindText.Of(containingType), containingType.Name));
+
+		// A location inside a local function nests under it (and under any outer local functions) below the member.
+		foreach (LocalFunctionStatementSyntax localFunction in node.AncestorsAndSelf().OfType<LocalFunctionStatementSyntax>().Reverse())
+		{
+			if (declaration.Span.Contains(localFunction.Span))
+				segments.Add(new EnclosingSegment("localfunction", localFunction.Identifier.ValueText));
+		}
 
 		return new EnclosingPath(NamespaceOf(symbol), segments);
 	}

@@ -1,0 +1,18 @@
+@using System.Text
+@using System.CodeDom
+@{
+	var greeting = Format("world");
+}
+<p>@greeting</p>
+<p>@Format("again")</p>
+
+@functions {
+	private string Format(string name)
+	{
+		int unused = 1;
+		var builder = new StringBuilder();
+		builder.Append("Hello ");
+		builder.Append(name);
+		return builder.ToString();
+	}
+}
