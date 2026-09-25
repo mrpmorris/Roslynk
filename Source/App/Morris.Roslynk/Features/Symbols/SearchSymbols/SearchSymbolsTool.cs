@@ -36,6 +36,7 @@ public sealed class SearchSymbolsTool
 		$"""
 		Searches source-declared symbols whose name contains the query (case-insensitive), across the
 		solution.
+		{OutlineDescriptions.ProjectionCoverage}
 		{OutlineDescriptions.CommonMethodInstructions}
 		Matches are grouped file -> namespace -> type -> member, a
 		matched member nesting under its (parent-only) type:

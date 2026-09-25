@@ -38,10 +38,12 @@ public sealed class FindDefinitionTool
 		$"""
 		Resolves the symbol used at a source position (file, 1-based line and column) and returns where it is
 		declared; the 'go to definition' jump, by position.
+		{OutlineDescriptions.ProjectionCoverage}
 		{OutlineDescriptions.CommonMethodInstructions}
 		The result is a '#fullName' (parameter types included for a method or indexer, so it can be passed
 		straight to the name-based tools), '#kind' header plus '#project=<project>', '#path=<relative/path.cs>' and '#loc=<line:col>' for a source symbol,
-		or '#assembly=<name>' for a metadata symbol. {OutlineDescriptions.Project}. {OutlineDescriptions.ErrorBlock} Prefer this over grepping
+		or '#assembly=<name>' for a metadata symbol. {OutlineDescriptions.Project}. A position that binds to no
+		symbol in any projection is error=NotFound. {OutlineDescriptions.ErrorBlock} Prefer this over grepping
 		to chase a definition; it follows the compiler's binding, so it lands on the right symbol even when
 		names are overloaded or shadowed.
 		""")]

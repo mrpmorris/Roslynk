@@ -53,6 +53,7 @@ public sealed class FindReferencesTool
 		{OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} It matches the compiler's
 		symbol, not text, so it skips comments, strings and unrelated same-named members, and still finds
 		usages in code-behind and partial classes.
+		{OutlineDescriptions.ProjectionCoverage}
 		Prefer this over text search for usages in *.cs, *.cshtml and *.razor; combine with
 		get_callers/find_implementations via multi_query for impact analysis.
 		""")]

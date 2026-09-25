@@ -38,7 +38,9 @@ public sealed class ApplyCodeActionTool
 		Applies a code action discovered by get_code_actions, identified by its actionId. Returns a text
 		result, not JSON: 'applied', 'action', 'status' header, a blank line, then one
 		solution-relative changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} The action is re-resolved at the same position (nothing is
-		held between calls), then written atomically through the same safe write path as the other tools. Pass
+		held between calls), then written atomically through the same safe write path as the other tools. If
+		the code changed since discovery, the re-resolution no longer finds the action and the result is
+		error=Conflict — re-run get_code_actions and pick again; a malformed actionId is error=Invalid. Pass
 		checkOnly to preview the changed files without writing. Prefer applying Roslyn's action over
 		re-implementing the change by hand so the in-memory model stays in sync.
 		""")]

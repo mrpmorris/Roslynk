@@ -37,6 +37,7 @@ public sealed class GetTypeHierarchyTool
 		$"""
 		Returns a type's base-type chain, implemented interfaces, and known derived types, resolved by
 		fully-qualified name.
+		{OutlineDescriptions.ProjectionCoverage}
 		{OutlineDescriptions.CommonMethodInstructions}
 		The body has up to three sections (base, interfaces, derived); an empty section is omitted, and
 		each entry is a '<typeKind>,<fully-qualified name>':

@@ -46,8 +46,11 @@ public sealed class ChangeSignatureTool
 		'updatedCallSites', 'status' header, a blank line, then one solution-relative changed-file
 		path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} The parameter must have a default so the change stays backward-compatible. v1 targets a
 		single ordinary method only: it refuses virtual/override/abstract methods, interface members and their
-		implementations, partial methods, params methods, and constructors (returns error=NotSupported). Pass
-		checkOnly to preview the changed files without writing.
+		implementations, partial methods, params methods, and constructors (returns error=NotSupported). Only
+		true invocation call sites are updated — method groups, nameof and cref references are left alone
+		(the parameter is optional, so they remain valid). An invalid parameter name, type or default value is
+		error=Invalid; a bare name that matches several overloads is error=Ambiguous with one candidate per
+		match. Pass checkOnly to preview the changed files without writing.
 		""")]
 	public async Task<string> ChangeSignature(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
