@@ -192,6 +192,7 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 >
 > **Navigation:**
 > - `find_definition`: Go to definition from a cursor position. Parameters: `solutionId`, `filePath`, `line`, `column` (1-based).
+> - `get_expression_info`: Compiler facts about the expression at a position: type and converted type, bound symbol and selected overload, nullability, constant value, implicit conversion, origin and doc summary; on a declared name, the declared symbol and its type. Parameters: `solutionId`, `filePath` (`.cs`/`.razor`/`.cshtml`), `line`, `column` (1-based).
 > - `get_symbol`: Identify a symbol and get its declaration. Parameters: `solutionId`, `symbolName` (fully-qualified).
 > - `get_symbol_body`: Read a symbol's complete source text, body included. Parameters: `solutionId`, `symbolName` (fully-qualified), `includeLeadingTrivia`.
 > - `get_members`: List a type's members with their locations. Parameters: `solutionId`, `typeName`, `includeInherited`, `nameFilter`, `includeMethods`/`includeFields`/`includeProperties`/`includeEvents`/`includeNestedTypes`.
@@ -227,7 +228,7 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > **Conventions:** most tools take a fully-qualified `Namespace.Type.Member` name (no `global::`); a local
 > function is named as a member of the method declaring it (`Namespace.Type.Method.local`, nesting further
 > for one inside another);
-> `find_definition` and `get_code_actions` are position-based instead. Every tool that takes a
+> `find_definition`, `get_expression_info` and `get_code_actions` are position-based instead. Every tool that takes a
 > `documentPath`, and every write tool, works on `.razor` and `.cshtml` files as well as `.cs`: positions
 > are given in the Razor file, and edits are written back to it in its own indentation. Responses are a compact
 > `key=value` header block, a blank line, then a tab-indented outline; booleans are `Y`/`N`. Errors

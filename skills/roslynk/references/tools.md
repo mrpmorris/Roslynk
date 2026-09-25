@@ -8,7 +8,7 @@ workflows and the tool descriptions carry the concise contract for discovery.
 
 - [Shared conventions](#shared-conventions)
 - [Lifecycle: open_solution, get_solution_status, reload_solution](#lifecycle)
-- [Navigation: find_definition, get_symbol, get_symbol_body, get_members, search_symbols](#navigation)
+- [Navigation: find_definition, get_expression_info, get_symbol, get_symbol_body, get_members, search_symbols](#navigation)
 - [Relationships: find_references, get_callers, find_implementations, get_type_hierarchy](#relationships)
 - [Diagnostics: get_diagnostics](#diagnostics)
 - [Razor and CSHTML: how path-based and write tools handle .razor/.cshtml](#razor-and-cshtml)
@@ -73,6 +73,31 @@ No parameters. Lists every solution loaded by the daemon (daemon-wide, not sessi
 
 ### find_definition
 `solutionId`, `filePath` (absolute or solution-relative), `line`, `column` (1-based). Position-based go-to-definition. Returns `#fullName`, `#kind`, plus `#project`/`#path`/`#loc` for source symbols or `#assembly=` for metadata-only. (Note the `#`-prefixed header style, unique to this tool family.)
+
+### get_expression_info
+`solutionId`, `filePath` (`.cs`, `.razor` or `.cshtml`; absolute or solution-relative), `line`, `column` (1-based, anywhere inside the expression; the position just after a token counts as that token). Returns compiler facts about the expression at the position. Batchable in `multi_query`.
+
+The expression is the innermost one containing the token, widened to what an edit means: a member name reports its whole member access (`a.B`), a called name its invocation (`a.B(c)`, so `type` is the return type and `symbol` the selected overload), and a created type its object creation (`new T(...)`, symbol = constructor). A position on the name a declaration introduces (local, parameter, field, property, event, method, type, foreach/catch/pattern variable) reports the declared symbol instead, like an editor hover: `declaration=Y`, `expr` is the name, `exprKind` the declaring syntax kind (e.g. `VariableDeclarator`, `MethodDeclaration`), `type` the declared type (a method's return type; `none` for a type declaration), `nullability` the declared annotation with the initializer's flow state (`None` without an initializer), `constant` for a `const`, then the usual symbol keys; no `convertedType`/`conversion`. A position on a keyword, punctuation, comment or whitespace is `error=NotFound`; a line/column outside the file or a file not compiled in the solution is `error=NotFound`; a loading solution is `error=Indexing`. Positions inside an inactive `#if` branch are tried in each projection.
+
+Output is header only, in this order (optional keys only when applicable):
+
+| Key | Meaning |
+|---|---|
+| `expr` | Expression text, whitespace collapsed, cut at 200 chars with `...` |
+| `exprKind` | Roslyn `SyntaxKind` (e.g. `InvocationExpression`, `IdentifierName`) |
+| `declaration` | `Y` only when the position is on a declared name (see above) |
+| `path`, `loc` | Solution-relative file and `startLine:startCol-endLine:endCol` (Razor source positions for `.razor`/`.cshtml`) |
+| `type` | Expression's natural type, fully qualified with C# keywords and `?` for annotated references; `none` for a method group, namespace or typeless expression (`null`, lambda) |
+| `convertedType` | Only when the target type differs (implicit conversion, target typing) |
+| `nullability` | `<annotation>/<flowState>`: annotation `None|NotAnnotated|Annotated`, flow state `None|NotNull|MaybeNull`; `None/None` when nullable analysis is off. Flow state reflects prior null checks |
+| `conversion` | Only when converted type is known and not a plain identity: `implicit`/`explicit` followed by kinds (`numeric`, `nullable`, `reference`, `boxing`, `constant`, `user-defined <operator>`, `target-typed-new`, `collection-expression`, ...), `identity`, or `none` when no conversion exists |
+| `constant` | Compile-time constant as a C# literal (`40`, `"x"`, `null`), else `none` |
+| `symbol` | Bound symbol: generic definition / static extension form, re-queryable with name-based tools (`get_symbol`, `find_references`, ...); locals, parameters and range variables report their bare name; `none` when nothing binds |
+| `candidateReason`, `candidates` | With `symbol=none`: Roslyn's reason (e.g. `OverloadResolutionFailure`) and pipe-delimited candidate names |
+| `symbolKind` | Same kind words as other tools (`method`, `property`, `field`, `local`, `parameter`, `class`, ...) |
+| `instantiation` | Constructed generic or reduced extension form, e.g. `Formatter.Echo<string>(string)` |
+| `origin` | `source` with `symbolPath`/`symbolLoc` (`line:col`), or `metadata` with `assembly` |
+| `doc` | XML-doc `<summary>` as plain text (cref short names), cut at 400 chars; absent when none is available |
 
 ### get_symbol
 `solutionId`, `symbolName` (FQN, any symbol kind including members). Unambiguous source match → `#project`/`#path`/`#loc` headers + body containing the verbatim declaration text cut before the body (brace/`=>` excluded). Metadata symbol → `#source=metadata`, `#kind`, `#signature`, `#assembly`. Ambiguous → `error=Ambiguous` with one `candidate=` per match. Preferred over reading a file to identify a symbol.
@@ -193,7 +218,7 @@ Leaf lines: `memberKind,memberName,loc,confidence,reason` with confidence `High|
 ### multi_query
 `solutionId`, `operations` (1-25 items), optional `expectSnapshot`.
 
-Each operation is `{ "tool": <name>, "arguments": { ... } }` where `tool` is one of the 11 read-only query tools (get_symbol, get_symbol_body, get_members, find_definition, find_implementations, find_references, get_callers, search_symbols, get_type_hierarchy, find_dead_code, find_dead_conditionals) and `arguments` uses exactly that tool's single-call parameter names - unknown or misspelled keys are rejected (`error=Invalid` naming the key), never ignored; omitted parameters take the tool's declared defaults. The schema's `tool` enum lists the legal names, so a write tool, get_diagnostics or get_solution_status is unrepresentable and fails the whole call at binding (`error=Invalid` naming the offending value and the permitted set).
+Each operation is `{ "tool": <name>, "arguments": { ... } }` where `tool` is one of the 12 read-only query tools (get_symbol, get_symbol_body, get_members, find_definition, find_implementations, find_references, get_callers, search_symbols, get_type_hierarchy, find_dead_code, find_dead_conditionals, get_expression_info) and `arguments` uses exactly that tool's single-call parameter names - unknown or misspelled keys are rejected (`error=Invalid` naming the key), never ignored; omitted parameters take the tool's declared defaults. The schema's `tool` enum lists the legal names, so a write tool, get_diagnostics or get_solution_status is unrepresentable and fails the whole call at binding (`error=Invalid` naming the offending value and the permitted set).
 
 **Impact analysis.** To answer "what uses X / who calls X / what breaks if I change X", batch find_references (`symbolName`), get_callers (`methodName`), find_implementations (`symbolName`) and get_type_hierarchy (`typeName`) in one call instead of grepping - parameter names are each tool's own and a wrong key is an `Invalid` slot.
 

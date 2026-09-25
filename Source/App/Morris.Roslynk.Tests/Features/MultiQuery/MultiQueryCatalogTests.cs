@@ -11,7 +11,7 @@ namespace Morris.Roslynk.Tests.Features.MultiQuery;
 public class MultiQueryCatalogTests
 {
 	[Fact]
-	public void WhenTheCatalogIsEnumerated_ThenItHoldsExactlyTheElevenQueryTools()
+	public void WhenTheCatalogIsEnumerated_ThenItHoldsExactlyTheTwelveQueryTools()
 	{
 		string[] expected =
 		[
@@ -26,6 +26,7 @@ public class MultiQueryCatalogTests
 			"get_type_hierarchy",
 			"find_dead_code",
 			"find_dead_conditionals",
+			"get_expression_info",
 		];
 
 		Assert.Equal(
