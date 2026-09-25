@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Morris.Roslynk.Features.MultiQuery;
 
@@ -11,7 +11,7 @@ namespace Morris.Roslynk.Tests.Features.MultiQuery;
 public class MultiQueryCatalogTests
 {
 	[Fact]
-	public void WhenTheCatalogIsEnumerated_ThenItHoldsExactlyTheTwelveQueryTools()
+	public void WhenTheCatalogIsEnumerated_ThenItHoldsExactlyTheFourteenQueryTools()
 	{
 		string[] expected =
 		[
@@ -27,6 +27,8 @@ public class MultiQueryCatalogTests
 			"find_dead_code",
 			"find_dead_conditionals",
 			"get_expression_info",
+			"find_reads",
+			"find_writes",
 		];
 
 		Assert.Equal(

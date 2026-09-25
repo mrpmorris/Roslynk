@@ -16,6 +16,7 @@ internal static class TestSolutions
 	private static readonly Lazy<string> ConditionalSolutionPath = new(() => Prepare("ConditionalSolution", "ConditionalSolution.slnx"));
 	private static readonly Lazy<string> LocalFunctionSolutionPath = new(() => Prepare("LocalFunctionSolution", "LocalFunctionSolution.slnx"));
 	private static readonly Lazy<string> ExpressionSolutionPath = new(() => Prepare("ExpressionSolution", "ExpressionSolution.slnx"));
+	private static readonly Lazy<string> AccessSolutionPath = new(() => Prepare("AccessSolution", "AccessSolution.slnx"));
 	private static readonly Lazy<string> GeneratorSolutionPath = new(() =>
 	{
 		string path = Prepare("GeneratorSolution", "GeneratorSolution.slnx");
@@ -125,6 +126,9 @@ internal static class TestSolutions
 	/// conversions, a generic call, a reduced extension method, nullable flow, and an unresolvable overload call.
 	/// </summary>
 	public static string Expressions => ExpressionSolutionPath.Value;
+
+	/// <summary>A single-project solution touching fields, properties and parameters in every read/write form.</summary>
+	public static string Access => AccessSolutionPath.Value;
 
 	/// <summary>A writable scratch copy of the LocalFunctionSolution fixture, for tests that rename or edit it.</summary>
 	public static string CreateScratchLocalFunctionSolution() => CreateScratch("LocalFunctionSolution", "LocalFunctionSolution.slnx");

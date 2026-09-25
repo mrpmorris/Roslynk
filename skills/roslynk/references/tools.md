@@ -9,7 +9,7 @@ workflows and the tool descriptions carry the concise contract for discovery.
 - [Shared conventions](#shared-conventions)
 - [Lifecycle: open_solution, get_solution_status, reload_solution](#lifecycle)
 - [Navigation: find_definition, get_expression_info, get_symbol, get_symbol_body, get_members, search_symbols](#navigation)
-- [Relationships: find_references, get_callers, find_implementations, get_type_hierarchy](#relationships)
+- [Relationships: find_references, find_reads, find_writes, get_callers, find_implementations, get_type_hierarchy](#relationships)
 - [Diagnostics: get_diagnostics](#diagnostics)
 - [Razor and CSHTML: how path-based and write tools handle .razor/.cshtml](#razor-and-cshtml)
 - [Code actions: get_code_actions, apply_code_action, apply_code_fix](#code-actions)
@@ -55,7 +55,7 @@ report a local function's kind as `localfunction` and nest it under its containi
 
 **Defaults.** Don't pass a value for a defaulted parameter unless you need the non-default behavior.
 
-**`#if` projections.** Symbol tools (find_definition, find_implementations, get_members, get_symbol, get_symbol_body, get_type_hierarchy, find_references, get_callers, rename_symbol, search_symbols) also cover inactive `#if`/`#else` branches: Roslynk builds derived compilations toggling each uniformly-defined preprocessor symbol, and unions/dedupes results.
+**`#if` projections.** Symbol tools (find_definition, find_implementations, get_members, get_symbol, get_symbol_body, get_type_hierarchy, find_references, find_reads, find_writes, get_callers, rename_symbol, search_symbols) also cover inactive `#if`/`#else` branches: Roslynk builds derived compilations toggling each uniformly-defined preprocessor symbol, and unions/dedupes results.
 
 ## Lifecycle
 
@@ -115,6 +115,13 @@ Output is header only, in this order (optional keys only when applicable):
 
 ### find_references
 `solutionId`, `symbolName` (FQN), `maxResults` (default 100). Compiler-accurate: skips comments, strings, unrelated same-named members. References grouped file→namespace→type→member; pipe-delimited `loc`s on one line for multiple hits. Deduped across `#if` projections. `count=`/`truncated=Y` when capped. Prefer this over text search for usages in `*.cs`, `*.cshtml` and `*.razor`; combine with get_callers/find_implementations via multi_query for impact analysis.
+
+### find_reads / find_writes
+`solutionId`, `symbolName`, `maxResults` (default 100). Target a field or property by FQN (`N.T.Field`), or a parameter as its containing method, constructor, indexer or local function's FQN + `:` + parameter name (`N.T.Method:value`, `N.T.Method(int):value`; the member part follows the usual overload grammar). Local variables are not supported. Same body as find_references, but one location per leaf with the access kind appended: `<memberKind>,<memberName>,<loc>,<accessKind>`.
+
+`accessKind`: `read`, `assign` (`=`, including deconstruction targets), `compound` (`+=`, `??=`, ...), `increment` (`++`/`--`), `ref` (`ref x` argument, `ref x` expression, `&x`), `out`, `init` (field/property declaration initialiser, object or `with` initialiser, attribute named argument, or an assignment to the constructor's own field/property inside its constructor; a lambda inside the constructor is `assign`). find_reads returns `read`, `compound`, `increment`, `ref`; find_writes returns everything except `read`. **`compound`, `increment` and `ref` appear in both tools with the same kind** — do not add the two counts. `nameof(...)`, doc crefs and named arguments (`M(value: 1)`) are omitted from both.
+
+`count=`/`truncated=Y` when capped, as find_references. Errors: `NotFound` (for an unknown parameter, candidates list the member's real parameters), `Ambiguous` with candidates, `NotSupported` (method, type, event, local variable), `Indexing`. Coverage: all loaded target frameworks plus derived compilations that each toggle one uniformly-defined/undefined preprocessor symbol; a branch reachable only with several symbols toggled together, or guarded by a symbol defined in only some projects, is not analysed. Both are available in `multi_query`.
 
 ### get_callers
 `solutionId`, `methodName` (FQN). Callers grouped file→namespace→containing type→calling member with the caller's declaration `loc`. Target one overload by writing its parameter-type list.
@@ -218,7 +225,7 @@ Leaf lines: `memberKind,memberName,loc,confidence,reason` with confidence `High|
 ### multi_query
 `solutionId`, `operations` (1-25 items), optional `expectSnapshot`.
 
-Each operation is `{ "tool": <name>, "arguments": { ... } }` where `tool` is one of the 12 read-only query tools (get_symbol, get_symbol_body, get_members, find_definition, find_implementations, find_references, get_callers, search_symbols, get_type_hierarchy, find_dead_code, find_dead_conditionals, get_expression_info) and `arguments` uses exactly that tool's single-call parameter names - unknown or misspelled keys are rejected (`error=Invalid` naming the key), never ignored; omitted parameters take the tool's declared defaults. The schema's `tool` enum lists the legal names, so a write tool, get_diagnostics or get_solution_status is unrepresentable and fails the whole call at binding (`error=Invalid` naming the offending value and the permitted set).
+Each operation is `{ "tool": <name>, "arguments": { ... } }` where `tool` is one of the 14 read-only query tools (get_symbol, get_symbol_body, get_members, find_definition, find_implementations, find_references, find_reads, find_writes, get_callers, search_symbols, get_type_hierarchy, find_dead_code, find_dead_conditionals, get_expression_info) and `arguments` uses exactly that tool's single-call parameter names - unknown or misspelled keys are rejected (`error=Invalid` naming the key), never ignored; omitted parameters take the tool's declared defaults. The schema's `tool` enum lists the legal names, so a write tool, get_diagnostics or get_solution_status is unrepresentable and fails the whole call at binding (`error=Invalid` naming the offending value and the permitted set).
 
 **Impact analysis.** To answer "what uses X / who calls X / what breaks if I change X", batch find_references (`symbolName`), get_callers (`methodName`), find_implementations (`symbolName`) and get_type_hierarchy (`typeName`) in one call instead of grepping - parameter names are each tool's own and a wrong key is an `Invalid` slot.
 

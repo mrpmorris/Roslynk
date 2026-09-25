@@ -201,6 +201,7 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 >
 > **Relationships:**
 > - `find_references`: Every usage of a symbol. Parameters: `solutionId`, `symbolName`, `maxResults`.
+> - `find_reads` / `find_writes`: Where a field, property or parameter is read or written, each location tagged `read`, `assign`, `compound`, `increment`, `ref`, `out` or `init`; `compound`, `increment` and `ref` appear in both. Parameters: `solutionId`, `symbolName` (a parameter is `Namespace.Type.Method:parameter`), `maxResults`.
 > - `get_callers`: Who calls a method, overloads resolved. Parameters: `solutionId`, `methodName`.
 > - `find_implementations`: Implementors/overrides of an interface, abstract or virtual member. Parameters: `solutionId`, `symbolName`.
 > - `get_type_hierarchy`: Base types, interfaces and derived types. Parameters: `solutionId`, `typeName`.
