@@ -13,12 +13,25 @@ public sealed class SymbolNode
 	private readonly Dictionary<string, SymbolNode> ChildIndex = new(StringComparer.Ordinal);
 	private readonly List<SymbolNode> Children = [];
 	private readonly List<(int Line, int Column, int EndLine, int EndColumn)> Locations = [];
+	private readonly string SortKey;
+	private readonly int SortLine;
+	private readonly int SortColumn;
 
 	public SymbolNode() : this("")
 	{
 	}
 
-	private SymbolNode(string key) => Key = key;
+	private SymbolNode(string key) : this(key, key, 0, 0)
+	{
+	}
+
+	private SymbolNode(string key, string sortKey, int sortLine, int sortColumn)
+	{
+		Key = key;
+		SortKey = sortKey;
+		SortLine = sortLine;
+		SortColumn = sortColumn;
+	}
 
 	/// <summary>Returns the child with the exact line text, creating it on first use.</summary>
 	public SymbolNode Child(string key)
@@ -43,22 +56,46 @@ public sealed class SymbolNode
 		(string? folder, string name) = OutlinePath.Split(path);
 		return folder is null ? Child(name) : Child(folder).Child(name);
 	}
+
+	/// <summary>
+	/// Adds a leaf line '<paramref name="key"/>,&lt;loc&gt;,<paramref name="suffix"/>' carrying exactly one
+	/// location, for outlines where each location has its own trailing field and so cannot share a pipe list.
+	/// Leaves with the same key sort by position rather than by their text.
+	/// </summary>
+	public void AddLeaf(string key, int line, int column, int endLine, int endColumn, string suffix)
+	{
+		string text = $"{key},{LocationText((line, column, endLine, endColumn))},{suffix}";
+		if (ChildIndex.ContainsKey(text))
+			return;
+
+		var leaf = new SymbolNode(text, key, line, column);
+		ChildIndex.Add(text, leaf);
+		Children.Add(leaf);
+	}
+
 	public void AddLocation(int line, int column, int endLine, int endColumn) =>
 		Locations.Add((line, column, endLine, endColumn));
 
 	/// <summary>Renders this node's children (the root itself has no line) sorted for determinism.</summary>
 	public void Render(OutlineBuilder builder)
 	{
-		foreach (SymbolNode child in Children.OrderBy(node => node.Key, StringComparer.Ordinal))
+		foreach (SymbolNode child in Ordered())
 			child.RenderInto(builder, depth: 0);
 	}
 
 	private void RenderInto(OutlineBuilder builder, int depth)
 	{
 		builder.Line(depth, LineText());
-		foreach (SymbolNode child in Children.OrderBy(node => node.Key, StringComparer.Ordinal))
+		foreach (SymbolNode child in Ordered())
 			child.RenderInto(builder, depth + 1);
 	}
+
+	private IEnumerable<SymbolNode> Ordered() =>
+		Children
+			.OrderBy(node => node.SortKey, StringComparer.Ordinal)
+			.ThenBy(node => node.SortLine)
+			.ThenBy(node => node.SortColumn)
+			.ThenBy(node => node.Key, StringComparer.Ordinal);
 
 	private string LineText()
 	{

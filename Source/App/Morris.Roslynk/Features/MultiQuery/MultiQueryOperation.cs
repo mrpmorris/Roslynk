@@ -27,6 +27,8 @@ public enum MultiQueryOp
 	find_dead_code,
 	find_dead_conditionals,
 	get_expression_info,
+	find_reads,
+	find_writes,
 }
 
 /// <summary>

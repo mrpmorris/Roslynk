@@ -97,4 +97,26 @@ internal static class OutlineDescriptions
 		+ "(or property, constructor, or outer local function) that declares it, e.g. 'MyNamespace.MyType.MyMethod.local' "
 		+ "or 'MyNamespace.MyType.MyMethod.outer.inner'; any segment may carry its own parameter list to pick an "
 		+ "overload, e.g. 'MyNamespace.MyType.MyMethod(int).local(string)'.";
+
+	/// <summary>How find_reads/find_writes name their target, including the 'Member:parameter' form.</summary>
+	public const string AccessSymbolName =
+		"Fully-qualified name of a field or property, e.g. 'MyNamespace.MyType.MyField'; for a parameter, the "
+		+ "fully-qualified name of its containing method, constructor, indexer or local function, then ':' and the "
+		+ "parameter name, e.g. 'MyNamespace.MyType.MyMethod:value' or 'MyNamespace.MyType.MyMethod(int):value'. "
+		+ "Local variables are not supported (error=NotSupported). " + SymbolNameGrammar;
+
+	/// <summary>The access-kind vocabulary and dual read/write rule shared by find_reads and find_writes.</summary>
+	public const string AccessKinds =
+		"accessKind is one of read, assign (simple '='), compound ('+=', '??=' and friends), increment ('++'/'--'), "
+		+ "ref (passed by ref, 'ref x', or '&x'), out (passed as out), init (a declaration initialiser, an object or "
+		+ "'with' initialiser, an attribute named argument, or an assignment to the constructor's own field/property "
+		+ "in its constructor). compound, increment and ref both read and write: each such location appears in BOTH "
+		+ "find_reads and find_writes with the same accessKind, so do not add the two tools' counts together. "
+		+ "nameof(...), doc-comment crefs and named arguments ('M(value: 1)') are neither, and are omitted.";
+
+	/// <summary>The projection limitation stated for find_reads/find_writes.</summary>
+	public const string AccessCoverage =
+		"Coverage: every loaded target framework, plus derived compilations each toggling ONE preprocessor symbol "
+		+ "that is uniformly defined or undefined across the C# projects; a #if branch reachable only with several "
+		+ "symbols toggled at once, or guarded by a symbol defined in some projects but not others, is not analysed.";
 }

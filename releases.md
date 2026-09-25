@@ -2,6 +2,7 @@
 
 # Unreleased
 
+- New `find_reads` and `find_writes` tools: semantic reads/writes of a field, property or parameter (addressed as `Namespace.Type.Member:parameter`), each location tagged `read`, `assign`, `compound`, `increment`, `ref`, `out` or `init`. Dual read/write accesses (`compound`, `increment`, `ref`) appear in both tools. Output follows `find_references` with one location per leaf. Available in `multi_query` (Fixes #27)
 - New `get_expression_info` tool: position-based compiler facts about an expression in a `.cs`, `.razor` or `.cshtml` file — its type and converted type, the symbol it binds to (with the overload selected, generic/extension instantiation, and candidates when unresolved), nullable annotation and flow state, constant value, implicit conversion kind, source/metadata origin and XML-doc summary. Unavailable facts are reported as `none`; a position on a declared name (local, parameter, field, member, type) reports the declared symbol and its type like an editor hover; a keyword, punctuation, comment or whitespace is `error=NotFound`. Available in `multi_query` (Fixes #26)
 - New `rename_parameter` tool: rename one parameter of a method, constructor or indexer overload via Roslyn rename, updating named arguments and `<paramref>` docs and cascading across override/interface groups; reports related declarations left unchanged, and refuses on name conflicts (Fixes #44)
 - Fully-qualified names now resolve explicitly declared constructors, written `Namespace.Type.Type(...)`

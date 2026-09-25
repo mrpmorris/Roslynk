@@ -24,6 +24,8 @@ public class ToolRegistrationTests
 			"get_diagnostics",
 			"get_symbol_body",
 			"find_references",
+			"find_reads",
+			"find_writes",
 			"rename_symbol",
 			"rename_parameter",
 			"apply_patch",

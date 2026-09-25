@@ -26,6 +26,7 @@ Each tool's exact contract â€” parameters, output format, limits, error codes â€
 |---|---|---|
 | Check it compiles / see warnings | `get_diagnostics` | instant vs `dotnet build` |
 | Find where a symbol is used, or who calls it | `find_references` / `get_callers` | text search finds false hits and misses partial classes, generated code, `#if` branches |
+| Find where a field, property or parameter is read or written (assign, `+=`, `++`, `ref`/`out`, initialisers) | `find_reads` / `find_writes` | text search cannot tell a read from a write; `compound`/`increment`/`ref` appear in both results, so do not add the counts |
 | Jump from a usage to its declaration | `find_definition` | compiler binding; correct through overloads and shadowing |
 | Know what an expression means before editing it (type, overload chosen, nullability, constant, conversion) | `get_expression_info` | `var`, overloads, implicit conversions and nullable flow are invisible in the text |
 | Find implementations of an interface/abstract member | `find_implementations` | compiler's type graph |

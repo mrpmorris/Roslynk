@@ -1,4 +1,4 @@
-using System.Collections.Frozen;
+﻿using System.Collections.Frozen;
 using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +13,8 @@ using Morris.Roslynk.Features.Symbols.FindImplementations;
 using Morris.Roslynk.Features.Symbols.GetTypeHierarchy;
 using Morris.Roslynk.Features.Symbols.SearchSymbols;
 using Morris.Roslynk.Features.References.FindReferences;
+using Morris.Roslynk.Features.References.FindReads;
+using Morris.Roslynk.Features.References.FindWrites;
 using Morris.Roslynk.Features.Callers.GetCallers;
 using Morris.Roslynk.Features.DeadCode.FindDeadCode;
 using Morris.Roslynk.Features.Conditionals.FindDeadConditionals;
@@ -69,6 +71,8 @@ internal static class MultiQueryCatalog
 		[FindDeadCodeTool.FindDeadCodeName] = new(FindDeadCodeTool.FindDeadCodeName, typeof(FindDeadCodeTool), nameof(FindDeadCodeTool.FindDeadCodeCoreAsync)),
 		[FindDeadConditionalsTool.FindDeadConditionalsName] = new(FindDeadConditionalsTool.FindDeadConditionalsName, typeof(FindDeadConditionalsTool), nameof(FindDeadConditionalsTool.FindDeadConditionalsCoreAsync)),
 		[GetExpressionInfoTool.GetExpressionInfoName] = new(GetExpressionInfoTool.GetExpressionInfoName, typeof(GetExpressionInfoTool), nameof(GetExpressionInfoTool.GetExpressionInfoCoreAsync)),
+		[FindReadsTool.FindReadsName] = new(FindReadsTool.FindReadsName, typeof(FindReadsTool), nameof(FindReadsTool.FindReadsCoreAsync)),
+		[FindWritesTool.FindWritesName] = new(FindWritesTool.FindWritesName, typeof(FindWritesTool), nameof(FindWritesTool.FindWritesCoreAsync)),
 	}.ToFrozenDictionary(StringComparer.Ordinal);
 
 	/// <summary>
