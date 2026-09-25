@@ -31,6 +31,7 @@ Each tool's exact contract — parameters, output format, limits, error codes �
 | Explore base/derived types | `get_type_hierarchy` | includes referenced-assembly base types |
 | Find a symbol by partial name | `search_symbols` | compiler-declared symbols |
 | Rename a symbol everywhere (incl. `.razor`/`.cshtml`) | `rename_symbol` | find-and-replace misses markup and same-named text |
+| Rename one parameter of a method/constructor/indexer | `rename_parameter` | also fixes named arguments, `<paramref>` docs and the override/interface family |
 | Apply a compiler-suggested fix | `get_code_actions` + `apply_code_action`, or `apply_code_fix` | hand-editing |
 | Extract statements or an expression into a new method | `extract_method` | hand-cutting code misses parameters, `ref`/`out` and return values |
 | Edit source or text files | `apply_patch` | keeps the in-memory model in sync; stale-guarded |
@@ -49,6 +50,10 @@ Results are **snapshots** of a solution that is edited live: re-query after any 
 ## Preview broad edits before writing
 
 Every write tool takes `checkOnly=true`, which returns the changed-file list without writing anything. Use it whenever a change might be broad — a rename of a widely-used symbol, a whole-solution cleanup — and confirm the scope before applying. Write tools are atomic and stale-guarded: if a target file changed on disk since Roslynk read it, the whole operation is rejected with `error=Stale` and nothing is written — recompute from current state and retry. Writes go straight to disk and advance the in-memory model immediately, so no reload or rebuild is ever needed afterwards.
+
+## Rename parameters with Roslyn
+
+To rename a parameter, call `rename_parameter` with the declaring member's `methodId` (add the parameter-type list when overloaded; a constructor is `Namespace.Type.Type(int)`), the current `parameterName` and `newName`. It updates named arguments at call sites and `<paramref>` docs, and renames the same parameter across overrides, interface members and implementations that use the same old name - check `renamedMembers` and `unchangedRelated` in the response to see what was and wasn't cascaded. On `error=Conflict` pick a name not already used inside the member. Prefer it over `rename_symbol` for parameters, which cannot target a parameter by name.
 
 ## Extract methods with Roslyn
 

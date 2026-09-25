@@ -214,6 +214,7 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 >
 > **Editing:**
 > - `apply_patch`: Edit text files with a git unified diff. Parameters: `solutionId`, `patch`, `baseVersions`, `checkOnly`. Hunks are content-anchored, not line-number-anchored — include enough context that each matches exactly one place.
+> - `rename_parameter`: Rename one parameter of a method, constructor or indexer overload with Roslyn: declaration, body, named arguments and `<paramref>` docs, cascading across the override/interface family. Parameters: `solutionId`, `methodId`, `parameterName`, `newName`, `checkOnly`.
 > - `rename_symbol`: Compiler-correct rename across partial classes, every `#if` branch, every target framework, and `.razor`/`.cshtml`. Parameters: `solutionId`, `symbolName`, `newName`, `checkOnly`.
 > - `change_signature`: Append one optional parameter to an ordinary method and thread an argument into every call site. Parameters: `solutionId`, `methodId`, `parameterType`, `parameterName`, `defaultValue`, `callSiteArgument`, `checkOnly`.
 > - `extract_method`: Extract a selection of statements or an expression into a new method or local function with Roslyn's own Extract Method refactoring; writes nothing when Roslyn cannot extract it safely or the result would not compile. Parameters: `solutionId`, `documentPath`, `startLine`, `startColumn`, `endLine`, `endColumn`, `methodName`, `asLocalFunction`, `checkOnly`.
