@@ -41,4 +41,21 @@ public class ToolRegistrationTests
 
 		Assert.True(toolNames.Count >= 20, $"Expected the full tool surface; found {toolNames.Count}.");
 	}
+
+	[Fact]
+	public void WhenRenameSymbolIsPublished_ThenOnlyItsUserParametersAreRequiredAndCancellationIsHidden()
+	{
+		var services = new ServiceCollection();
+		services.AddRoslynk();
+		services.AddMcpServer().WithRoslynkTools();
+		using ServiceProvider provider = services.BuildServiceProvider();
+
+		System.Text.Json.JsonElement schema = provider.GetServices<McpServerTool>()
+			.Single(tool => tool.ProtocolTool.Name == "rename_symbol")
+			.ProtocolTool.InputSchema;
+
+		string[] required = schema.GetProperty("required").EnumerateArray().Select(item => item.GetString()!).Order().ToArray();
+		Assert.Equal(new[] { "newName", "solutionId", "symbolName" }, required);
+		Assert.False(schema.GetProperty("properties").TryGetProperty("cancellationToken", out _));
+	}
 }

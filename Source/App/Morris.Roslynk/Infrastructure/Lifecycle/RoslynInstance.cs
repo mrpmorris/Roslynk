@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Threading.Channels;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
@@ -66,6 +66,11 @@ public sealed class RoslynInstance : IDisposable
 		CurrentModel.Solution ?? throw new InvalidOperationException("The solution is still loading.");
 
 	/// <summary>When the instance was last handed out, used by the registry to idle-evict unused solutions.</summary>
+	private int EnqueuedWritesField;
+
+	/// <summary>Writes enqueued so far (lets tests order a write against one already queued).</summary>
+	internal int EnqueuedWrites => Volatile.Read(ref EnqueuedWritesField);
+
 	public DateTime LastAccessedUtc => new(Interlocked.Read(ref LastAccessedTicks), DateTimeKind.Utc);
 
 	/// <summary>Records that the instance was just used.</summary>
@@ -123,6 +128,7 @@ public sealed class RoslynInstance : IDisposable
 			var item = new WorkItem(() => RunWriteAsync(transform, completion, cancellationToken), exception => completion.TrySetException(exception));
 			if (!Work.Writer.TryWrite(item))
 				completion.TrySetException(new ObjectDisposedException(nameof(RoslynInstance)));
+			Interlocked.Increment(ref EnqueuedWritesField);
 
 			return completion.Task;
 		}

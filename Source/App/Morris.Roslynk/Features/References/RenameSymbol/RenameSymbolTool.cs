@@ -50,7 +50,9 @@ public sealed class RenameSymbolTool
 		— edits computed against the Razor-generated code are mapped back through the compiler's #line
 		directives, covering @code blocks, markup expressions, and component-attribute usages in other
 		components' markup. If a Razor edit cannot be mapped and verified, the rename aborts before anything
-		is written (error=Conflict or error=NotSupported).
+		is written (error=Conflict or error=NotSupported). If a file the rename changes was edited (on disk or
+		in the loaded model) after the rename was computed, nothing is written and error=Stale names the file;
+		edits to other files made in the meantime are kept.
 		Returns a text result, not JSON: 'applied' (N for a checkOnly preview), 'resolvedSymbol' (the name
 		as resolved, before the rename), 'status' header, a blank line, then one solution-relative
 		changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness}
@@ -64,7 +66,8 @@ public sealed class RenameSymbolTool
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description($"Fully-qualified name of the symbol to rename. {OutlineDescriptions.SymbolNameGrammar}")] string symbolName,
 		[Description("The new name (must be a valid C# identifier).")] string newName,
-		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false)
+		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
+		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = instance.CurrentModel;
@@ -80,11 +83,11 @@ public sealed class RenameSymbolTool
 		Solution baseSolution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(baseSolution);
 
-		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(baseSolution);
-		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName);
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(baseSolution, cancellationToken);
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName, cancellationToken);
 		if (groups.Count == 0)
 		{
-			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(baseSolution, symbolName);
+			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(baseSolution, symbolName, cancellationToken: cancellationToken);
 			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", suggestions.Count > 0 ? suggestions : null));
 		}
 		if (groups.Count > 1)
@@ -99,7 +102,8 @@ public sealed class RenameSymbolTool
 			updated = await ProjectionRenamer.RenameAsync(
 				baseSolution,
 				resolved.Select(projectionSymbol => new RenameTarget(projectionSymbol.Projection.Solution, projectionSymbol.Symbol)),
-				newName);
+				newName,
+				cancellationToken);
 		}
 		catch (RazorMappingException exception)
 		{
@@ -112,9 +116,24 @@ public sealed class RenameSymbolTool
 			return Failure(Error.Conflict(exception.Message));
 		}
 
-		IReadOnlyList<string> changed = checkOnly
-			? ApplyPipeline.GetChangedFilePaths(baseSolution, updated)
-			: await ApplyPipeline.ApplyAsync(instance, updated);
+		IReadOnlyList<string> changed;
+		if (checkOnly)
+		{
+			changed = ApplyPipeline.GetChangedFilePaths(baseSolution, updated);
+		}
+		else
+		{
+			try
+			{
+				changed = await ApplyPipeline.ApplyAsync(instance, updated, basedOn: baseSolution, cancellationToken);
+			}
+			catch (StaleWriteException exception)
+			{
+				return OutlineError.Format(
+					Error.Stale(exception.Message, [SolutionRelativePath.Of(solutionDirectory, exception.FilePath) ?? exception.FilePath]),
+					instance.CurrentModel.Status);
+			}
+		}
 
 		var builder = new OutlineBuilder();
 		builder.Header("applied", !checkOnly);
