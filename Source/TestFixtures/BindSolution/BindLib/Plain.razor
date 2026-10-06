@@ -1,0 +1,8 @@
+@using BindLib
+
+<InputDate @bind-Value="Model.Name" />
+<p>@Model.Name</p>
+
+@code {
+    public Item Model { get; set; } = new();
+}

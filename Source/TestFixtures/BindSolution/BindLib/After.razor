@@ -1,0 +1,11 @@
+@using BindLib
+
+<InputDate @bind-Value="Model.Level" @bind-Value:after="Validate" />
+
+@code {
+    public Item Model { get; set; } = new();
+
+    private void Validate()
+    {
+    }
+}

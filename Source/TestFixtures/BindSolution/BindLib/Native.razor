@@ -1,0 +1,8 @@
+@using Microsoft.AspNetCore.Components.Web
+@using BindLib
+
+<input @bind="Model.Title" @bind:event="oninput" />
+
+@code {
+    public Item Model { get; set; } = new();
+}

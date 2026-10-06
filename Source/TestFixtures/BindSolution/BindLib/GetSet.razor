@@ -1,0 +1,9 @@
+@using BindLib
+
+<InputDate @bind-Value:get="Model.Amount" @bind-Value:set="OnSet" />
+
+@code {
+    public Item Model { get; set; } = new();
+
+    private void OnSet(int value) => Model.Amount = value;
+}
