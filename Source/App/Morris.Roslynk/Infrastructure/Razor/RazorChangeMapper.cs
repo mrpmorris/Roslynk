@@ -8,12 +8,22 @@ namespace Morris.Roslynk.Infrastructure.Razor;
 /// in the <c>.razor</c>/<c>.cshtml</c> source it was generated from, via the enhanced <c>#line</c>
 /// directives the Razor compiler emits. Regions the compiler copies verbatim (<c>@code</c> blocks, inline
 /// expressions, <c>nameof()</c> component-attribute names) map token-precisely, so a rename edit in the
-/// generated document lands exactly on the identifier in the razor source. Every change is verified
-/// against the razor text before it is emitted; a change that cannot be mapped and verified raises
-/// <see cref="RazorMappingException"/> so the caller aborts without applying a partial edit.
+/// generated document lands exactly on the identifier in the razor source.
+/// <para>
+/// A <c>@bind-X="Expr"</c> attribute compiles into several generated spans from one source span: the
+/// attribute value itself (mapped), plus setter lambdas and a <c>ValueExpression</c> lambda inside
+/// <c>#line hidden</c> scaffolding (unmapped) that repeat the same expression. An unmapped edit is
+/// redundant when the mapped span it was expanded from already carries the identical edit, so it is dropped.
+/// Every change is verified against the razor text before it is emitted; an unmapped change that cannot be
+/// explained that way raises <see cref="RazorMappingException"/> so the caller aborts without applying a
+/// partial edit.
+/// </para>
 /// </summary>
 public static class RazorChangeMapper
 {
+	/// <summary>How many preceding mapped regions one <c>@bind</c> expansion can span (value, get, set, handler, after).</summary>
+	private const int MaxExpansionRegions = 6;
+
 	/// <summary>
 	/// Maps <paramref name="changes"/> (spans in <paramref name="generatedOriginal"/>'s pre-edit
 	/// coordinates, as returned by <c>GetTextChangesAsync</c>) to changes against the razor source
@@ -38,7 +48,26 @@ public static class RazorChangeMapper
 			?? throw new RazorMappingException(RazorMappingFailure.Unmappable, generatedPath, $"'{generatedPath}' has no syntax tree to map through.");
 		SourceText generatedText = await generatedOriginal.GetTextAsync(cancellationToken);
 
+		// The C# spans the compiler copied from razor files, in generated order. Generated scaffolding
+		// between two of them (what a @bind attribute is expanded into) belongs to the region before it.
+		var regions = new List<(int GeneratedStart, LineMapping Mapping)>();
+		foreach (LineMapping mapping in syntaxTree.GetLineMappings(cancellationToken))
+		{
+			if (mapping.IsHidden || !mapping.MappedSpan.HasMappedPath || !IsRazorSourcePath(mapping.MappedSpan.Path))
+				continue;
+			if (mapping.Span.Start.Line < generatedText.Lines.Count)
+			{
+				int start = Math.Min(
+					generatedText.Lines[mapping.Span.Start.Line].Start + (mapping.CharacterOffset ?? mapping.Span.Start.Character),
+					generatedText.Lines[mapping.Span.Start.Line].End);
+				regions.Add((start, mapping));
+			}
+		}
+
+		regions.Sort((left, right) => left.GeneratedStart.CompareTo(right.GeneratedStart));
+
 		var mapped = new List<(string RazorPath, TextChange Change)>(changes.Count);
+		var unmapped = new List<TextChange>();
 		var razorTexts = new Dictionary<string, SourceText?>(StringComparer.OrdinalIgnoreCase);
 
 		foreach (TextChange original in changes)
@@ -49,10 +78,10 @@ public static class RazorChangeMapper
 
 			FileLinePositionSpan mappedSpan = syntaxTree.GetMappedLineSpan(change.Span, cancellationToken);
 			if (!mappedSpan.HasMappedPath || !IsRazorSourcePath(mappedSpan.Path))
-				throw new RazorMappingException(
-					RazorMappingFailure.Unmappable,
-					generatedPath,
-					$"A change in '{generatedPath}' has no source mapping back to a .razor/.cshtml file; the edit was not applied.");
+			{
+				unmapped.Add(change);
+				continue;
+			}
 
 			if (!razorTexts.TryGetValue(mappedSpan.Path, out SourceText? razorText))
 			{
@@ -79,7 +108,71 @@ public static class RazorChangeMapper
 			mapped.Add((mappedSpan.Path, new TextChange(razorSpan, change.NewText ?? "")));
 		}
 
+		foreach (TextChange change in unmapped)
+			await EnsureCoveredByMappedEditAsync(generatedPath, generatedText, change, regions, mapped, razorTexts, razorTextProvider, cancellationToken);
+
 		return mapped;
+	}
+
+	/// <summary>
+	/// Accepts a change that landed in generated scaffolding with no #line mapping of its own only when it is
+	/// a copy of an edit already mapped. A <c>@bind-X</c> attribute is expanded from its source span into a
+	/// mapped value (and handler) span plus hidden scaffolding — setter lambdas and a <c>ValueExpression</c>
+	/// lambda — that repeats the same expression, so a rename edit there duplicates the edit the semantic
+	/// rename also made inside the mapped span. At most <see cref="MaxExpansionRegions"/> regions are scanned
+	/// backwards from the edit (an expansion has a value, get/set, handler and after span at most); the first
+	/// one carrying a mapped edit with the same old and new text explains the change, which is then dropped
+	/// (it collapses into the user-written edit). Dropping can never lose a razor edit, because every
+	/// occurrence in razor source is itself mapped. Anything else — a class declaration, a generated member —
+	/// cannot be explained and aborts the whole operation.
+	/// </summary>
+	private static async Task EnsureCoveredByMappedEditAsync(
+		string generatedPath,
+		SourceText generatedText,
+		TextChange change,
+		List<(int GeneratedStart, LineMapping Mapping)> regions,
+		List<(string RazorPath, TextChange Change)> mapped,
+		Dictionary<string, SourceText?> razorTexts,
+		Func<string, Task<SourceText?>> razorTextProvider,
+		CancellationToken cancellationToken)
+	{
+		string oldText = generatedText.ToString(change.Span);
+		string newText = change.NewText ?? "";
+
+		int owner = regions.FindLastIndex(region => region.GeneratedStart <= change.Span.Start);
+		for (int index = owner; index >= 0 && owner - index < MaxExpansionRegions; index--)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+
+			string razorPath = regions[index].Mapping.MappedSpan.Path;
+			if (!razorTexts.TryGetValue(razorPath, out SourceText? razorText))
+			{
+				razorText = await razorTextProvider(razorPath);
+				razorTexts[razorPath] = razorText;
+			}
+
+			if (razorText is null)
+				throw new RazorMappingException(
+					RazorMappingFailure.MissingSource,
+					generatedPath,
+					$"'{razorPath}' is not loaded in the workspace as an additional document, so the edit cannot be applied to it; reload the solution (or build the project once) and retry.");
+
+			TextSpan regionSpan = ToTextSpan(razorText, regions[index].Mapping.MappedSpan, generatedPath);
+
+			foreach ((string mappedPath, TextChange mappedChange) in mapped)
+			{
+				if (string.Equals(mappedPath, razorPath, StringComparison.OrdinalIgnoreCase)
+					&& regionSpan.Contains(mappedChange.Span)
+					&& string.Equals(mappedChange.NewText, newText, StringComparison.Ordinal)
+					&& string.Equals(razorText.ToString(mappedChange.Span), oldText, StringComparison.Ordinal))
+					return;
+			}
+		}
+
+		throw new RazorMappingException(
+			RazorMappingFailure.Unmappable,
+			generatedPath,
+			$"A change to '{oldText}' in '{generatedPath}' lies in generated scaffolding that no .razor/.cshtml edit accounts for; the edit was not applied.");
 	}
 
 	/// <summary>

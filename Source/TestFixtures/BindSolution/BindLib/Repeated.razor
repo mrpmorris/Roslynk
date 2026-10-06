@@ -1,0 +1,13 @@
+@using BindLib
+
+<InputDate @bind-Value:get="Pick(Model.Tag, Model.Tag)" @bind-Value:set="OnSet" />
+
+@code {
+    public Item Model { get; set; } = new();
+
+    private static string Pick(string first, string second) => first + second;
+
+    private void OnSet(string value)
+    {
+    }
+}

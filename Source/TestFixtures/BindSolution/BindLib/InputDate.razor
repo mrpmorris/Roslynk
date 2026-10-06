@@ -1,0 +1,10 @@
+@typeparam TValue
+@using System.Linq.Expressions
+
+<input value="@Value" />
+
+@code {
+    [Parameter] public TValue Value { get; set; } = default!;
+    [Parameter] public EventCallback<TValue> ValueChanged { get; set; }
+    [Parameter] public Expression<Func<TValue>>? ValueExpression { get; set; }
+}

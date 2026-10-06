@@ -1,0 +1,15 @@
+@using Microsoft.AspNetCore.Components.Web
+@using BindLib
+
+<InputDate @bind-Value="Model.InstallDate" />
+<p>@Languages.Machines.InstallDate</p>
+<p>@Model.InstallDate</p>
+
+@code {
+    public ViewModel Model { get; set; } = new();
+
+    public class ViewModel
+    {
+        public DateTime? InstallDate { get; set; }
+    }
+}

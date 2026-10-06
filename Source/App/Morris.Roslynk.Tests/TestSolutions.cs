@@ -11,6 +11,7 @@ internal static class TestSolutions
 	private static readonly Lazy<string> SimpleSolution = new(() => Prepare("SimpleSolution", "SimpleSolution.slnx"));
 	private static readonly Lazy<string> BrokenSolution = new(() => Prepare("BrokenSolution", "BrokenSolution.slnx"));
 	private static readonly Lazy<string> RazorSolutionPath = new(() => Prepare("RazorSolution", "RazorSolution.slnx"));
+	private static readonly Lazy<string> BindSolutionPath = new(() => Prepare("BindSolution", "BindSolution.slnx"));
 	private static readonly Lazy<string> ReferencesSolutionPath = new(() => Prepare("ReferencesSolution", "ReferencesSolution.slnx"));
 	private static readonly Lazy<string> CodeStyleSolutionPath = new(() => Prepare("CodeStyleSolution", "CodeStyleSolution.slnx"));
 	private static readonly Lazy<string> ConditionalSolutionPath = new(() => Prepare("ConditionalSolution", "ConditionalSolution.slnx"));
@@ -35,6 +36,13 @@ internal static class TestSolutions
 
 	/// <summary>A Razor Class Library with a component whose handler is wired only in markup.</summary>
 	public static string Razor => RazorSolutionPath.Value;
+
+	/// <summary>
+	/// A Razor Class Library whose Dialog.razor binds a nested-ViewModel property with
+	/// <c>@bind-Value="Model.InstallDate"</c> (the issue 59 shape), also using the property in plain
+	/// markup, next to a same-named unrelated symbol (Languages.Machines.InstallDate).
+	/// </summary>
+	public static string Bind => BindSolutionPath.Value;
 
 	/// <summary>A two-file solution with an interface referenced many ways, for testing reference grouping.</summary>
 	public static string References => ReferencesSolutionPath.Value;
@@ -107,6 +115,9 @@ internal static class TestSolutions
 
 	/// <summary>A writable scratch copy of the RazorSolution fixture, for tests that rename/edit its .razor files.</summary>
 	public static string CreateScratchRazorSolution() => CreateScratch("RazorSolution", "RazorSolution.slnx");
+
+	/// <summary>A writable scratch copy of the BindSolution fixture, for tests that rename through @bind expansions.</summary>
+	public static string CreateScratchBindSolution() => CreateScratch("BindSolution", "BindSolution.slnx");
 
 	/// <summary>
 	/// A writable scratch copy of the CshtmlSolution fixture: an MVC view (Views/Home/Index.cshtml) with a used

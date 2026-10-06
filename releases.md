@@ -1,5 +1,9 @@
 # Releases
 
+# Unreleased
+
+- `rename_symbol` and `rename_parameter` no longer fail with `error=NotSupported` when the renamed member is referenced from a Razor `@bind-X="Expr"`, `@bind-X:get`/`:set`/`:after` or `@bind="Expr"` attribute (e.g. `<InputDate @bind-Value="Model.InstallDate" />`): the Razor compiler expands the attribute into hidden setter/`ValueExpression` lambdas with no `#line` mapping of their own, and those unmapped edits aborted the whole rename. They are now recognised as copies of the edit already made at the user-written span and collapse into the single `.razor` edit. A scaffolding edit nothing accounts for (e.g. renaming a component whose class is generated) still returns `error=NotSupported` with nothing written (Fixes #59)
+
 ## 2.0.0
 
 **Important** Tell your agent
