@@ -45,7 +45,7 @@ Sources: `Infrastructure/Lifecycle/{InstanceRegistry,RoslynInstance,SolutionMode
 - `GetOrAddAsync` waits for initial readiness and has a different dirty path that closes/recreates the instance; it is useful in tests, not interchangeable with the normal data-tool path.
 - Instances track access for idle eviction and own the workspace, watcher, queue and cancellation lifetime.
 
-`SolutionModel` is a published immutable wrapper containing status, optional Roslyn `Solution`, fault message and immutable project metadata. Each new wrapper has a fresh GUID `Id`, even when it contains the same `Solution`. This is a **publication generation**, not a content hash or Roslyn document version. Diagnostics status transitions can also change it.
+`SolutionModel` is a published immutable wrapper containing status, optional Roslyn `Solution` and fault message. Each new wrapper has a fresh GUID `Id`, even when it contains the same `Solution`. This is a **publication generation**, not a content hash or Roslyn document version. Diagnostics status transitions can also change it.
 
 `RoslynInstance.CurrentModel` uses `Volatile.Read`; publication uses `Volatile.Write`. `ReadModelAsync` briefly acquires a read lock, captures one model, and releases the lock. A reader starting during a locked write waits for publication, then performs semantic work against its captured immutable snapshot without holding the lock. Do not repeatedly consult `CurrentModel` halfway through a logical read or combine symbols/trees from different solutions.
 
@@ -53,7 +53,7 @@ Writes and diagnostics run on an unbounded channel with one consumer:
 
 1. `EnqueueWriteAsync` queues a transform receiving the latest `Solution` when it executes.
 2. Under the write lock, `RunWriteAsync` publishes `Updating`, invokes the transform, then publishes `WriteResult.Updated` as `Ready`.
-3. It marks diagnostics needed and clears the diagnostics cache. On transform failure it republishes the previous solution and faults that work item's completion; subsequent work must still run.
+3. It marks diagnostics needed and clears the diagnostics cache, unless the transform returned the very `Solution` it was given. On transform failure it republishes the previous solution and faults that work item's completion; subsequent work must still run.
 4. `WriteResult` contains the updated solution and changed physical paths. Watcher folds use an empty path list because disk was already edited.
 
 Diagnostics requests are queued after pending writes. Compilation runs against a captured solution without holding the read lock, so semantic readers can continue. The cache is keyed by diagnostics mode and invalidated by writes/rebuilds. `DiagnosticsResult` includes the solution actually compiled: use that solution for mapping diagnostics, not whichever solution happens to be current later.
@@ -63,7 +63,7 @@ Rebuilds load a replacement workspace in the background. `RebuildGate` and `Rebu
 ### Snapshot details to verify when extending lifecycle behavior
 
 - `CurrentModel` access itself does not wait for an active writer; `ReadModelAsync` is the fenced read API. Several existing write tools capture `CurrentModel` directly.
-- `ProjectModels` is populated on workspace load/rebuild, but helpers such as `Ready(solution)`, `Loading(solution)` and `Updating(solution)` do not carry it forward. `AdvanceTo` currently uses `Ready(solution)`. Do not assume project metadata survives every publication; changes needing it should explicitly address preservation and tests.
+- No MSBuild project properties are captured. `MSBuildWorkspace` evaluates projects out of process in its BuildHost, so `Microsoft.Build` is never loaded in Roslynk and in-process `ProjectInstance` evaluation is unavailable. Derive per-project build facts from the Roslyn `Project` itself (`CompilationOutputInfo`, `ParseOptions`, `AnalyzerOptions`), which every publication carries.
 - A failed operation may publish a new model ID even though its source content did not change. Do not use generation equality as text equality.
 
 ## Disk writes: preserve all layers of protection
@@ -107,12 +107,15 @@ Sources: `Infrastructure/Watching/{SolutionFileWatcher,SolutionFileSync}.cs`.
 `SolutionFileSync` owns the classification rules:
 
 - Ignore `bin`, `obj`, `.roslynk.tmp` and `.roslynk.bak` centrally, including direct calls that bypass the watcher adapter.
-- Known `.cs` edits fold into all matching documents via the write queue; unchanged text is ignored, avoiding feedback from the server's own writes. Text folds request background compiler diagnostics.
+- Known `.cs` edits fold into all matching documents via the write queue; unchanged text is ignored, avoiding feedback from the server's own writes. Text folds request background compiler diagnostics. A `.cs` fold also reruns the Razor generator for the affected projects and their dependents (`RazorDocumentGenerator.RegenerateAsync`), because generated Razor code binds to C# declarations (a code-behind parameter rename): always for an added or removed file, and for an edit only when the tree is not top-level equivalent (`IsEquivalentTo(topLevel: true)`), since method bodies and initializers never reach generated code.
+- Files inside a project directory's dot-folders (`.git`, `.vs`, `.idea`) or `node_modules` are ignored, matching the SDK's own default item excludes; build files there still count. The check is relative to each project directory, so a solution that itself lives under a dot-folder is unaffected.
+- A known additional document whose disk text equals the model needs nothing. A known `.razor`/`.cshtml` in projects whose Razor output `RazorGenerationState` covers is folded in place (new text, then incremental regeneration) instead of marking dirty; it is folded even when the text is unchanged, so the generator's real output replaces `RazorGeneratedChangeFolder`'s approximation after the server's own writes. Other changed additional documents mark dirty.
 - Known deletions remove documents. New `.cs` files can be folded into owning default-glob projects; explicit compile-item cases mark the instance dirty for MSBuild reevaluation.
 - Default-glob detection currently uses project-file text heuristics, not full MSBuild item evaluation. Treat unusual conditions, exclusions and nested projects carefully.
 - A `.cs` path registered as an analyzer additional file is a rebuild input, even if also compiled. Do not accidentally fold it as ordinary C# only.
 - Build files (`.csproj`, `.vbproj`, `.fsproj`, `.props`, `.targets`, `.sln`, `.slnx`, `.editorconfig`) use content baselines to distinguish edits from touches.
-- Other nonignored files mark the instance dirty, covering Razor, resources and generator inputs. Dirty rebuild is lazy and coalesced on subsequent use.
+- Other nonignored files mark the instance dirty, covering new or deleted Razor files, resources and generator inputs. Dirty rebuild is lazy and coalesced on subsequent use.
+- `RunWriteAsync` leaves the diagnostics cache valid when a transform returns the very `Solution` it was given (a no-op fold), and the auto-diagnostics after such a write are skipped.
 
 Watcher exception handling is best-effort; disk stale validation is a separate correctness layer. Fold transforms use the latest solution, but the current text-fold implementation reads disk text before queueing; do not assume it re-reads inside the queue. For concurrency work, test intervening edits and rebuilds explicitly.
 
@@ -137,9 +140,12 @@ Regression tests: `Morris.Roslynk.Tests/Features/LocalFunctions` against `TestFi
 Razor has two representations: real `.razor`/`.cshtml` additional documents and generated C# made available as editable model documents by `RazorDocumentGenerator`.
 
 - Workspace loading remaps analyzer references to a shadow-copy loader **before** requesting compilations/Razor augmentation. Otherwise generator DLLs in another project's `bin/obj` can be locked and prevent rebuilding them.
-- Razor augmentation prefers a fresh pre-generated snapshot, otherwise runs a discovered SDK generator. Snapshot analysis checks missing/new sources, timestamps, directive files and orphan outputs, including flat and folder-preserved layouts.
+- Razor augmentation runs per project in dependency order (`GetTopologicallySortedProjects`): a project's generator discovers the components of the projects it references from their compilations, so those must be generated first. Only projects with `.razor`/`.cshtml` additional documents are augmented.
+- `RazorGeneratorLoader` prefers the generator instance of the project's own (shadow-loaded) analyzer reference; when that is refused or absent it loads the SDK's DLL into an isolated per-file load context, never the default one (which can hold one Razor compiler per process).
+- Razor augmentation prefers a fresh pre-generated snapshot (`RazorSnapshot`, located through `CompilationOutputInfo`, so it is per configuration/TFM and works for artifacts or custom intermediate layouts), otherwise runs the generator. Snapshot analysis checks missing/new sources, timestamps, directive files (their own `.g.cs` is claimed but not required) and orphan outputs, in flat and folder-preserved layouts, and rejects a snapshot older than any compile input of the project or its referenced projects.
 - If no generator is available, it may keep stale but nonorphan generated files to preserve useful binding. Freshness is therefore not guaranteed just because generated documents exist.
-- Once augmentation supplies generated documents, it removes the native Razor generator reference to prevent duplicate partial members and bindings to an immutable duplicate.
+- The native Razor generator reference is removed before the project is compiled for the generator (so the compilation does not run it a second time) and stays removed once Roslynk supplies generated documents, preventing duplicate partial members and bindings to an immutable duplicate.
+- `RazorGenerationState` (one per `SolutionWorkspace`, exposed as `SolutionWorkspace.Razor`) keeps each project's generator, last `GeneratorDriver`, generated documents by hint name and the Razor compiler's diagnostics. Regeneration hands the driver the compilation without the previous generated documents (reusing the identical input object when the compilation is unchanged), then updates only documents whose text changed, adding new ones in one batch. Generated documents of a multi-targeted project share one path per hint name across frameworks; duplicate detection is per project. `get_diagnostics` appends `RazorGenerationState.Diagnostics` (external-file locations in the Razor source) to the compiled diagnostics.
 - Use `RazorMapping.GetDisplaySpan` for user-facing source positions. `RazorChangeMapper` maps pre-edit generated spans through `#line` directives, obtains Razor text from the captured solution, validates bounds and exact old text, and rejects unmappable/mismatched changes before writes.
 - Rename keeps generated C# changes in memory while writing the corresponding additional documents. One generated document can map to several Razor files (including imports); duplicate/conflicting mapped edits need handling. Never write generated C# to disk as the rename result.
 - Other tools that edit or take positions in `.razor`/`.cshtml` go through two seams:

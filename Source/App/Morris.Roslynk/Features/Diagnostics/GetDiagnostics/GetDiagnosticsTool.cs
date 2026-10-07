@@ -54,8 +54,9 @@ public sealed class GetDiagnosticsTool
 		Analyzers (NetAnalyzers / IDE rules) run by default; set includeAnalyzers false for a faster compiler-only pass.
 		{OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to hunt for problems, and over running
 		`dotnet build`; it returns the compiler's and analyzers' own diagnostics with exact locations.
-		Multi-targeted projects report diagnostics across their loaded target frameworks. Diagnostic ids that
-		exist only to trigger a code fix (they carry no message and accompany a public rule, as IDE0005's
+		Multi-targeted projects report diagnostics across their loaded target frameworks. The Razor compiler's own
+		diagnostics (RZxxxx, e.g. an unclosed @code block) are reported against the .razor/.cshtml file. Diagnostic
+		ids that exist only to trigger a code fix (they carry no message and accompany a public rule, as IDE0005's
 		does) are not listed — fix the public id instead.
 		""")]
 	public async Task<string> GetDiagnostics(
@@ -81,9 +82,13 @@ public sealed class GetDiagnosticsTool
 		Solution compiled = diagnostics.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(compiled);
 
+		// The Razor compiler's own diagnostics come from Roslynk's in-process generator run, not the compilation.
+		IReadOnlyList<Diagnostic> razor = instance.Workspace?.Razor.Diagnostics(compiled) ?? [];
+
 		// Analyzers report private trigger ids alongside the public rule (IDE0005's, for one). They have no
 		// message and nothing to act on, so they are dropped before the counts as well as the body.
 		List<Diagnostic> all = diagnostics.Diagnostics
+			.Concat(razor)
 			.Where(diagnostic => !CodeActionCatalog.IsPrivateFixTrigger(diagnostic.Id))
 			.ToList();
 
@@ -132,11 +137,11 @@ public sealed class GetDiagnosticsTool
 					builder.Line(severityDepth, SeverityLabel(severity.Key));
 
 					IEnumerable<Diagnostic> ordered = severity
-						.OrderBy(diagnostic => diagnostic.Location.IsInSource ? 0 : 1)
-						.ThenBy(diagnostic => diagnostic.Location.IsInSource
+						.OrderBy(diagnostic => HasFile(diagnostic.Location) ? 0 : 1)
+						.ThenBy(diagnostic => HasFile(diagnostic.Location)
 							? diagnostic.Location.GetDisplaySpan().StartLinePosition.Line
 							: int.MaxValue)
-						.ThenBy(diagnostic => diagnostic.Location.IsInSource
+						.ThenBy(diagnostic => HasFile(diagnostic.Location)
 							? diagnostic.Location.GetDisplaySpan().StartLinePosition.Character
 							: int.MaxValue);
 
@@ -149,11 +154,22 @@ public sealed class GetDiagnosticsTool
 		return builder.ToString();
 	}
 
+	/// <summary>
+	/// Whether the diagnostic points into a file: a source location, or (for a Razor compiler diagnostic) a
+	/// location in a .razor/.cshtml file outside the compilation.
+	/// </summary>
+	private static bool HasFile(Location location) =>
+		location.IsInSource || location.Kind == LocationKind.ExternalFile;
+
 	private static string? ProjectOf(Diagnostic diagnostic, Solution solution) =>
-		diagnostic.Location.SourceTree is SyntaxTree tree ? ProjectName.Of(solution, tree) : null;
+		diagnostic.Location.SourceTree is SyntaxTree tree
+			? ProjectName.Of(solution, tree)
+			: diagnostic.Location.Kind == LocationKind.ExternalFile && diagnostic.Location.GetLineSpan().Path is { Length: > 0 } path
+				? ProjectName.OfPath(solution, path)
+				: null;
 
 	private static string FileOf(Diagnostic diagnostic, string? solutionDirectory) =>
-		diagnostic.Location.IsInSource
+		HasFile(diagnostic.Location)
 			? SolutionRelativePath.Of(solutionDirectory, diagnostic.Location.GetDisplaySpan().Path)!
 			: NoLocationBucket;
 
@@ -170,7 +186,7 @@ public sealed class GetDiagnosticsTool
 	{
 		string message = OutlineBuilder.Sanitize(diagnostic.GetMessage());
 
-		if (!diagnostic.Location.IsInSource)
+		if (!HasFile(diagnostic.Location))
 			return $"{diagnostic.Id},{message}";
 
 		FileLinePositionSpan span = diagnostic.Location.GetDisplaySpan();

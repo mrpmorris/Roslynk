@@ -111,8 +111,8 @@ public class RazorStaleSnapshotTests
 		PlantGeneratedFile(solutionPath, "UsesCounter_razor.g.cs",
 			"namespace RazorLib { public partial class UsesCounter { void M() { DirectiveStaleMarker(); } } }");
 
-		// _Imports.razor produces no .g.cs of its own but changes every component's generated code, so
-		// one written after the snapshot invalidates it wholesale.
+		// _Imports.razor changes every component's generated code, so one written after the snapshot
+		// invalidates it wholesale (its own _Imports_razor.g.cs is not required to exist).
 		string projectDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib");
 		File.WriteAllText(Path.Combine(projectDir, "_Imports.razor"), "@using Microsoft.AspNetCore.Components.Web");
 		File.SetLastWriteTimeUtc(Path.Combine(projectDir, "_Imports.razor"), DateTime.UtcNow.AddMinutes(5));
@@ -123,9 +123,105 @@ public class RazorStaleSnapshotTests
 		Assert.DoesNotContain(diagnostics, d => d.GetMessage().Contains("DirectiveStaleMarker"));
 	}
 
-	private static string PlantGeneratedFile(string solutionPath, string fileName, string content)
+	[Fact]
+	public async Task WhenTheSnapshotIncludesTheImportsFilesOwnOutput_ThenItIsStillUsed()
 	{
-		string projectDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib");
+		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+
+		// Every SDK emits _Imports_razor.g.cs for _Imports.razor; it must count as claimed, not as an orphan.
+		string imports = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "_Imports.razor");
+		File.WriteAllText(imports, "@using Microsoft.AspNetCore.Components.Web");
+		File.SetLastWriteTimeUtc(imports, DateTime.UtcNow.AddMinutes(-5));
+
+		PlantGeneratedFile(solutionPath, "Counter_razor.g.cs",
+			"namespace RazorLib { public partial class Counter : global::Microsoft.AspNetCore.Components.ComponentBase { } }");
+		PlantGeneratedFile(solutionPath, "UsesCounter_razor.g.cs",
+			"namespace RazorLib { public partial class UsesCounter : global::Microsoft.AspNetCore.Components.ComponentBase { } }");
+		PlantGeneratedFile(solutionPath, "_Imports_razor.g.cs",
+			"namespace RazorLib { public partial class _Imports : global::Microsoft.AspNetCore.Components.ComponentBase { } }");
+
+		using SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(solutionPath);
+
+		IEnumerable<Document> documents = workspace.Solution.Projects.SelectMany(p => p.Documents);
+		Assert.Contains(documents, d => IsSnapshotFile(d, "Counter_razor.g.cs"));
+		Assert.Contains(documents, d => IsSnapshotFile(d, "_Imports_razor.g.cs"));
+	}
+
+	[Fact]
+	public async Task WhenAFlatLayoutSnapshotIncludesViewImportsAndViewStartOutput_ThenItIsUsed()
+	{
+		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
+		string projectDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "CshtmlLib");
+		string viewStart = Path.Combine(projectDir, "Views", "_ViewStart.cshtml");
+		File.WriteAllText(viewStart, "@{ Layout = null; }");
+		File.SetLastWriteTimeUtc(viewStart, DateTime.UtcNow.AddMinutes(-5));
+
+		// Older SDKs flatten the whole relative path into the file name.
+		PlantGeneratedFile(solutionPath, "CshtmlLib", "Views_Home_Index_cshtml.g.cs", "namespace AspNetCoreGeneratedDocument { internal sealed class Views_Home_Index { } }");
+		PlantGeneratedFile(solutionPath, "CshtmlLib", "Views__ViewImports_cshtml.g.cs", "namespace AspNetCoreGeneratedDocument { internal sealed class Views__ViewImports { } }");
+		PlantGeneratedFile(solutionPath, "CshtmlLib", "Views__ViewStart_cshtml.g.cs", "namespace AspNetCoreGeneratedDocument { internal sealed class Views__ViewStart { } }");
+
+		using SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(solutionPath);
+
+		IEnumerable<Document> documents = workspace.Solution.Projects.SelectMany(p => p.Documents);
+		Assert.Contains(documents, d => IsSnapshotFile(d, "Views_Home_Index_cshtml.g.cs"));
+		Assert.Contains(documents, d => IsSnapshotFile(d, "Views__ViewImports_cshtml.g.cs"));
+		Assert.Contains(documents, d => IsSnapshotFile(d, "Views__ViewStart_cshtml.g.cs"));
+	}
+
+	[Fact]
+	public async Task WhenACodeBehindFileIsNewerThanTheSnapshot_ThenTheSnapshotIsNotTrusted()
+	{
+		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+
+		// Every .razor source is covered and older than its .g.cs, but the generated code also binds to C#: a
+		// component parameter renamed in a code-behind after the build would survive in the snapshot.
+		PlantGeneratedFile(solutionPath, "Counter_razor.g.cs",
+			"namespace RazorLib { public partial class Counter { void M() { CodeBehindStaleMarker(); } } }");
+		PlantGeneratedFile(solutionPath, "UsesCounter_razor.g.cs",
+			"namespace RazorLib { public partial class UsesCounter { void M() { CodeBehindStaleMarker(); } } }");
+		string codeBehind = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Helper.cs");
+		File.WriteAllText(codeBehind, "namespace RazorLib; public static class Helper { }");
+		File.SetLastWriteTimeUtc(codeBehind, DateTime.UtcNow.AddMinutes(5));
+
+		using SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(solutionPath);
+		IReadOnlyList<Diagnostic> diagnostics = await new DiagnosticsService().GetAllDiagnosticsAsync(workspace.Solution);
+
+		Assert.DoesNotContain(diagnostics, d => d.GetMessage().Contains("CodeBehindStaleMarker"));
+		Assert.DoesNotContain(workspace.Solution.Projects.SelectMany(p => p.Documents), d => IsSnapshotFile(d, "Counter_razor.g.cs"));
+	}
+
+	[Fact]
+	public async Task WhenOnlyAnotherConfigurationHasASnapshot_ThenItIsNotUsed()
+	{
+		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string releaseDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "obj", "Release", "net8.0", "generated",
+			"Microsoft.CodeAnalysis.Razor.Compiler", "Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator");
+		Directory.CreateDirectory(releaseDir);
+		File.WriteAllText(Path.Combine(releaseDir, "Counter_razor.g.cs"),
+			"namespace RazorLib { public partial class Counter { void M() { OtherConfigurationMarker(); } } }");
+		File.WriteAllText(Path.Combine(releaseDir, "UsesCounter_razor.g.cs"),
+			"namespace RazorLib { public partial class UsesCounter { void M() { OtherConfigurationMarker(); } } }");
+
+		using SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(solutionPath);
+		IReadOnlyList<Diagnostic> diagnostics = await new DiagnosticsService().GetAllDiagnosticsAsync(workspace.Solution);
+
+		Assert.DoesNotContain(diagnostics, d => d.GetMessage().Contains("OtherConfigurationMarker"));
+		Assert.DoesNotContain(workspace.Solution.Projects.SelectMany(p => p.Documents),
+			d => d.FilePath?.Contains($"{Path.DirectorySeparatorChar}Release{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) == true);
+	}
+
+	private static bool IsSnapshotFile(Document document, string fileName) =>
+		document.FilePath is string path
+		&& string.Equals(Path.GetFileName(path), fileName, StringComparison.OrdinalIgnoreCase)
+		&& path.Contains("Microsoft.CodeAnalysis.Razor.Compiler", StringComparison.OrdinalIgnoreCase);
+
+	private static string PlantGeneratedFile(string solutionPath, string fileName, string content) =>
+		PlantGeneratedFile(solutionPath, "RazorLib", fileName, content);
+
+	private static string PlantGeneratedFile(string solutionPath, string projectFolder, string fileName, string content)
+	{
+		string projectDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, projectFolder);
 		string generatedDir = Path.Combine(projectDir, GeneratedSubPath);
 		Directory.CreateDirectory(generatedDir);
 

@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Watching;
 using Morris.Roslynk.Infrastructure.Writing;
 
@@ -307,6 +308,162 @@ public class SolutionFileSyncTests
 		File.Delete(additional);
 		await subject.OnFileChangedAsync(additional);
 
+		Assert.True(instance.IsDirty);
+	}
+
+	[Fact]
+	public async Task WhenARazorFileIsEdited_ThenItsGeneratedDocumentIsRegeneratedWithoutReload()
+	{
+		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string counter = FindFile(solutionPath, "Counter.razor");
+		await File.WriteAllTextAsync(counter, (await File.ReadAllTextAsync(counter)) + "\n<span>regenerated-marker</span>\n");
+
+		await subject.OnFileChangedAsync(counter);
+
+		Assert.False(instance.IsDirty);
+		Document generated = instance.CurrentSolution.Projects.SelectMany(p => p.Documents)
+			.First(d => string.Equals(Path.GetFileName(d.FilePath), "Counter_razor.g.cs", StringComparison.OrdinalIgnoreCase));
+		Assert.Contains("regenerated-marker", (await generated.GetTextAsync()).ToString());
+	}
+
+	[Fact]
+	public async Task WhenARazorFileIsRewrittenWithIdenticalContent_ThenNothingChanges()
+	{
+		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+		Solution before = instance.CurrentSolution;
+
+		string counter = FindFile(solutionPath, "Counter.razor");
+		await File.WriteAllBytesAsync(counter, await File.ReadAllBytesAsync(counter));
+
+		await subject.OnFileChangedAsync(counter);
+
+		Assert.False(instance.IsDirty);
+		Assert.Same(before, instance.CurrentSolution);
+	}
+
+	[Fact]
+	public async Task WhenANewRazorFileAppears_ThenTheInstanceIsMarkedDirty()
+	{
+		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string added = Path.Combine(Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!, "Added.razor");
+		await File.WriteAllTextAsync(added, "<p>added</p>");
+
+		await subject.OnFileChangedAsync(added);
+
+		// Membership is MSBuild's call: a new Razor source is not yet an additional document.
+		Assert.True(instance.IsDirty);
+	}
+
+	[Fact]
+	public async Task WhenACodeBehindParameterIsRenamed_ThenTheDependentPagesRazorIsRegeneratedWithoutReload()
+	{
+		string solutionPath = TestSolutions.CreateScratchRazorMultiProjectSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string codeBehind = FindFile(solutionPath, "Widget.razor.cs");
+		await File.WriteAllTextAsync(codeBehind, (await File.ReadAllTextAsync(codeBehind)).Replace("Count", "Total"));
+
+		await subject.OnFileChangedAsync(codeBehind);
+
+		// App's Page.razor still says Count="3". Generated before the rename, its code reads
+		// nameof(Widget.Count) and fails with a phantom CS0117; regenerated, Count is just an attribute.
+		Assert.False(instance.IsDirty);
+		Project app = instance.CurrentSolution.Projects.Single(p => p.Name == "App");
+		Compilation compilation = (await app.GetCompilationAsync())!;
+		Assert.DoesNotContain(compilation.GetDiagnostics(), d => d.Severity == DiagnosticSeverity.Error);
+	}
+
+	[Fact]
+	public async Task WhenACodeBehindEditOnlyChangesAMethodBody_ThenRazorIsNotRegenerated()
+	{
+		string solutionPath = TestSolutions.CreateScratchRazorMultiProjectSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+		RazorGenerationState razor = instance.Workspace!.Razor;
+		Dictionary<ProjectId, GeneratorDriver?> driversBefore = instance.CurrentSolution.ProjectIds.ToDictionary(id => id, id => razor.Get(id)?.Driver);
+
+		string codeBehind = FindFile(solutionPath, "Widget.razor.cs");
+		await File.WriteAllTextAsync(codeBehind, (await File.ReadAllTextAsync(codeBehind)).Replace("=> StateHasChanged();", "=> InvokeAsync(StateHasChanged);"));
+
+		await subject.OnFileChangedAsync(codeBehind);
+
+		Assert.False(instance.IsDirty);
+		Assert.Contains("InvokeAsync", await ReadDocumentTextAsync(instance.CurrentSolution, codeBehind));
+		Assert.All(driversBefore, pair => Assert.Same(pair.Value, razor.Get(pair.Key)?.Driver));
+	}
+
+	[Fact]
+	public async Task WhenAFileInsideADotFolderOrNodeModulesChanges_ThenItIsIgnored()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+		Solution before = instance.CurrentSolution;
+
+		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
+		string gitIndex = Path.Combine(projectDir, ".git", "index");
+		string ideState = Path.Combine(projectDir, ".vs", "Simple", "v17", ".suo");
+		string package = Path.Combine(projectDir, "node_modules", "left-pad", "index.js");
+		foreach (string path in new[] { gitIndex, ideState, package })
+		{
+			Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+			await File.WriteAllTextAsync(path, "noise");
+			await subject.OnFileChangedAsync(path);
+		}
+
+		Assert.False(instance.IsDirty);
+		Assert.Same(before, instance.CurrentSolution);
+	}
+
+	[Fact]
+	public async Task WhenABuildFileInsideADotFolderChanges_ThenTheInstanceIsStillMarkedDirty()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
+		string imported = Path.Combine(projectDir, ".build", "Common.props");
+		Directory.CreateDirectory(Path.GetDirectoryName(imported)!);
+		await File.WriteAllTextAsync(imported, "<Project />");
+
+		await subject.OnFileChangedAsync(imported);
+
+		Assert.True(instance.IsDirty);
+	}
+
+	[Fact]
+	public async Task WhenANonRazorAdditionalFileIsRewrittenWithIdenticalContent_ThenOnlyARealChangeMarksTheInstanceDirty()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string additional = await AddAnalyzerAdditionalFileAsync(solutionPath, "settings.json", "{ \"a\": 1 }", removeFromCompile: false);
+
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		await File.WriteAllTextAsync(additional, "{ \"a\": 1 }");
+		await subject.OnFileChangedAsync(additional);
+		Assert.False(instance.IsDirty);
+
+		await File.WriteAllTextAsync(additional, "{ \"a\": 2 }");
+		await subject.OnFileChangedAsync(additional);
 		Assert.True(instance.IsDirty);
 	}
 

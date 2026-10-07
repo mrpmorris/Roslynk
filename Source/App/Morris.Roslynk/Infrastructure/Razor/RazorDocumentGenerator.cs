@@ -1,99 +1,334 @@
-using System.Collections.Concurrent;
 using System.Collections.Immutable;
-using System.Reflection;
-using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
-using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.Razor;
 
 /// <summary>
-/// Produces the Razor <c>.g.cs</c> documents the workspace does not. The SDK's Razor source generator targets
-/// a newer Roslyn than Roslynk loads, so the workspace's analyzer loader refuses it and emits nothing, leaving
-/// component partials (the <c>ComponentBase</c> base of every <c>.razor</c>) out of the compilation and the
-/// hand-written <c>.razor.cs</c> code-behind riddled with phantom CS0103/CS0115/CS0246. We load the generator
-/// from the project's own analyzer reference into the default load context (where it binds against our Roslyn
-/// and runs), drive it ourselves, and add the generated sources to the solution as documents so the partials
-/// are in the compilation for every tool. Best-effort: if the generator cannot be loaded or run, the project
-/// is returned unchanged.
-///
-/// Two fallback paths handle projects where the SDK's design-time build never registers the generator DLL as an
-/// analyzer reference (most <c>Microsoft.NET.Sdk.Web</c> projects):
-///
-///   - The DLL is searched for in the dotnet SDK directory via <c>MSBuildLocator</c>.
-///   - Pre-generated <c>.g.cs</c> files from a previous <c>dotnet build</c> are loaded from
-///     <c>obj/{config}/{tfm}/generated/Microsoft.CodeAnalysis.Razor.Compiler/</c>.
-///
-/// When pre-generated files exist on disk they take precedence and the in-process generator is skipped, avoiding
-/// duplicate partial-class definitions in the compilation — but only after the snapshot is verified fresh. The
-/// <c>obj</c> output is a build-time artifact MSBuild never prunes: a <c>.g.cs</c> can outlive its deleted
-/// <c>.razor</c> source (an orphan), lag behind an edited one (stale), or be missing for a newly added one
-/// (incomplete). Trusting such a snapshot poisons the compilation with phantom CS0103/CS0246 in files that no
-/// longer exist. An invalid snapshot falls back to the in-process generator; when that is unavailable the
-/// snapshot minus provable orphans is used (stale files are kept — an outdated partial binds more references
-/// than a missing one).
+/// Produces the Razor <c>.g.cs</c> documents as ordinary, editable documents of each Razor project. The SDK's
+/// Razor source generator may target a newer Roslyn than Roslynk loads, in which case the workspace's analyzer
+/// loader refuses it and emits nothing, leaving component partials (the <c>ComponentBase</c> base of every
+/// <c>.razor</c>) out of the compilation and the hand-written <c>.razor.cs</c> code-behind riddled with phantom
+/// CS0103/CS0115/CS0246. Even when it loads, its output would be immutable source-generated documents that
+/// rename and the Razor mapping cannot edit. So Roslynk drives the generator itself (see
+/// <see cref="RazorGeneratorLoader"/>) and adds the generated sources as documents. Best-effort: if the
+/// generator cannot be loaded or run, the project is returned unchanged.
+/// <para>
+/// A fresh snapshot of pre-generated <c>.g.cs</c> files from a previous <c>dotnet build</c> is used instead of
+/// running the generator (see <see cref="RazorSnapshot"/>). An invalid snapshot falls back to the generator;
+/// when that is unavailable the snapshot minus provable orphans is used (stale files are kept — an outdated
+/// partial binds more references than a missing one).
+/// </para>
+/// <para>
+/// The generator's <see cref="GeneratorDriver"/> is kept in a <see cref="RazorGenerationState"/>, so after a
+/// .razor or C# edit <see cref="RegenerateAsync"/> reruns it incrementally and replaces only the generated
+/// documents whose text changed, without reloading the solution.
+/// </para>
 /// </summary>
 public static class RazorDocumentGenerator
 {
-	private const string RazorCompilerFileName = "Microsoft.CodeAnalysis.Razor.Compiler.dll";
-	private const string GeneratorTypeName = "Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator";
 	private const string GeneratedFolder = "RoslynkRazorGenerated";
 
-	private static readonly ConcurrentDictionary<string, IIncrementalGenerator?> Generators = new(StringComparer.OrdinalIgnoreCase);
-
-	/// <summary>Adds the generated Razor documents for every Razor project in the solution, returning the augmented solution.</summary>
-	public static async Task<Solution> AugmentAsync(Solution solution, ImmutableDictionary<ProjectId, ProjectModel> projectModels, CancellationToken cancellationToken = default)
+	/// <summary>
+	/// Adds the generated Razor documents for every Razor project in the solution, returning the augmented
+	/// solution and recording each project's generation in <paramref name="state"/>.
+	/// </summary>
+	public static async Task<Solution> AugmentAsync(Solution solution, RazorGenerationState state, CancellationToken cancellationToken = default)
 	{
 		if (solution is null)
 			throw new ArgumentNullException(nameof(solution));
+		if (state is null)
+			throw new ArgumentNullException(nameof(state));
 
-		foreach (ProjectId projectId in solution.ProjectIds)
+		// Dependencies first: a project's generator discovers the components of the projects it references from
+		// their compilations, so theirs must already hold their generated partials. Solution order is not enough:
+		// a page project listed before its component library would see the library's components as plain HTML.
+		foreach (ProjectId projectId in solution.GetProjectDependencyGraph().GetTopologicallySortedProjects(cancellationToken))
 		{
 			cancellationToken.ThrowIfCancellationRequested();
-			if (solution.GetProject(projectId) is Project project)
-				solution = await AugmentProjectAsync(solution, project, projectModels, cancellationToken);
+			if (solution.GetProject(projectId) is Project project && HasRazorInputs(project))
+				solution = await AugmentProjectAsync(solution, project, state, cancellationToken);
 		}
 
 		return solution;
 	}
 
-	private static async Task<Solution> AugmentProjectAsync(Solution solution, Project project, ImmutableDictionary<ProjectId, ProjectModel> projectModels, CancellationToken cancellationToken)
+	/// <summary>
+	/// Regenerates the Razor documents of <paramref name="changedProjects"/> and of every project depending on
+	/// them that Roslynk generates for, dependencies first. Used after a .razor or C# edit has been applied to
+	/// <paramref name="solution"/>; a project <paramref name="state"/> does not cover is left alone.
+	/// </summary>
+	public static async Task<Solution> RegenerateAsync(Solution solution, IEnumerable<ProjectId> changedProjects, RazorGenerationState state, CancellationToken cancellationToken = default)
 	{
-		Solution before = solution;
-		string? generatedDir = GetRazorGeneratedDirectory(project, projectModels.GetValueOrDefault(project.Id));
-		SnapshotAnalysis? snapshot = generatedDir is not null && Directory.Exists(generatedDir)
-			? AnalyzeSnapshot(project, generatedDir)
-			: null;
+		if (solution is null)
+			throw new ArgumentNullException(nameof(solution));
+		if (state is null)
+			throw new ArgumentNullException(nameof(state));
+
+		HashSet<ProjectId> affected = AffectedProjects(solution, changedProjects, state);
+		if (affected.Count == 0)
+			return solution;
+
+		foreach (ProjectId projectId in solution.GetProjectDependencyGraph().GetTopologicallySortedProjects(cancellationToken))
+		{
+			if (affected.Contains(projectId))
+				solution = await RegenerateProjectAsync(solution, projectId, state, cancellationToken);
+		}
+
+		return solution;
+	}
+
+	/// <summary>True for a .razor or .cshtml path.</summary>
+	public static bool IsRazorSourcePath(string path) =>
+		path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase);
+
+	private static HashSet<ProjectId> AffectedProjects(Solution solution, IEnumerable<ProjectId> changedProjects, RazorGenerationState state)
+	{
+		ProjectDependencyGraph graph = solution.GetProjectDependencyGraph();
+		var affected = new HashSet<ProjectId>();
+		foreach (ProjectId projectId in changedProjects)
+		{
+			if (state.Covers(projectId))
+				affected.Add(projectId);
+
+			foreach (ProjectId dependent in graph.GetProjectsThatTransitivelyDependOnThisProject(projectId))
+			{
+				if (state.Covers(dependent))
+					affected.Add(dependent);
+			}
+		}
+
+		return affected;
+	}
+
+	private static async Task<Solution> AugmentProjectAsync(Solution solution, Project project, RazorGenerationState state, CancellationToken cancellationToken)
+	{
+		string? snapshotDirectory = RazorSnapshot.DirectoryFor(project);
+		RazorSnapshot.Analysis? snapshot = snapshotDirectory is null
+			? null
+			: RazorSnapshot.Analyze(solution, project, snapshotDirectory);
+
+		// Resolved before the native reference is removed: the project's own reference is the preferred source.
+		ISourceGenerator? generator = RazorGeneratorLoader.For(project);
+		string generatedRoot = GeneratedRoot(project);
 
 		if (snapshot is { IsFresh: true })
 		{
-			solution = await AddPreGeneratedFilesAsync(solution, project, snapshot.NonOrphanFiles, cancellationToken);
-		}
-		else
-		{
-			bool hasGenerator = TryGetGenerator(project, out IIncrementalGenerator? generator);
-			bool hasRazorInputs = HasRazorInputs(project) || HasRazorFilesOnDisk(project);
-			if (hasGenerator && hasRazorInputs)
-				solution = await RunGeneratorAsync(solution, project, generator!, cancellationToken);
-			else if (snapshot is not null)
-				// No generator to fall back to: use the snapshot minus provable orphans. Stale files are
-				// kept deliberately — an outdated component partial still declares the class and its
-				// members, so keeping it binds far more references than omitting it; only files whose
-				// source is gone poison the compilation with symbols that no longer exist anywhere.
-				solution = await AddPreGeneratedFilesAsync(solution, project, snapshot.NonOrphanFiles, cancellationToken);
+			(Solution withSnapshot, ImmutableDictionary<string, DocumentId> documents) =
+				await AddPreGeneratedFilesAsync(solution, project.Id, snapshot.Files, cancellationToken);
+			if (!documents.IsEmpty)
+			{
+				// With a generator at hand, a later edit regenerates from this snapshot's documents in place.
+				if (generator is not null)
+					state.Set(project.Id, new RazorGenerationState.Entry(generator, Driver: null, generatedRoot, documents, Diagnostics: [], InputCompilations: null));
+				return RemoveNativeRazorGenerator(withSnapshot, project.Id);
+			}
 		}
 
-		// Once our documents own the generation, the SDK generator must not also run natively: newer
-		// Roslyn loads it where older versions refused, and its source-generated copy of every component
-		// partial would duplicate ours (CS0102/CS0111) with references binding to the immutable copy —
-		// breaking rename and diagnostics. Removing the analyzer reference suppresses the native run.
-		if (!ReferenceEquals(before, solution))
-			solution = RemoveNativeRazorGenerator(solution, project.Id);
+		if (generator is not null)
+		{
+			state.Set(project.Id, new RazorGenerationState.Entry(generator, Driver: null, generatedRoot, ImmutableDictionary<string, DocumentId>.Empty, Diagnostics: [], InputCompilations: null));
+			return await RegenerateProjectAsync(solution, project.Id, state, cancellationToken);
+		}
+
+		if (snapshot is not null)
+		{
+			// No generator to fall back to: use the snapshot minus provable orphans. Stale files are
+			// kept deliberately — an outdated component partial still declares the class and its
+			// members, so keeping it binds far more references than omitting it; only files whose
+			// source is gone poison the compilation with symbols that no longer exist anywhere.
+			(Solution withSnapshot, ImmutableDictionary<string, DocumentId> documents) =
+				await AddPreGeneratedFilesAsync(solution, project.Id, snapshot.Files, cancellationToken);
+			if (!documents.IsEmpty)
+				return RemoveNativeRazorGenerator(withSnapshot, project.Id);
+		}
 
 		return solution;
+	}
+
+	/// <summary>
+	/// Runs the project's generator (incrementally, reusing the last driver) and brings its generated documents
+	/// in line with the output: changed ones get new text, new ones are added, vanished ones removed.
+	/// </summary>
+	private static async Task<Solution> RegenerateProjectAsync(Solution solution, ProjectId projectId, RazorGenerationState state, CancellationToken cancellationToken)
+	{
+		if (state.Get(projectId) is not RazorGenerationState.Entry entry || solution.GetProject(projectId) is null)
+			return solution;
+
+		try
+		{
+			// Once our documents own the generation, the SDK generator must not also run natively: where it loads,
+			// its source-generated copy of every component partial would duplicate ours (CS0102/CS0111) with
+			// references binding to the immutable copy — breaking rename and diagnostics. Removing its reference
+			// before compiling also keeps the compilation below from running the whole generator a second time.
+			Solution stripped = RemoveNativeRazorGenerator(solution, projectId);
+			Project project = stripped.GetProject(projectId)!;
+			if (project.ParseOptions is not CSharpParseOptions parseOptions || await project.GetCompilationAsync(cancellationToken) is not Compilation compilation)
+				return solution;
+
+			Compilation input = await GeneratorInputAsync(project, compilation, entry, cancellationToken);
+			GeneratorDriver driver = entry.Driver is null
+				? CSharpGeneratorDriver.Create(
+					generators: [entry.Generator],
+					additionalTexts: project.AnalyzerOptions.AdditionalFiles,
+					parseOptions: parseOptions,
+					optionsProvider: project.AnalyzerOptions.AnalyzerConfigOptionsProvider)
+				: entry.Driver
+					.ReplaceAdditionalTexts(project.AnalyzerOptions.AdditionalFiles)
+					.WithUpdatedParseOptions(parseOptions)
+					.WithUpdatedAnalyzerConfigOptions(project.AnalyzerOptions.AnalyzerConfigOptionsProvider);
+			driver = driver.RunGenerators(input, cancellationToken);
+			GeneratorDriverRunResult result = driver.GetRunResult();
+
+			// A generator crash (reported as CS8785 among the diagnostics) produces no sources; keeping the previous
+			// documents binds far more than dropping every component partial would.
+			ImmutableArray<GeneratedSourceResult> sources = [.. result.Results.SelectMany(run => run.GeneratedSources)];
+			if (result.Results.Any(run => run.Exception is not null) || (sources.IsEmpty && entry.Documents.IsEmpty))
+			{
+				state.Set(projectId, entry with { Driver = driver, Diagnostics = result.Diagnostics });
+				return solution;
+			}
+
+			(Solution applied, ImmutableDictionary<string, DocumentId> documents) = await ApplyAsync(stripped, projectId, entry, sources, cancellationToken);
+
+			// Remember which full compilation the generator's input was derived from: an edit that leaves the
+			// compilation untouched (a .razor-only change) then hands the driver the identical input, and its
+			// incremental pipeline skips component discovery entirely.
+			Compilation? full = await applied.GetProject(projectId)!.GetCompilationAsync(cancellationToken);
+			state.Set(projectId, entry with
+			{
+				Driver = driver,
+				Documents = documents,
+				Diagnostics = result.Diagnostics,
+				InputCompilations = full is null ? null : (full, input),
+			});
+			return applied;
+		}
+		catch (OperationCanceledException)
+		{
+			throw;
+		}
+		catch (Exception)
+		{
+			return solution;
+		}
+	}
+
+	/// <summary>
+	/// The compilation the generator sees: the project's, minus the generated Razor documents from a previous
+	/// run — the build never feeds the generator its own output, and a stale partial left in would keep a removed
+	/// parameter or component discoverable.
+	/// </summary>
+	private static async Task<Compilation> GeneratorInputAsync(Project project, Compilation compilation, RazorGenerationState.Entry entry, CancellationToken cancellationToken)
+	{
+		if (entry.InputCompilations is ({ } full, { } input) && ReferenceEquals(full, compilation))
+			return input;
+
+		var generatedTrees = new List<SyntaxTree>();
+		foreach (DocumentId documentId in entry.Documents.Values)
+		{
+			if (project.GetDocument(documentId) is Document document
+				&& await document.GetSyntaxTreeAsync(cancellationToken) is SyntaxTree tree
+				&& compilation.ContainsSyntaxTree(tree))
+			{
+				generatedTrees.Add(tree);
+			}
+		}
+
+		return generatedTrees.Count == 0 ? compilation : compilation.RemoveSyntaxTrees(generatedTrees);
+	}
+
+	/// <summary>
+	/// Applies the generator's output to the project's generated documents, keyed by hint name: text changes
+	/// only where it differs, new documents in one batch (adding them one at a time slows the next compilation
+	/// several-fold on a large project), and documents whose output vanished removed.
+	/// </summary>
+	private static async Task<(Solution Solution, ImmutableDictionary<string, DocumentId> Documents)> ApplyAsync(
+		Solution solution,
+		ProjectId projectId,
+		RazorGenerationState.Entry entry,
+		ImmutableArray<GeneratedSourceResult> sources,
+		CancellationToken cancellationToken)
+	{
+		var documents = ImmutableDictionary.CreateBuilder<string, DocumentId>(StringComparer.Ordinal);
+		var added = ImmutableArray.CreateBuilder<DocumentInfo>();
+
+		foreach (GeneratedSourceResult source in sources)
+		{
+			if (entry.Documents.TryGetValue(source.HintName, out DocumentId? existingId) && solution.GetDocument(existingId) is Document existing)
+			{
+				documents[source.HintName] = existingId;
+				if (!(await existing.GetTextAsync(cancellationToken)).ContentEquals(source.SourceText))
+					solution = solution.WithDocumentText(existingId, source.SourceText);
+				continue;
+			}
+
+			// One path per hint name across a multi-targeted project's frameworks: every per-framework copy of a
+			// generated file is the same file to the Razor mapping (RazorGeneratedChangeFolder folds it once).
+			string generatedPath = System.IO.Path.Combine(entry.GeneratedRoot, source.HintName);
+			DocumentId documentId = DocumentId.CreateNewId(projectId, source.HintName);
+			documents[source.HintName] = documentId;
+			added.Add(DocumentInfo.Create(
+				documentId,
+				source.HintName,
+				loader: TextLoader.From(TextAndVersion.Create(source.SourceText, VersionStamp.Create(), generatedPath)),
+				filePath: generatedPath));
+		}
+
+		ImmutableArray<DocumentId> removed = [.. entry.Documents
+			.Where(pair => !documents.ContainsKey(pair.Key) && solution.GetDocument(pair.Value) is not null)
+			.Select(pair => pair.Value)];
+		if (!removed.IsEmpty)
+			solution = solution.RemoveDocuments(removed);
+		if (added.Count > 0)
+			solution = solution.AddDocuments(added.ToImmutable());
+
+		return (solution, documents.ToImmutable());
+	}
+
+	private static async Task<(Solution Solution, ImmutableDictionary<string, DocumentId> Documents)> AddPreGeneratedFilesAsync(
+		Solution solution,
+		ProjectId projectId,
+		IReadOnlyList<(string Path, string HintName)> files,
+		CancellationToken cancellationToken)
+	{
+		var documents = ImmutableDictionary.CreateBuilder<string, DocumentId>(StringComparer.Ordinal);
+		var added = ImmutableArray.CreateBuilder<DocumentInfo>();
+
+		try
+		{
+			foreach ((string file, string hintName) in files)
+			{
+				cancellationToken.ThrowIfCancellationRequested();
+
+				if (solution.GetDocumentIdsWithFilePath(file).Any(id => id.ProjectId == projectId))
+					continue;
+
+				string content = await File.ReadAllTextAsync(file, cancellationToken);
+				DocumentId documentId = DocumentId.CreateNewId(projectId, hintName);
+				documents[hintName] = documentId;
+				added.Add(DocumentInfo.Create(
+					documentId,
+					System.IO.Path.GetFileName(file),
+					loader: TextLoader.From(TextAndVersion.Create(SourceText.From(content), VersionStamp.Create(), file)),
+					filePath: file));
+			}
+		}
+		catch (OperationCanceledException)
+		{
+			throw;
+		}
+		catch (Exception)
+		{
+			// A snapshot that cannot be read in full is not used at all.
+			return (solution, ImmutableDictionary<string, DocumentId>.Empty);
+		}
+
+		return added.Count == 0
+			? (solution, documents.ToImmutable())
+			: (solution.AddDocuments(added.ToImmutable()), documents.ToImmutable());
 	}
 
 	private static Solution RemoveNativeRazorGenerator(Solution solution, ProjectId projectId)
@@ -103,423 +338,29 @@ public static class RazorDocumentGenerator
 
 		foreach (AnalyzerReference reference in project.AnalyzerReferences)
 		{
-			if (reference.FullPath is string path && path.EndsWith(RazorCompilerFileName, StringComparison.OrdinalIgnoreCase))
+			if (RazorGeneratorLoader.IsRazorCompiler(reference))
 				solution = solution.RemoveAnalyzerReference(projectId, reference);
 		}
 
 		return solution;
 	}
 
-	private static async Task<Solution> RunGeneratorAsync(Solution solution, Project project, IIncrementalGenerator generator, CancellationToken cancellationToken)
+	/// <summary>
+	/// Where the generated documents claim to live. Nothing is written there: the path only has to be stable,
+	/// shared by a multi-targeted project's frameworks, and recognisable to <see cref="RazorMapping"/>.
+	/// </summary>
+	private static string GeneratedRoot(Project project)
 	{
-		try
-		{
-			Compilation? compilation = await project.GetCompilationAsync(cancellationToken);
-			if (compilation is null || project.ParseOptions is not CSharpParseOptions parseOptions)
-				return solution;
-
-			GeneratorDriver driver = CSharpGeneratorDriver.Create(
-				generators: [generator.AsSourceGenerator()],
-				additionalTexts: project.AnalyzerOptions.AdditionalFiles,
-				parseOptions: parseOptions,
-				optionsProvider: project.AnalyzerOptions.AnalyzerConfigOptionsProvider);
-
-			GeneratorDriverRunResult result = driver.RunGenerators(compilation, cancellationToken).GetRunResult();
-
-			string projectDirectory = project.FilePath is string filePath
-				? System.IO.Path.GetDirectoryName(filePath)!
-				: AppContext.BaseDirectory;
-
-			foreach (GeneratorRunResult run in result.Results)
-			{
-				foreach (GeneratedSourceResult source in run.GeneratedSources)
-				{
-					string generatedPath = System.IO.Path.Combine(projectDirectory, "obj", GeneratedFolder, source.HintName);
-					if (!solution.GetDocumentIdsWithFilePath(generatedPath).IsEmpty)
-						continue;
-
-					DocumentId documentId = DocumentId.CreateNewId(project.Id, source.HintName);
-					solution = solution.AddDocument(documentId, source.HintName, source.SourceText, filePath: generatedPath);
-				}
-			}
-
-			return solution;
-		}
-		catch (Exception)
-		{
-			return solution;
-		}
+		string projectDirectory = project.FilePath is string filePath
+			? System.IO.Path.GetDirectoryName(filePath)!
+			: AppContext.BaseDirectory;
+		return System.IO.Path.Combine(projectDirectory, "obj", GeneratedFolder);
 	}
 
 	/// <summary>
-	/// Classifies a pre-generated snapshot against the .razor/.cshtml sources it was generated from.
-	/// <c>NonOrphanFiles</c> are the .g.cs matched to an existing source (a hint name that maps back to
-	/// no known source is an orphan — its .razor was deleted, and MSBuild never prunes obj output).
-	/// <c>IsFresh</c> additionally requires that no source is newer than its .g.cs, that every current
-	/// source has a .g.cs, and that no directive file (_Imports.razor etc., whose edits change every
-	/// component's generated code without producing output of their own) is newer than the snapshot.
-	/// <para>
-	/// Matching runs source→hint-name, never the reverse: the generator flattens paths into hint names
-	/// with underscores, which cannot be un-flattened unambiguously (Views/Shared/_Layout.cshtml and a
-	/// literal Views_Shared__Layout.cshtml collide). Computing the expected hint name for each known
-	/// source is deterministic, so a .g.cs is an orphan exactly when no source claims it.
-	/// </para>
+	/// Whether the project has Razor sources the generator can see. The generator reads only the analyzer
+	/// additional files, so .razor/.cshtml files on disk that are not additional documents produce nothing.
 	/// </summary>
-	private sealed record SnapshotAnalysis(bool IsFresh, IReadOnlyList<string> NonOrphanFiles);
-
-	private static SnapshotAnalysis AnalyzeSnapshot(Project project, string generatedDir)
-	{
-		var nonOrphanFiles = new List<string>();
-		bool fresh = true;
-
-		try
-		{
-			string projectDir = project.FilePath is string projectFilePath
-				? System.IO.Path.GetDirectoryName(projectFilePath)!
-				: string.Empty;
-			if (projectDir.Length == 0)
-				return new SnapshotAnalysis(false, nonOrphanFiles);
-
-			var sourcesByHintKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-			var componentSources = new List<string>();
-			var directiveSources = new List<string>();
-
-			foreach (string source in EnumerateRazorSources(project, projectDir))
-			{
-				if (IsDirectiveOnly(source))
-				{
-					directiveSources.Add(source);
-					continue;
-				}
-
-				componentSources.Add(source);
-				string relative = System.IO.Path.GetRelativePath(projectDir, source);
-
-				// Folder-preserved layout: relative folders survive, only the file name is flattened.
-				string relativeDir = System.IO.Path.GetDirectoryName(relative) ?? "";
-				sourcesByHintKey[string.Concat(relativeDir, "|", FlattenToHintName(System.IO.Path.GetFileName(relative)))] = source;
-
-				// Flat layout (older SDKs): the whole relative path is flattened into the file name.
-				sourcesByHintKey[string.Concat("|", FlattenToHintName(relative))] = source;
-			}
-
-			var matchedSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			DateTime oldestGenerated = DateTime.MaxValue;
-
-			foreach (string file in Directory.EnumerateFiles(generatedDir, "*.g.cs", SearchOption.AllDirectories))
-			{
-				string fileName = System.IO.Path.GetFileName(file);
-				if (!fileName.EndsWith("_razor.g.cs", StringComparison.OrdinalIgnoreCase) &&
-					!fileName.EndsWith("_cshtml.g.cs", StringComparison.OrdinalIgnoreCase))
-				{
-					// Not a razor/cshtml output; keep it without letting it decide snapshot validity.
-					nonOrphanFiles.Add(file);
-					continue;
-				}
-
-				// The generator emits under a folder named after itself
-				// (Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator); the project-relative
-				// structure starts beneath it.
-				string relativeDir = System.IO.Path.GetDirectoryName(System.IO.Path.GetRelativePath(generatedDir, file)) ?? "";
-				string[] segments = relativeDir.Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
-				if (segments.Length > 0 && segments[0].StartsWith("Microsoft.NET.Sdk.Razor", StringComparison.OrdinalIgnoreCase))
-					segments = segments[1..];
-
-				string? source = sourcesByHintKey.GetValueOrDefault(
-					string.Concat(System.IO.Path.Combine(segments), "|", fileName));
-				if (source is null && segments.Length == 0)
-					source = sourcesByHintKey.GetValueOrDefault(string.Concat("|", fileName));
-
-				if (source is null)
-				{
-					fresh = false;
-					continue;
-				}
-
-				nonOrphanFiles.Add(file);
-				matchedSources.Add(source);
-
-				DateTime generatedAt = File.GetLastWriteTimeUtc(file);
-				if (generatedAt < oldestGenerated)
-					oldestGenerated = generatedAt;
-
-				// Stale: the source was edited after the last build emitted this file.
-				if (File.GetLastWriteTimeUtc(source) > generatedAt)
-					fresh = false;
-			}
-
-			// Incomplete: a source added since the last build has no .g.cs, so its component partial
-			// would be missing from the compilation.
-			if (componentSources.Any(source => !matchedSources.Contains(source)))
-				fresh = false;
-
-			// A directive file edited after the snapshot invalidates every emitted file at once.
-			if (directiveSources.Any(directive => File.GetLastWriteTimeUtc(directive) > oldestGenerated))
-				fresh = false;
-		}
-		catch (Exception)
-		{
-			fresh = false;
-		}
-
-		return new SnapshotAnalysis(fresh, nonOrphanFiles);
-	}
-
-	/// <summary>
-	/// The hint name the razor generator derives from a path: every character that is not a letter or
-	/// digit becomes an underscore, and <c>.g.cs</c> is appended (Pages/_Host.cshtml → Pages__Host_cshtml.g.cs).
-	/// </summary>
-	private static string FlattenToHintName(string path) =>
-		string.Concat(path.Select(c => char.IsLetterOrDigit(c) ? c : '_')) + ".g.cs";
-
-	private static bool IsDirectiveOnly(string path)
-	{
-		string name = System.IO.Path.GetFileName(path);
-		return string.Equals(name, "_Imports.razor", StringComparison.OrdinalIgnoreCase)
-			|| string.Equals(name, "_ViewImports.cshtml", StringComparison.OrdinalIgnoreCase)
-			|| string.Equals(name, "_ViewStart.cshtml", StringComparison.OrdinalIgnoreCase);
-	}
-
-	/// <summary>
-	/// Enumerates the project's .razor/.cshtml files. The workspace's additional documents are
-	/// included (linked files outside the project directory, exclusions). A disk scan is always
-	/// merged in so files present on disk but not yet in the design-time graph (e.g. a newly written
-	/// <c>_Imports.razor</c>) still participate in snapshot freshness.
-	/// </summary>
-	private static IEnumerable<string> EnumerateRazorSources(Project project, string projectDir)
-	{
-		HashSet<string> paths = new(StringComparer.OrdinalIgnoreCase);
-
-		foreach (string path in project.AdditionalDocuments
-			.Select(document => document.FilePath)
-			.OfType<string>()
-			.Where(path => path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase)
-				|| path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase)))
-		{
-			paths.Add(path);
-		}
-
-		try
-		{
-			foreach (string file in Directory.EnumerateFiles(projectDir, "*.razor", SearchOption.AllDirectories)
-				.Concat(Directory.EnumerateFiles(projectDir, "*.cshtml", SearchOption.AllDirectories)))
-			{
-				// Build artifacts under bin/obj are not project sources.
-				string relative = System.IO.Path.GetRelativePath(projectDir, file);
-				string firstSegment = relative.Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)[0];
-				if (string.Equals(firstSegment, "bin", StringComparison.OrdinalIgnoreCase)
-					|| string.Equals(firstSegment, "obj", StringComparison.OrdinalIgnoreCase))
-				{
-					continue;
-				}
-
-				paths.Add(file);
-			}
-		}
-		catch
-		{
-			// Disk scan is best-effort; additional documents alone still apply.
-		}
-
-		return paths;
-	}
-
-	private static async Task<Solution> AddPreGeneratedFilesAsync(Solution solution, Project project, IReadOnlyList<string> files, CancellationToken cancellationToken)
-	{
-		try
-		{
-			foreach (string file in files)
-			{
-				cancellationToken.ThrowIfCancellationRequested();
-
-				if (!solution.GetDocumentIdsWithFilePath(file).IsEmpty)
-					continue;
-
-				string content = await File.ReadAllTextAsync(file, cancellationToken);
-				SourceText text = SourceText.From(content);
-				string hintName = System.IO.Path.GetFileName(file);
-				DocumentId documentId = DocumentId.CreateNewId(project.Id, hintName);
-				solution = solution.AddDocument(documentId, hintName, text, filePath: file);
-			}
-		}
-		catch (Exception)
-		{
-		}
-
-		return solution;
-	}
-
-	private static string? GetRazorGeneratedDirectory(Project project, ProjectModel? projectModel)
-	{
-		if (project.FilePath is not string projectFilePath || project.OutputFilePath is not string outputFilePath)
-			return null;
-
-		string projectDir = System.IO.Path.GetDirectoryName(projectFilePath)!;
-		string? outputDir = System.IO.Path.GetDirectoryName(outputFilePath);
-
-		if (outputDir is null)
-			return null;
-
-		// If EmitCompilerGeneratedFiles is explicitly false, skip scanning — no files exist.
-		if (projectModel?.CapturedProperties.TryGetValue("EmitCompilerGeneratedFiles", out string? emit) == true
-			&& !string.Equals(emit, "true", StringComparison.OrdinalIgnoreCase))
-			return null;
-
-		// Respect a custom CompilerGeneratedFilesOutputPath if set.
-		if (projectModel?.CapturedProperties.TryGetValue("CompilerGeneratedFilesOutputPath", out string? customPath) == true
-			&& !string.IsNullOrWhiteSpace(customPath))
-		{
-			string resolved = System.IO.Path.GetFullPath(System.IO.Path.Combine(projectDir, customPath));
-			string candidate = System.IO.Path.Combine(resolved, "Microsoft.CodeAnalysis.Razor.Compiler");
-			if (Directory.Exists(candidate))
-				return candidate;
-		}
-
-		string relativeOutput = System.IO.Path.GetRelativePath(projectDir, outputDir);
-		string[] parts = relativeOutput.Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
-
-		if (parts.Length >= 2 && string.Equals(parts[0], "bin", StringComparison.OrdinalIgnoreCase))
-		{
-			string configuration = parts[1];
-			string targetFramework = parts.Length > 2 ? parts[2] : "";
-			string path = System.IO.Path.Combine(projectDir, "obj", configuration, targetFramework, "generated", "Microsoft.CodeAnalysis.Razor.Compiler");
-			if (Directory.Exists(path))
-				return path;
-		}
-
-		if (parts.Length >= 1)
-		{
-			string configuration = parts[0];
-			string path = System.IO.Path.Combine(projectDir, "obj", configuration, "generated", "Microsoft.CodeAnalysis.Razor.Compiler");
-			if (Directory.Exists(path))
-				return path;
-		}
-
-		string objDir = System.IO.Path.Combine(projectDir, "obj");
-		if (Directory.Exists(objDir))
-		{
-			var candidates = Directory.EnumerateDirectories(objDir, "Microsoft.CodeAnalysis.Razor.Compiler", SearchOption.AllDirectories).ToArray();
-			if (candidates.Length > 0)
-				return System.IO.Path.GetDirectoryName(candidates[0]);
-		}
-
-		return null;
-	}
-
 	private static bool HasRazorInputs(Project project) =>
-		project.AdditionalDocuments.Any(document =>
-			document.FilePath is string path
-			&& (path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase)));
-
-	private static bool HasRazorFilesOnDisk(Project project)
-	{
-		if (project.FilePath is not string projectFilePath)
-			return false;
-
-		string projectDir = System.IO.Path.GetDirectoryName(projectFilePath)!;
-		try
-		{
-			return Directory.EnumerateFiles(projectDir, "*.razor", SearchOption.AllDirectories).Any()
-				|| Directory.EnumerateFiles(projectDir, "*.cshtml", SearchOption.AllDirectories).Any();
-		}
-		catch
-		{
-			return false;
-		}
-	}
-
-	private static bool TryGetGenerator(Project project, out IIncrementalGenerator? generator)
-	{
-		generator = null;
-
-		var reference = project.AnalyzerReferences.FirstOrDefault(candidate =>
-			candidate.FullPath is string path && path.EndsWith(RazorCompilerFileName, StringComparison.OrdinalIgnoreCase));
-
-		string? razorPath = reference?.FullPath;
-		razorPath ??= FindRazorCompilerInSdkDirectory();
-
-		if (razorPath is null)
-			return false;
-
-		generator = Generators.GetOrAdd(razorPath, Load);
-		return generator is not null;
-	}
-
-	private static string? FindRazorCompilerInSdkDirectory()
-	{
-		try
-		{
-			var searchRoots = new List<string>();
-
-			if (MSBuildLocator.IsRegistered)
-			{
-				string msbuildPath = MSBuildLocator.QueryVisualStudioInstances().FirstOrDefault()?.MSBuildPath ?? string.Empty;
-				if (msbuildPath.Length > 0)
-				{
-					searchRoots.Add(System.IO.Path.Combine(msbuildPath, "Sdks", "Microsoft.NET.Sdk.Razor", "source-generators"));
-					searchRoots.Add(System.IO.Path.Combine(msbuildPath, "Sdks", "Microsoft.NET.Sdk.Razor", "tools"));
-					searchRoots.Add(System.IO.Path.GetFullPath(System.IO.Path.Combine(msbuildPath, "..", "..", "Sdks", "Microsoft.NET.Sdk.Razor", "source-generators")));
-					searchRoots.Add(System.IO.Path.GetFullPath(System.IO.Path.Combine(msbuildPath, "..", "..", "Sdks", "Microsoft.NET.Sdk.Razor", "tools")));
-				}
-			}
-
-			// Windows Program Files layout and Linux/macOS DOTNET_ROOT / ~/.dotnet / /usr/share/dotnet.
-			foreach (string? sdkRoot in SdkRootCandidates())
-			{
-				if (sdkRoot is null || !Directory.Exists(sdkRoot))
-					continue;
-
-				foreach (string versionDir in Directory.EnumerateDirectories(sdkRoot))
-				{
-					searchRoots.Add(System.IO.Path.Combine(versionDir, "Sdks", "Microsoft.NET.Sdk.Razor", "source-generators"));
-					searchRoots.Add(System.IO.Path.Combine(versionDir, "Sdks", "Microsoft.NET.Sdk.Razor", "tools"));
-				}
-			}
-
-			foreach (string directory in searchRoots)
-			{
-				string path = System.IO.Path.Combine(directory, RazorCompilerFileName);
-				if (File.Exists(path))
-					return path;
-			}
-		}
-		catch (Exception)
-		{
-		}
-
-		return null;
-	}
-
-	private static IEnumerable<string?> SdkRootCandidates()
-	{
-		string? dotnetRoot = Environment.GetEnvironmentVariable("DOTNET_ROOT");
-		if (!string.IsNullOrWhiteSpace(dotnetRoot))
-			yield return System.IO.Path.Combine(dotnetRoot, "sdk");
-
-		string programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-		if (!string.IsNullOrWhiteSpace(programFiles))
-			yield return System.IO.Path.Combine(programFiles, "dotnet", "sdk");
-
-		string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-		if (!string.IsNullOrWhiteSpace(userProfile))
-			yield return System.IO.Path.Combine(userProfile, ".dotnet", "sdk");
-
-		yield return "/usr/share/dotnet/sdk";
-		yield return "/usr/local/share/dotnet/sdk";
-	}
-
-	private static IIncrementalGenerator? Load(string razorPath)
-	{
-		try
-		{
-			Assembly assembly = Assembly.LoadFrom(razorPath);
-			return assembly.GetType(GeneratorTypeName) is Type type
-				? Activator.CreateInstance(type) as IIncrementalGenerator
-				: null;
-		}
-		catch (Exception)
-		{
-			return null;
-		}
-	}
+		project.AdditionalDocuments.Any(document => document.FilePath is string path && IsRazorSourcePath(path));
 }

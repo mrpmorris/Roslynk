@@ -52,6 +52,25 @@ public class GetDiagnosticsTests
 	}
 
 	[Fact]
+	public async Task WhenARazorFileHasARazorSyntaxError_ThenTheRazorDiagnosticIsReportedAgainstThatFile()
+	{
+		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string broken = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Broken.razor");
+		await File.WriteAllTextAsync(broken, "<h1>Broken</h1>\n@code {\n    private string Value = \"\";\n");
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+
+		string result = await subject.GetDiagnostics(solutionPath, includeErrors: true, includeAnalyzers: false);
+
+		string[] lines = result.Split('\n');
+		int file = Array.FindIndex(lines, line => line.Trim() == "Broken.razor");
+		Assert.True(file >= 0, result);
+		Assert.Contains(lines.Skip(file), line => line.TrimStart('\t').StartsWith("RZ1006,2:", StringComparison.Ordinal));
+		Assert.Contains(lines, line => line == "RazorLib");
+	}
+
+	[Fact]
 	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
 	{
 		using var registry = new InstanceRegistry();

@@ -250,7 +250,7 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > - `get_type_hierarchy`: Base types, interfaces and derived types. Parameters: `solutionId`, `typeName`.
 >
 > **Diagnostics:**
-> - `get_diagnostics`: Compile check — this replaces `dotnet build`. Parameters: `solutionId`, `includeErrors`, `includeWarnings`, `includeInfo`, `includeHidden` (**all default false**), `includeAnalyzers`. The header always reports `errors=`/`warnings=`/`infos=`/`hidden=` counts, so a bare call is a cheap "does it compile?"; opt into detail only when the counts are non-zero.
+> - `get_diagnostics`: Compile check — this replaces `dotnet build`. Parameters: `solutionId`, `includeErrors`, `includeWarnings`, `includeInfo`, `includeHidden` (**all default false**), `includeAnalyzers`. The header always reports `errors=`/`warnings=`/`infos=`/`hidden=` counts, so a bare call is a cheap "does it compile?"; opt into detail only when the counts are non-zero. Razor compiler (`RZ*`) errors are included, reported against the `.razor`/`.cshtml` file.
 >
 > **Code actions:**
 > - `get_code_actions`: List fixes and refactorings at a position. Parameters: `solutionId`, `documentPath`, `line`, `column`, `endLine`, `endColumn`.

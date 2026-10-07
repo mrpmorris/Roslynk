@@ -6,10 +6,10 @@ namespace Morris.Roslynk.Tests.Infrastructure.Razor;
 public class RazorGenerationProbeTests
 {
 	/// <summary>
-	/// The SDK's Razor source generator targets a newer Roslyn than we load, so the workspace's analyzer
-	/// loader refuses it and produces no documents. <see cref="Morris.Roslynk.Infrastructure.Razor.RazorDocumentGenerator"/>
-	/// works around that by running the generator itself and adding the result as a document, so the component
-	/// partial enters the compilation. These tests guard that workaround.
+	/// When the SDK's Razor source generator targets a newer Roslyn than we load, the workspace's analyzer
+	/// loader refuses it and produces no documents; when it loads, its output is immutable. Either way
+	/// <see cref="Morris.Roslynk.Infrastructure.Razor.RazorDocumentGenerator"/> runs the generator itself and adds
+	/// the result as documents, so the component partial enters the compilation. These tests guard that.
 	/// </summary>
 	[Fact]
 	public async Task WhenARazorProjectIsLoaded_ThenTheGeneratedComponentDocumentIsAdded()

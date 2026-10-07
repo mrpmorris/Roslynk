@@ -149,6 +149,10 @@ public sealed class RoslynInstance : IDisposable
 
 			IReadOnlyList<string> changedPaths = await EnqueueWriteAsync(transform, cancellationToken);
 
+			// A write that changed nothing leaves the last diagnostics build current.
+			if (!BuildNeededField)
+				return changedPaths;
+
 			_ = Task.Run(async () =>
 			{
 				try
@@ -232,8 +236,15 @@ public sealed class RoslynInstance : IDisposable
 			{
 				WriteResult result = await transform(current, cancellationToken);
 				AdvanceTo(result.Updated);
-				BuildNeededField = true;
-				Volatile.Write(ref DiagnosticsCacheField, null);
+
+				// A transform that found nothing to change (a watcher event for content the snapshot already
+				// holds) leaves the last diagnostics build valid.
+				if (!ReferenceEquals(result.Updated, current))
+				{
+					BuildNeededField = true;
+					Volatile.Write(ref DiagnosticsCacheField, null);
+				}
+
 				completion.TrySetResult(result.ChangedPaths);
 			}
 			catch (Exception exception)
@@ -307,7 +318,7 @@ public sealed class RoslynInstance : IDisposable
 					Volatile.Write(ref WorkspaceField, workspace);
 					BuildNeededField = true;
 					Volatile.Write(ref DiagnosticsCacheField, null);
-					Swap(SolutionModel.Ready(workspace.Solution, workspace.ProjectModels));
+					Swap(SolutionModel.Ready(workspace.Solution));
 					activity?.SetTag(ActivityTags.ProjectCountTag, workspace.Solution.Projects.Count());
 				}
 
@@ -419,7 +430,7 @@ public sealed class RoslynInstance : IDisposable
 				{
 					SolutionWorkspace? previous = Volatile.Read(ref WorkspaceField);
 					Volatile.Write(ref WorkspaceField, workspace);
-					Swap(SolutionModel.Ready(workspace.Solution, workspace.ProjectModels));
+					Swap(SolutionModel.Ready(workspace.Solution));
 					BuildNeededField = true;
 					Volatile.Write(ref DiagnosticsCacheField, null);
 					onReady(this);

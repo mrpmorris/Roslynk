@@ -2,6 +2,16 @@
 
 # Unreleased
 
+- Faster Razor solution loads: the Razor generator runs once per project instead of twice, and its output is added in one batch (Fixes #64)
+- Editing a `.razor`/`.cshtml` file regenerates its Razor output in place instead of reloading the solution (Fixes #64)
+- A C# edit regenerates dependent Razor output, so a renamed code-behind `[Parameter]` no longer leaves a phantom `CS0117` (Fixes #64)
+- Multi-targeted Razor projects get generated Razor code for every target framework (Fixes #64)
+- Razor projects are generated in dependency order, so a referenced library's components bind instead of becoming plain HTML (Fixes #64)
+- `get_diagnostics` reports the Razor compiler's own `RZ*` errors against the `.razor`/`.cshtml` file (Fixes #64)
+- A `dotnet build` Razor snapshot (`EmitCompilerGeneratedFiles=true`) is used despite `_Imports.razor`/`_ViewImports.cshtml`/`_ViewStart.cshtml` output, found in artifacts/custom layouts, and rejected when another configuration made it or C# it depends on is newer (Fixes #64)
+- Changes under a project's `.git`, `.vs`, `.idea` or `node_modules`, and saves that leave an additional file's content unchanged, no longer reload the solution (Fixes #64)
+- Solutions on different SDKs in one daemon each keep their in-process Razor generation (Fixes #64)
+
 - New `get_callees` tool: the inverse of `get_callers` (Fixes #58)
 - `rename_symbol` and `rename_parameter` no longer fail with `error=NotSupported` when the renamed member is referenced from a Razor `@bind-X="Expr"`, `@bind-X:get`/`:set`/`:after` or `@bind="Expr"` attribute (e.g. `<InputDate @bind-Value="Model.InstallDate" />`): the Razor compiler expands the attribute into hidden setter/`ValueExpression` lambdas with no `#line` mapping of their own, and those unmapped edits aborted the whole rename. They are now recognised as copies of the edit already made at the user-written span and collapse into the single `.razor` edit. A scaffolding edit nothing accounts for (e.g. renaming a component whose class is generated) still returns `error=NotSupported` with nothing written (Fixes #59)
 
