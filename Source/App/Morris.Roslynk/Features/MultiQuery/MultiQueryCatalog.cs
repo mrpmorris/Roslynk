@@ -16,6 +16,7 @@ using Morris.Roslynk.Features.References.FindReferences;
 using Morris.Roslynk.Features.References.FindReads;
 using Morris.Roslynk.Features.References.FindWrites;
 using Morris.Roslynk.Features.Callers.GetCallers;
+using Morris.Roslynk.Features.Callers.GetCallees;
 using Morris.Roslynk.Features.DeadCode.FindDeadCode;
 using Morris.Roslynk.Features.Conditionals.FindDeadConditionals;
 
@@ -53,7 +54,7 @@ internal static class MultiQueryCatalog
 	}
 
 	/// <summary>
-	/// The 11 multi-queryable tools, each pointing at the internal core that takes the pinned
+	/// The 15 multi-queryable tools, each pointing at the internal core that takes the pinned
 	/// <see cref="SolutionModel"/> instead of acquiring its own. Names must equal the <see cref="MultiQueryOp"/>
 	/// members (the resolution test keeps enum == catalog == the tools' name constants in lockstep).
 	/// </summary>
@@ -66,6 +67,7 @@ internal static class MultiQueryCatalog
 		[FindImplementationsTool.FindImplementationsName] = new(FindImplementationsTool.FindImplementationsName, typeof(FindImplementationsTool), nameof(FindImplementationsTool.FindImplementationsCoreAsync)),
 		[FindReferencesTool.FindReferencesName] = new(FindReferencesTool.FindReferencesName, typeof(FindReferencesTool), nameof(FindReferencesTool.FindReferencesCoreAsync)),
 		[GetCallersTool.GetCallersName] = new(GetCallersTool.GetCallersName, typeof(GetCallersTool), nameof(GetCallersTool.GetCallersCoreAsync)),
+		[GetCalleesTool.GetCalleesName] = new(GetCalleesTool.GetCalleesName, typeof(GetCalleesTool), nameof(GetCalleesTool.GetCalleesCoreAsync)),
 		[SearchSymbolsTool.SearchSymbolsName] = new(SearchSymbolsTool.SearchSymbolsName, typeof(SearchSymbolsTool), nameof(SearchSymbolsTool.SearchSymbolsCoreAsync)),
 		[GetTypeHierarchyTool.GetTypeHierarchyName] = new(GetTypeHierarchyTool.GetTypeHierarchyName, typeof(GetTypeHierarchyTool), nameof(GetTypeHierarchyTool.GetTypeHierarchyCoreAsync)),
 		[FindDeadCodeTool.FindDeadCodeName] = new(FindDeadCodeTool.FindDeadCodeName, typeof(FindDeadCodeTool), nameof(FindDeadCodeTool.FindDeadCodeCoreAsync)),

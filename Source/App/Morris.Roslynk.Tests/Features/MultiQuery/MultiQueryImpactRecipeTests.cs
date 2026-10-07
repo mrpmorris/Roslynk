@@ -35,11 +35,12 @@ public class MultiQueryImpactRecipeTests
 				new(MultiQueryOp.get_symbol, Args(("symbolName", Json("SimpleLibrary.Greeter")))),
 				new(MultiQueryOp.find_references, Args(("symbolName", Json("SimpleLibrary.Greeter.Greet")))),
 				new(MultiQueryOp.get_callers, Args(("methodName", Json("SimpleLibrary.Greeter.Greet")))),
+				new(MultiQueryOp.get_callees, Args(("memberName", Json("SimpleLibrary.Caller.Run")))),
 				new(MultiQueryOp.find_implementations, Args(("symbolName", Json("SimpleLibrary.IGreeter.Greet")))),
 				new(MultiQueryOp.get_type_hierarchy, Args(("typeName", Json("SimpleLibrary.Greeter")))),
 			]);
 
-		Assert.Contains("operations=5", envelope);
+		Assert.Contains("operations=6", envelope);
 		Assert.DoesNotContain("error=Invalid", envelope);
 		Assert.DoesNotContain("error=NotFound", envelope);
 
@@ -53,11 +54,15 @@ public class MultiQueryImpactRecipeTests
 		Assert.Contains("slot=3 tool=get_callers", envelope);
 		Assert.Contains("method,Run,", envelope);                          // Caller.Run calls Greeter.Greet
 
-		Assert.Contains("slot=4 tool=find_implementations", envelope);
+		Assert.Contains("slot=4 tool=get_callees", envelope);
+		Assert.Contains("resolvedSymbol=SimpleLibrary.Caller.Run", envelope);
+		Assert.Contains("method,Greet,", envelope);                        // Caller.Run calls Greeter.Greet
+
+		Assert.Contains("slot=5 tool=find_implementations", envelope);
 		Assert.Contains("resolvedSymbol=SimpleLibrary.IGreeter.Greet", envelope);
 		Assert.Contains("Greeter", envelope);                              // Greeter.Greet implements it
 
-		Assert.Contains("slot=5 tool=get_type_hierarchy", envelope);
+		Assert.Contains("slot=6 tool=get_type_hierarchy", envelope);
 		Assert.Contains("resolvedType=SimpleLibrary.Greeter", envelope);
 		Assert.Contains("interfaces", envelope);
 		Assert.Contains("IGreeter", envelope);
