@@ -42,6 +42,35 @@ dotnet tool install roslynk -g
 claude mcp add roslynk -- dnx Roslynk --yes -- stdio
 ```
 
+### Antigravity (`agy`)
+
+Using the CLI:
+
+```bash
+agy mcp add roslynk roslynk stdio
+```
+
+(Or with `dnx`: `agy mcp add roslynk dnx Roslynk --yes -- stdio`)
+
+Or manually in `~/.gemini/config/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "roslynk": {
+      "command": "roslynk",
+      "args": ["stdio"]
+    }
+  }
+}
+```
+
+To attach to an already-running daemon instead of spawning one:
+
+```bash
+agy mcp add roslynk http://localhost:6502
+```
+
 ### Manual `mcp.json` (VS Code, Cursor, Windsurf, and others)
 
 Add the following entry to your MCP configuration file (e.g. `.vscode/mcp.json`,
@@ -149,6 +178,19 @@ cp -r skills/roslynk ~/.claude/skills/
 
 # or per-project
 cp -r skills/roslynk .claude/skills/
+```
+
+### Antigravity: install the skill
+
+Antigravity discovers skills in `~/.gemini/config/skills` for user-wide skills, and
+`<projectRoot>/.agents/skills` for project ones:
+
+```bash
+# user-wide (all projects)
+cp -r skills/roslynk ~/.gemini/config/skills/
+
+# or per-project
+cp -r skills/roslynk .agents/skills/
 ```
 
 ### DeepSeek Harness: install the skill
