@@ -197,12 +197,13 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > - `get_symbol_body`: Read a symbol's complete source text, body included. Parameters: `solutionId`, `symbolName` (fully-qualified), `includeLeadingTrivia`.
 > - `get_members`: List a type's members with their locations. Parameters: `solutionId`, `typeName`, `includeInherited`, `nameFilter`, `includeMethods`/`includeFields`/`includeProperties`/`includeEvents`/`includeNestedTypes`.
 > - `search_symbols`: Find symbols by partial name. Parameters: `solutionId`, `query`, `maxResults`.
-> - `multi_query`: Run several of the read-only queries above in one call, against a single snapshot of the solution. Parameters: `solutionId`, `operations` (each names a tool and carries that tool's own parameters), optional `expectSnapshot`. See the skill's multi_query section. For impact questions ("what uses X?", "what breaks if I change X?"), batch `find_references`, `get_callers`, `find_implementations` and `get_type_hierarchy` in one call.
+> - `multi_query`: Run several of the read-only queries above in one call, against a single snapshot of the solution. Parameters: `solutionId`, `operations` (each names a tool and carries that tool's own parameters), optional `expectSnapshot`. See the skill's multi_query section. For impact questions ("what uses X?", "what breaks if I change X?"), batch `find_references`, `get_callers`, `get_callees`, `find_implementations` and `get_type_hierarchy` in one call.
 >
 > **Relationships:**
 > - `find_references`: Every usage of a symbol. Parameters: `solutionId`, `symbolName`, `maxResults`.
 > - `find_reads` / `find_writes`: Where a field, property or parameter is read or written, each location tagged `read`, `assign`, `compound`, `increment`, `ref`, `out` or `init`; `compound`, `increment` and `ref` appear in both. Parameters: `solutionId`, `symbolName` (a parameter is `Namespace.Type.Method:parameter`), `maxResults`.
 > - `get_callers`: Who calls a method, overloads resolved. Parameters: `solutionId`, `methodName`.
+> - `get_callees`: What a member calls - the inverse of `get_callers`; methods, constructors, property/event accessors and operators, overload-exact, with referenced-assembly callees grouped per assembly. Parameters: `solutionId`, `memberName`, `excludeExternal`.
 > - `find_implementations`: Implementors/overrides of an interface, abstract or virtual member. Parameters: `solutionId`, `symbolName`.
 > - `get_type_hierarchy`: Base types, interfaces and derived types. Parameters: `solutionId`, `typeName`.
 >

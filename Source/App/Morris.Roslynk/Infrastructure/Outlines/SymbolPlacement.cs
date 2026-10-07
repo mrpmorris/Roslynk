@@ -53,7 +53,7 @@ public static class SymbolPlacement
 		}
 	}
 
-	private static string NamespaceOf(ISymbol symbol)
+	internal static string NamespaceOf(ISymbol symbol)
 	{
 		INamespaceSymbol? containing = symbol.ContainingNamespace;
 		return containing is null || containing.IsGlobalNamespace ? GlobalNamespace : containing.ToDisplayString();

@@ -120,7 +120,7 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 		string Normalize(string text) => string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
 		Assert.Contains(
-			"For usage/impact questions, batch find_references, get_callers, find_implementations and get_type_hierarchy in one call.",
+			"For usage/impact questions, batch find_references, get_callers, get_callees, find_implementations and get_type_hierarchy in one call.",
 			Normalize(descriptions["multi_query"]),
 			StringComparison.Ordinal);
 		Assert.Contains(

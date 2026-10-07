@@ -5,11 +5,11 @@ using Morris.Roslynk;
 namespace Morris.Roslynk.McpTests.Server;
 
 /// <summary>
-/// The impact-analysis recipe documented in the roslynk skill (issue #22): get_symbol +
-/// find_references + get_callers + find_implementations + get_type_hierarchy as one multi_query
-/// batch. multi_query rejects unknown argument keys (error=Invalid naming the key), so a recipe
-/// argument name that drifts from a tool's published single-call signature is a broken recipe - these
-/// tests pin the recipe at the schema level, independent of any fixture solution.
+/// The impact-analysis recipe documented in the roslynk skill (issue #22): get_symbol + find_references +
+/// get_callers + get_callees (issue #58, the inverse of get_callers) + find_implementations +
+/// get_type_hierarchy as one multi_query batch. multi_query rejects unknown argument keys (error=Invalid
+/// naming the key), so a recipe argument name that drifts from a tool's published single-call signature is
+/// a broken recipe - these tests pin the recipe at the schema level, independent of any fixture solution.
 /// </summary>
 public class ImpactAnalysisRecipeTests : IClassFixture<ServerBuilder>
 {
@@ -26,14 +26,16 @@ public class ImpactAnalysisRecipeTests : IClassFixture<ServerBuilder>
 		Dictionary<string, JsonElement> schemasByName = Tools
 			.ToDictionary(tool => tool.ProtocolTool.Name, tool => tool.ProtocolTool.InputSchema, StringComparer.Ordinal);
 
-		// Exactly the recipe from the skill's "Impact analysis / find usages" section. Note the two
-		// tools whose argument name is not symbolName: get_callers takes methodName, get_type_hierarchy
-		// takes typeName - a uniform symbolName recipe would be rejected by multi_query.
+		// Exactly the recipe from the skill's "Impact analysis / find usages" section. Note the three
+		// tools whose argument name is not symbolName: get_callers takes methodName, get_callees takes
+		// memberName, get_type_hierarchy takes typeName - a uniform symbolName recipe would be rejected
+		// by multi_query.
 		(string Tool, string Argument)[] recipe =
 		[
 			("get_symbol", "symbolName"),
 			("find_references", "symbolName"),
 			("get_callers", "methodName"),
+			("get_callees", "memberName"),
 			("find_implementations", "symbolName"),
 			("get_type_hierarchy", "typeName"),
 		];

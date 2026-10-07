@@ -242,8 +242,7 @@ public sealed class GetMembersTool
 		return (project, file, order, line);
 	}
 
-	private static string Signature(IMethodSymbol method) =>
-		string.Join('|', method.Parameters.Select(parameter => OutlineBuilder.Field(parameter.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat))));
+	private static string Signature(IMethodSymbol method) => ParameterTypes.Of(method);
 
 	private static IEnumerable<ISymbol> Collect(INamedTypeSymbol type, bool includeInherited)
 	{

@@ -9,7 +9,7 @@ workflows and the tool descriptions carry the concise contract for discovery.
 - [Shared conventions](#shared-conventions)
 - [Lifecycle: open_solution, get_solution_status, reload_solution](#lifecycle)
 - [Navigation: find_definition, get_expression_info, get_symbol, get_symbol_body, get_members, search_symbols](#navigation)
-- [Relationships: find_references, find_reads, find_writes, get_callers, find_implementations, get_type_hierarchy](#relationships)
+- [Relationships: find_references, find_reads, find_writes, get_callers, get_callees, find_implementations, get_type_hierarchy](#relationships)
 - [Diagnostics: get_diagnostics](#diagnostics)
 - [Razor and CSHTML: how path-based and write tools handle .razor/.cshtml](#razor-and-cshtml)
 - [Code actions: get_code_actions, apply_code_action, apply_code_fix](#code-actions)
@@ -55,7 +55,7 @@ report a local function's kind as `localfunction` and nest it under its containi
 
 **Defaults.** Don't pass a value for a defaulted parameter unless you need the non-default behavior.
 
-**`#if` projections.** Symbol tools (find_definition, find_implementations, get_members, get_symbol, get_symbol_body, get_type_hierarchy, find_references, find_reads, find_writes, get_callers, rename_symbol, search_symbols) also cover inactive `#if`/`#else` branches: Roslynk builds derived compilations toggling each uniformly-defined preprocessor symbol, and unions/dedupes results.
+**`#if` projections.** Symbol tools (find_definition, find_implementations, get_members, get_symbol, get_symbol_body, get_type_hierarchy, find_references, find_reads, find_writes, get_callers, get_callees, rename_symbol, search_symbols) also cover inactive `#if`/`#else` branches: Roslynk builds derived compilations toggling each uniformly-defined preprocessor symbol, and unions/dedupes results.
 
 ## Lifecycle
 
@@ -125,6 +125,40 @@ Output is header only, in this order (optional keys only when applicable):
 
 ### get_callers
 `solutionId`, `methodName` (FQN). Callers grouped file→namespace→containing type→calling member with the caller's declaration `loc`. Target one overload by writing its parameter-type list.
+
+### get_callees
+`solutionId`, `memberName` (FQN), `excludeExternal` (default false). The inverse of get_callers: every method, constructor, property/event accessor and user-defined operator or conversion the member's code calls. Resolved from the compiler's operation model, so each call names the exact overload: a property read reports `get_X`, an assignment `set_X`, a compound assignment or increment both; `new T()` reports T's constructor; `e += h` reports `add_E` (`remove_E` for `-=`). Also reported: user-defined operators and conversions (including `+=` and `++`), the `Dispose`/`DisposeAsync` a `using` runs, and a method group passed as a delegate (`xs.Select(Helper)`). Only calls the source spells out are listed: the plumbing the compiler inserts for `foreach` (`GetEnumerator`, `MoveNext`, `get_Current`) and `await` (`GetAwaiter`, `get_IsCompleted`, `GetResult`) is not, though an explicit `.GetAwaiter()` call is. Also not reported: calls inside deconstruction assignments and interpolated-string handlers.
+
+The member may be a method, constructor, operator, property, indexer, event or field. What counts as its code: a property or indexer is its accessor bodies or expression body (plus an auto-property initializer), a field is its initializer, and a constructor also includes the field and property initializers it runs (instance ones, or static ones for a static constructor; none when it chains to `this(...)`). Lambdas and local functions declared inside the member are part of it. A member with no code in the solution (an abstract or interface declaration, an auto-property without initializer, or one in referenced metadata) calls nothing. Target one overload by writing its parameter-type list.
+
+Output: callees in the solution use the get_callers outline (project → folder → file → namespace → type → `kind,name,loc`). Callees declared in a referenced assembly (BCL, NuGet) sit under one top-level `<external:AssemblySimpleName>` line per assembly (`<external>` if the assembly is unknown), then namespace → type → leaf, with the leaf's `loc` field present but empty. `excludeExternal=true` leaves them out. A leaf gets a fourth field only when the callee's own type declares more than one method of that name (inherited overloads do not count): its declared parameter types, pipe-delimited, minimally qualified with nullable annotations and without `ref`/`out`/`in`, a type containing a comma single-quoted; `()` for the parameterless overload. Every callee is reported as declared: generic instantiations (`List<int>.Add`, `To<string>`) collapse to their definition, a classic extension method lists its `this` parameter, and a C# 14 `extension(...)` block member lists only the parameters declared on it.
+
+```
+resolvedSymbol=MyApp.Report.Save(string, int)
+
+<external:System.Console>
+	System
+		class,Console
+			method,WriteLine,,int
+			method,WriteLine,,string?
+<external:System.Runtime>
+	System
+		class,String
+			method,get_Length,
+		struct,Int32
+			method,ToString,,()
+MyApp
+	MyApp
+		Audit.cs
+			MyApp
+				class,Audit
+					method,Log,5:21
+		Tally.cs
+			MyApp
+				class,Tally
+					method,Add,5:14,int
+					method,Reset,7:14,()
+```
 
 ### find_implementations
 `solutionId`, `symbolName` (FQN of interface, abstract member, or virtual member). Implementors/overrides across all projections, deduped.
@@ -235,9 +269,9 @@ Leaf lines: `memberKind,memberName,loc,confidence,reason` with confidence `High|
 ### multi_query
 `solutionId`, `operations` (1-25 items), optional `expectSnapshot`.
 
-Each operation is `{ "tool": <name>, "arguments": { ... } }` where `tool` is one of the 14 read-only query tools (get_symbol, get_symbol_body, get_members, find_definition, find_implementations, find_references, find_reads, find_writes, get_callers, search_symbols, get_type_hierarchy, find_dead_code, find_dead_conditionals, get_expression_info) and `arguments` uses exactly that tool's single-call parameter names - unknown or misspelled keys are rejected (`error=Invalid` naming the key), never ignored; omitted parameters take the tool's declared defaults. The schema's `tool` enum lists the legal names, so a write tool, get_diagnostics or get_solution_status is unrepresentable and fails the whole call at binding (`error=Invalid` naming the offending value and the permitted set).
+Each operation is `{ "tool": <name>, "arguments": { ... } }` where `tool` is one of the 15 read-only query tools (get_symbol, get_symbol_body, get_members, find_definition, find_implementations, find_references, find_reads, find_writes, get_callers, get_callees, search_symbols, get_type_hierarchy, find_dead_code, find_dead_conditionals, get_expression_info) and `arguments` uses exactly that tool's single-call parameter names - unknown or misspelled keys are rejected (`error=Invalid` naming the key), never ignored; omitted parameters take the tool's declared defaults. The schema's `tool` enum lists the legal names, so a write tool, get_diagnostics or get_solution_status is unrepresentable and fails the whole call at binding (`error=Invalid` naming the offending value and the permitted set).
 
-**Impact analysis.** To answer "what uses X / who calls X / what breaks if I change X", batch find_references (`symbolName`), get_callers (`methodName`), find_implementations (`symbolName`) and get_type_hierarchy (`typeName`) in one call instead of grepping - parameter names are each tool's own and a wrong key is an `Invalid` slot.
+**Impact analysis.** To answer "what uses X / who calls X / what breaks if I change X", batch find_references (`symbolName`), get_callers (`methodName`), get_callees (`memberName`), find_implementations (`symbolName`) and get_type_hierarchy (`typeName`) in one call instead of grepping - parameter names are each tool's own and a wrong key is an `Invalid` slot. get_callers and get_callees are inverses: who calls this member, and what does this member call - together they trace a call chain one hop per query.
 
 Everything runs against ONE snapshot of the solution, so results inside one response can never disagree with each other. The response is one envelope, not JSON:
 
