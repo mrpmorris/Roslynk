@@ -16,21 +16,16 @@ public sealed class RazorGenerationState
 	private ImmutableDictionary<ProjectId, Entry> EntriesField = ImmutableDictionary<ProjectId, Entry>.Empty;
 
 	/// <param name="Generator">The project's Razor generator.</param>
-	/// <param name="Driver">The driver from the last run, or null before the first (a snapshot-loaded project).</param>
+	/// <param name="Driver">The driver from the last run, or null before the first.</param>
 	/// <param name="GeneratedRoot">The folder the generated documents' paths are rooted at.</param>
 	/// <param name="Documents">The project's generated documents, keyed by the generator's hint name.</param>
 	/// <param name="Diagnostics">The Razor compiler's diagnostics from the last run.</param>
-	/// <param name="InputCompilations">
-	/// The project's full compilation after the last run, and the generator input derived from it (the same
-	/// compilation without the generated documents), so an unchanged compilation reuses the identical input.
-	/// </param>
 	internal sealed record Entry(
 		ISourceGenerator Generator,
 		GeneratorDriver? Driver,
 		string GeneratedRoot,
 		ImmutableDictionary<string, DocumentId> Documents,
-		ImmutableArray<Diagnostic> Diagnostics,
-		(Compilation Full, Compilation Input)? InputCompilations);
+		ImmutableArray<Diagnostic> Diagnostics);
 
 	/// <summary>True when Roslynk generates <paramref name="projectId"/>'s Razor documents itself, so an edit
 	/// to its Razor sources can be regenerated in place.</summary>

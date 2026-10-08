@@ -2,21 +2,13 @@
 
 # Unreleased
 
-- Faster Razor solution loads: the Razor generator runs once per project instead of twice, and its output is added in one batch (Fixes #64)
-- Editing a `.razor`/`.cshtml` file regenerates its Razor output in place instead of reloading the solution (Fixes #64)
-- A C# edit regenerates dependent Razor output, so a renamed code-behind `[Parameter]` no longer leaves a phantom `CS0117` (Fixes #64)
-- Multi-targeted Razor projects get generated Razor code for every target framework (Fixes #64)
-- Razor projects are generated in dependency order, so a referenced library's components bind instead of becoming plain HTML (Fixes #64)
+- Faster loading of solutions with Razor projects (Fixes #64)
+- `get_diagnostics` recomputes only the projects an edit can affect, so a repeat call with nothing changed is near-instant (Fixes #64)
+- Edits to `.razor`/`.cshtml` files, C# files and source generator inputs (e.g. a `.csv` listed in `AdditionalFiles`) are applied in place without reloading the solution, and generated Razor code follows C# declaration changes such as a renamed `[Parameter]` (Fixes #64)
+- Files that cannot reach the compiler (content, embedded resources, a build tool's output, `.git`/`.vs` activity) no longer reload the solution; `.ruleset`, `global.json` and `NuGet.config` changes now do (Fixes #64)
+- Faster `rename_symbol` and reference searches in solutions using `#if` (Fixes #64)
+- Razor: multi-targeted projects get generated code for every target framework, and a referenced library's components bind instead of becoming plain HTML (Fixes #64)
 - `get_diagnostics` reports the Razor compiler's own `RZ*` errors against the `.razor`/`.cshtml` file (Fixes #64)
-- A `dotnet build` Razor snapshot (`EmitCompilerGeneratedFiles=true`) is used despite `_Imports.razor`/`_ViewImports.cshtml`/`_ViewStart.cshtml` output, found in artifacts/custom layouts, and rejected when another configuration made it or C# it depends on is newer (Fixes #64)
-- Changes under a project's `.git`, `.vs`, `.idea` or `node_modules`, and saves that leave an additional file's content unchanged, no longer reload the solution (Fixes #64)
-- Solutions on different SDKs in one daemon each keep their in-process Razor generation (Fixes #64)
-- `get_diagnostics` reuses each unchanged project's results and computes projects in parallel, so a repeat call is near-instant and one after an edit recomputes only the affected projects (Fixes #64)
-- After a write, `get_diagnostics` no longer waits behind a reload triggered by directory change events or a redundant background compiler pass, and a write reaching `.razor` files regenerates Razor output itself (Fixes #64)
-- Faster `#if` symbol discovery for rename and reference searches (Fixes #64)
-- Editing a source generator's additional file (e.g. a `.csv`) reruns the generator in place instead of reloading the solution (Fixes #64)
-- Files that cannot reach the compiler (content, embedded resources, a build tool's output such as a weaver's `.csv`, `.git` activity) no longer reload the solution (Fixes #64)
-
 - New `get_callees` tool: the inverse of `get_callers` (Fixes #58)
 - `rename_symbol` and `rename_parameter` no longer fail with `error=NotSupported` when the renamed member is referenced from a Razor `@bind-X="Expr"`, `@bind-X:get`/`:set`/`:after` or `@bind="Expr"` attribute (e.g. `<InputDate @bind-Value="Model.InstallDate" />`): the Razor compiler expands the attribute into hidden setter/`ValueExpression` lambdas with no `#line` mapping of their own, and those unmapped edits aborted the whole rename. They are now recognised as copies of the edit already made at the user-written span and collapse into the single `.razor` edit. A scaffolding edit nothing accounts for (e.g. renaming a component whose class is generated) still returns `error=NotSupported` with nothing written (Fixes #59)
 

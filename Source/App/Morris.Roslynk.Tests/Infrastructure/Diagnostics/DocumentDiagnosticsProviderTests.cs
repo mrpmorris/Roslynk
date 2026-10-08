@@ -28,6 +28,18 @@ public class DocumentDiagnosticsProviderTests
 		});
 
 	[Fact]
+	public async Task WhenTheProjectsCompilerDiagnosticsAreMemoized_ThenTheyAreReusedRatherThanRecompiled() =>
+		// get_diagnostics and every document's code actions share one compiler pass per project.
+		await WithGreeterAsync(async (document, subject) =>
+		{
+			ImmutableArray<Diagnostic> memoized = await DiagnosticsService.GetCompilerDiagnosticsAsync(document.Project);
+			ImmutableArray<Diagnostic> diagnostics = await subject.GetForDocumentAsync(document);
+
+			Diagnostic unnecessaryUsing = diagnostics.First(diagnostic => diagnostic.Id == "CS8019");
+			Assert.Contains(memoized, diagnostic => ReferenceEquals(diagnostic, unnecessaryUsing));
+		});
+
+	[Fact]
 	public async Task WhenTheCaretIsElsewhereInTheFile_ThenTheUsingDiagnosticIsStillReturned() =>
 		// IDE0005 reports on the using directive, so analysing only the span the caller asked about would
 		// hide it whenever the caret sits in the body. The provider is deliberately whole-document.

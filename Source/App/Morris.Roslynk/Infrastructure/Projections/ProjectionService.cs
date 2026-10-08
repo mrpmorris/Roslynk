@@ -20,7 +20,8 @@ namespace Morris.Roslynk.Infrastructure.Projections;
 /// linear, not the 2^N powerset.</item>
 /// </list>
 /// A symbol whose defined-state already varies across the loaded projects is covered by those projects and is
-/// not toggled.
+/// not toggled. A variant toggles the symbol only in the projects that test it: the others parse identically
+/// either way, so they keep their trees and only recompile where they reference a toggled project.
 /// </summary>
 public sealed class ProjectionService
 {
@@ -38,9 +39,9 @@ public sealed class ProjectionService
 		if (cSharpProjects.Count == 0)
 			return projections;
 
-		IReadOnlyCollection<string> referenced = await DiscoverConditionSymbolsAsync(cSharpProjects, cancellationToken);
+		IReadOnlyDictionary<string, HashSet<ProjectId>> referenced = await DiscoverConditionSymbolsAsync(cSharpProjects, cancellationToken);
 
-		foreach (string symbol in referenced.OrderBy(name => name, StringComparer.Ordinal))
+		foreach ((string symbol, HashSet<ProjectId> testedIn) in referenced.OrderBy(pair => pair.Key, StringComparer.Ordinal))
 		{
 			int definedCount = cSharpProjects.Count(project => Symbols(project).Contains(symbol));
 			bool definedInAll = definedCount == cSharpProjects.Count;
@@ -51,7 +52,7 @@ public sealed class ProjectionService
 				continue;
 
 			Solution variant = solution;
-			foreach (Project project in cSharpProjects)
+			foreach (Project project in cSharpProjects.Where(project => testedIn.Contains(project.Id)))
 			{
 				var parseOptions = (CSharpParseOptions)project.ParseOptions!;
 				IEnumerable<string> toggled = definedInAll
@@ -122,9 +123,10 @@ public sealed class ProjectionService
 	private static IReadOnlyCollection<string> Symbols(Project project) =>
 		((CSharpParseOptions)project.ParseOptions!).PreprocessorSymbolNames.ToArray();
 
-	private static async Task<IReadOnlyCollection<string>> DiscoverConditionSymbolsAsync(IReadOnlyList<Project> projects, CancellationToken cancellationToken)
+	/// <summary>Every symbol an <c>#if</c>/<c>#elif</c> tests, with the projects that test it.</summary>
+	private static async Task<IReadOnlyDictionary<string, HashSet<ProjectId>>> DiscoverConditionSymbolsAsync(IReadOnlyList<Project> projects, CancellationToken cancellationToken)
 	{
-		var symbols = new HashSet<string>(StringComparer.Ordinal);
+		var symbols = new Dictionary<string, HashSet<ProjectId>>(StringComparer.Ordinal);
 
 		foreach (Project project in projects)
 		{
@@ -149,7 +151,11 @@ public sealed class ProjectionService
 						continue;
 
 					foreach (IdentifierNameSyntax identifier in condition.DescendantNodesAndSelf().OfType<IdentifierNameSyntax>())
-						symbols.Add(identifier.Identifier.ValueText);
+					{
+						if (!symbols.TryGetValue(identifier.Identifier.ValueText, out HashSet<ProjectId>? testedIn))
+							symbols[identifier.Identifier.ValueText] = testedIn = [];
+						testedIn.Add(project.Id);
+					}
 				}
 			}
 		}

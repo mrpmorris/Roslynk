@@ -42,6 +42,29 @@ public class ProjectionServiceBuildTests
 		Assert.Equal(["base"], projections.Select(projection => projection.Label));
 	}
 
+	[Fact]
+	public async Task WhenOnlyOneProjectTestsASymbol_ThenItsVariantLeavesTheOtherProjectsUntouched()
+	{
+		// The other projects parse identically either way, so they keep their trees and compilations.
+		Solution solution = SolutionWith(
+			"""
+			class C
+			{
+			#if FEATURE
+				void M() { }
+			#endif
+			}
+			""");
+		Project untouched = solution.AddProject("Q", "Q", LanguageNames.CSharp).WithParseOptions(new CSharpParseOptions()).AddDocument("D.cs", "class D { }").Project;
+		solution = untouched.Solution;
+
+		IReadOnlyList<Projection> projections = await new ProjectionService().BuildAsync(solution);
+
+		Projection variant = Assert.Single(projections, projection => projection.Label == "FEATURE");
+		Assert.Same(untouched.ParseOptions, variant.Solution.GetProject(untouched.Id)!.ParseOptions);
+		Assert.Contains("FEATURE", variant.Solution.Projects.Single(project => project.Name == "P").ParseOptions!.PreprocessorSymbolNames);
+	}
+
 	private static Solution SolutionWith(string source)
 	{
 		var workspace = new AdhocWorkspace();

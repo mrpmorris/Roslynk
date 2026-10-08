@@ -1,7 +1,10 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
+using Morris.Roslynk.Features.References.RenameSymbol;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Razor;
+using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Watching;
 using Morris.Roslynk.Infrastructure.Writing;
 
@@ -242,7 +245,7 @@ public class SolutionFileSyncTests
 	}
 
 	[Fact]
-	public async Task WhenACsAnalyzerAdditionalFileIsModified_ThenTheInstanceIsMarkedDirty()
+	public async Task WhenACsAnalyzerAdditionalFileIsModified_ThenItIsFoldedInAsAnAdditionalFileOnly()
 	{
 		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
 		string additional = await AddAnalyzerAdditionalFileAsync(
@@ -255,11 +258,14 @@ public class SolutionFileSyncTests
 		await File.WriteAllTextAsync(additional, "namespace SimpleLibrary; public class Extra { /* changed */ }");
 		await subject.OnFileChangedAsync(additional);
 
-		Assert.True(instance.IsDirty);
+		Solution folded = instance.CurrentSolution;
+		Assert.False(instance.IsDirty);
+		Assert.All(folded.GetDocumentIdsWithFilePath(additional), id => Assert.Null(folded.GetDocument(id)));
+		Assert.Contains("changed", await ReadAdditionalTextAsync(folded, additional));
 	}
 
 	[Fact]
-	public async Task WhenACsFileThatIsBothCompiledAndAnAnalyzerAdditionalFileIsModified_ThenTheInstanceIsMarkedDirty()
+	public async Task WhenACsFileThatIsBothCompiledAndAnAnalyzerAdditionalFileIsModified_ThenBothAreFoldedIn()
 	{
 		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
 		string additional = await AddAnalyzerAdditionalFileAsync(
@@ -269,12 +275,13 @@ public class SolutionFileSyncTests
 		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
 		var subject = new SolutionFileSync(instance);
 
-		// The file is an additional document, so its change must reload (re-running the generators that read
-		// it) rather than be folded in as compiled source, even though it is also a compiled document here.
+		// The compiled document and the additional document (the generators' input) must both take the change.
 		await File.WriteAllTextAsync(additional, "namespace SimpleLibrary; public class Shared { /* changed */ }");
 		await subject.OnFileChangedAsync(additional);
 
-		Assert.True(instance.IsDirty);
+		Assert.False(instance.IsDirty);
+		Assert.Contains("changed", await ReadDocumentTextAsync(instance.CurrentSolution, additional));
+		Assert.Contains("changed", await ReadAdditionalTextAsync(instance.CurrentSolution, additional));
 	}
 
 	[Fact]
@@ -606,7 +613,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenADirectoryHoldingLoadedDocumentsChanges_ThenItIsIgnored()
 	{
-		// Writing a file raises a change event for its directory too; the file's own event covers the edit.
+		// A directory whose files are already loaded (folded as their own events arrived) brings nothing new.
 		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
 		using var registry = new InstanceRegistry();
 		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
@@ -660,6 +667,72 @@ public class SolutionFileSyncTests
 		Assert.True(instance.IsDirty);
 	}
 
+	[Fact]
+	public async Task WhenSeveralFilesChangeInOneBatch_ThenTheyAreFoldedAsOneWrite()
+	{
+		// A save-all or a branch switch: one write, so the snapshot (and any Razor) is rebuilt once, not per file.
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		string calculator = FindFile(solutionPath, "Calculator.cs");
+		string added = Path.Combine(Path.GetDirectoryName(greeter)!, "Added.cs");
+		await File.WriteAllTextAsync(greeter, (await File.ReadAllTextAsync(greeter)) + "\n// greeter edited\n");
+		await File.WriteAllTextAsync(calculator, (await File.ReadAllTextAsync(calculator)) + "\n// calculator edited\n");
+		await File.WriteAllTextAsync(added, "namespace SimpleLibrary; public class Added { }");
+		int writesBefore = instance.EnqueuedWrites;
+
+		await subject.OnFilesChangedAsync([greeter, calculator, added]);
+
+		Assert.Equal(writesBefore + 1, instance.EnqueuedWrites);
+		Assert.Contains("greeter edited", await ReadDocumentTextAsync(instance.CurrentSolution, greeter));
+		Assert.Contains("calculator edited", await ReadDocumentTextAsync(instance.CurrentSolution, calculator));
+		Assert.Contains("class Added", await ReadDocumentTextAsync(instance.CurrentSolution, added));
+	}
+
+	[Fact]
+	public async Task WhenARenameReachesRazorFiles_ThenTheWatcherFoldThatFollowsChangesNothing()
+	{
+		// The rename's own write regenerates the Razor output, so the events it raises find the snapshot current:
+		// no second regeneration, and no compilation forked for diagnostics to recompute.
+		string solutionPath = TestSolutions.CreateScratchRazorMultiProjectSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+		var rename = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+
+		string result = await rename.RenameSymbol(solutionPath, "Lib.Widget.Count", "Total");
+		Solution afterRename = instance.CurrentSolution;
+		string[] written = [FindFile(solutionPath, "Widget.razor.cs"), FindFile(solutionPath, "Page.razor")];
+		await subject.OnFilesChangedAsync(written);
+
+		Assert.Contains("applied=Y", result);
+		Assert.Contains("Total=", await File.ReadAllTextAsync(written[1]));
+		Assert.Same(afterRename, instance.CurrentSolution);
+		Assert.False(instance.IsDirty);
+	}
+
+	[Theory]
+	[InlineData("SimpleLibrary.ruleset")]
+	[InlineData("global.json")]
+	[InlineData("NuGet.config")]
+	public async Task WhenARulesetOrSdkOrPackageSourceFileChanges_ThenTheInstanceIsMarkedDirty(string name)
+	{
+		// They change the compilation options, the SDK MSBuild loads, or the packages it restores.
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string path = Path.Combine(Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!, name);
+		await File.WriteAllTextAsync(path, "{}");
+		await subject.OnFileChangedAsync(path);
+
+		Assert.True(instance.IsDirty);
+	}
+
 	/// <summary>
 	/// Writes a file into the single project and gives it the "C# analyzer additional file" build action by
 	/// adding an <c>&lt;AdditionalFiles&gt;</c> item, optionally removing it from compilation (the canonical
@@ -698,8 +771,13 @@ public class SolutionFileSyncTests
 
 	private static async Task<string> ReadDocumentTextAsync(Solution solution, string path)
 	{
-		DocumentId id = solution.GetDocumentIdsWithFilePath(path).First();
-		Document document = solution.GetDocument(id)!;
+		Document document = solution.GetDocumentIdsWithFilePath(path).Select(solution.GetDocument).OfType<Document>().First();
+		return (await document.GetTextAsync()).ToString();
+	}
+
+	private static async Task<string> ReadAdditionalTextAsync(Solution solution, string path)
+	{
+		TextDocument document = solution.GetDocumentIdsWithFilePath(path).Select(solution.GetAdditionalDocument).OfType<TextDocument>().First();
 		return (await document.GetTextAsync()).ToString();
 	}
 

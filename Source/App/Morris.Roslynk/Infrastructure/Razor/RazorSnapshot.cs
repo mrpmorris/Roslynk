@@ -3,22 +3,14 @@ using Microsoft.CodeAnalysis;
 namespace Morris.Roslynk.Infrastructure.Razor;
 
 /// <summary>
-/// Finds and validates the Razor output a previous <c>dotnet build</c> left on disk
-/// (<c>EmitCompilerGeneratedFiles=true</c>). That output is a build artifact MSBuild never prunes: a <c>.g.cs</c>
-/// can outlive its deleted <c>.razor</c> source (an orphan), lag behind an edited one (stale), or be missing
-/// for a newly added one (incomplete). Trusting such a snapshot poisons the compilation with phantom
-/// CS0103/CS0246 in files that no longer exist, so it is only used once verified fresh.
+/// Finds the Razor output a previous <c>dotnet build</c> left on disk (<c>EmitCompilerGeneratedFiles=true</c>), the
+/// fallback when no Razor generator can be loaded. That output is a build artifact MSBuild never prunes: a
+/// <c>.g.cs</c> can outlive its deleted <c>.razor</c> source (an orphan), which would poison the compilation with
+/// phantom CS0103/CS0246 for symbols that no longer exist anywhere, so orphans are dropped.
 /// </summary>
 internal static class RazorSnapshot
 {
 	private const string GeneratorAssemblyFolder = "Microsoft.CodeAnalysis.Razor.Compiler";
-
-	/// <summary>
-	/// <c>Files</c> are the snapshot's <c>.g.cs</c> files matched to an existing source, with the hint name the
-	/// generator gave each (its path below the generator's folder). <c>IsFresh</c> additionally requires that no
-	/// input is newer than the oldest of them and that every component source has one.
-	/// </summary>
-	internal sealed record Analysis(bool IsFresh, IReadOnlyList<(string Path, string HintName)> Files);
 
 	/// <summary>
 	/// The project's Razor snapshot directory, or null when there is none. The compiler writes generator output
@@ -67,8 +59,9 @@ internal static class RazorSnapshot
 	}
 
 	/// <summary>
-	/// Classifies the snapshot in <paramref name="generatedDirectory"/> against the .razor/.cshtml sources it was
-	/// generated from and the inputs the generator read.
+	/// The snapshot's <c>.g.cs</c> files in <paramref name="generatedDirectory"/> whose .razor/.cshtml source still
+	/// exists, each with the hint name the generator gave it (its path below the generator's folder); output that
+	/// is not Razor's is kept as is.
 	/// <para>
 	/// Matching runs source→hint-name, never the reverse: the generator flattens paths into hint names with
 	/// underscores, which cannot be un-flattened unambiguously (Views/Shared/_Layout.cshtml and a literal
@@ -76,21 +69,13 @@ internal static class RazorSnapshot
 	/// deterministic, so a .g.cs is an orphan exactly when no source claims it.
 	/// </para>
 	/// <para>
-	/// Directive files (_Imports.razor, _ViewImports.cshtml, _ViewStart.cshtml) claim their own output when the
-	/// SDK emitted one (every SDK checked does: _Imports_razor.g.cs and so on) but are never required to have
-	/// one; an edit to one changes every component's generated code, so it must not be newer than the snapshot.
-	/// </para>
-	/// <para>
-	/// Generated code also depends on the C# the generator discovers components and their parameters from: a
-	/// code-behind file, or a component in a referenced project. So no compile input of the project or of the
-	/// projects it references may be newer than the oldest generated file either, or a rename made after the
-	/// build would survive in the snapshot as a phantom error.
+	/// Directive files (_Imports.razor, _ViewImports.cshtml, _ViewStart.cshtml) claim their own output like any
+	/// other source (every SDK checked emits one: _Imports_razor.g.cs and so on).
 	/// </para>
 	/// </summary>
-	public static Analysis Analyze(Solution solution, Project project, string generatedDirectory)
+	public static IReadOnlyList<(string Path, string HintName)> Files(Project project, string generatedDirectory)
 	{
 		var files = new List<(string Path, string HintName)>();
-		bool fresh = true;
 
 		try
 		{
@@ -98,15 +83,11 @@ internal static class RazorSnapshot
 				? System.IO.Path.GetDirectoryName(projectFilePath)!
 				: string.Empty;
 			if (projectDir.Length == 0)
-				return new Analysis(false, files);
+				return files;
 
 			var sourcesByHintKey = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-			var componentSources = new List<string>();
-			var directiveSources = new List<string>();
-
 			foreach (string source in EnumerateRazorSources(project, projectDir))
 			{
-				(IsDirectiveOnly(source) ? directiveSources : componentSources).Add(source);
 				string relative = System.IO.Path.GetRelativePath(projectDir, source);
 
 				// Folder-preserved layout: relative folders survive, only the file name is flattened.
@@ -116,9 +97,6 @@ internal static class RazorSnapshot
 				// Flat layout (older SDKs): the whole relative path is flattened into the file name.
 				sourcesByHintKey[string.Concat("|", FlattenToHintName(relative))] = source;
 			}
-
-			var matchedSources = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			DateTime oldestGenerated = DateTime.MaxValue;
 
 			foreach (string file in Directory.EnumerateFiles(generatedDirectory, "*.g.cs", SearchOption.AllDirectories))
 			{
@@ -135,7 +113,7 @@ internal static class RazorSnapshot
 				if (!fileName.EndsWith("_razor.g.cs", StringComparison.OrdinalIgnoreCase) &&
 					!fileName.EndsWith("_cshtml.g.cs", StringComparison.OrdinalIgnoreCase))
 				{
-					// Not a razor/cshtml output; keep it without letting it decide snapshot validity.
+					// Not a razor/cshtml output; keep it.
 					files.Add((file, hintName));
 					continue;
 				}
@@ -145,109 +123,19 @@ internal static class RazorSnapshot
 				if (source is null && segments.Length == 1)
 					source = sourcesByHintKey.GetValueOrDefault(string.Concat("|", fileName));
 
-				if (source is null)
-				{
-					fresh = false;
-					continue;
-				}
-
-				files.Add((file, hintName));
-				matchedSources.Add(source);
-
-				DateTime generatedAt = File.GetLastWriteTimeUtc(file);
-				if (generatedAt < oldestGenerated)
-					oldestGenerated = generatedAt;
-
-				// Stale: the source was edited after the last build emitted this file.
-				if (File.GetLastWriteTimeUtc(source) > generatedAt)
-					fresh = false;
+				// An orphan: its source was deleted after the last build.
+				if (source is not null)
+					files.Add((file, hintName));
 			}
-
-			// Incomplete: a component added since the last build has no .g.cs, so its partial would be missing.
-			if (componentSources.Any(source => !matchedSources.Contains(source)))
-				fresh = false;
-
-			// A directive file edited after the snapshot invalidates every emitted file at once.
-			if (directiveSources.Any(directive => File.GetLastWriteTimeUtc(directive) > oldestGenerated))
-				fresh = false;
-
-			if (fresh && oldestGenerated != DateTime.MaxValue && NewestCompileInput(solution, project) > oldestGenerated)
-				fresh = false;
 		}
 		catch (Exception)
 		{
-			fresh = false;
+			// A snapshot that cannot be read in full is not used at all.
+			return [];
 		}
 
-		return new Analysis(fresh, files);
+		return files;
 	}
-
-	/// <summary>
-	/// The newest write time among the sources, project files and configuration the generator's view of
-	/// <paramref name="project"/> derives from, including every project it references. Build artifacts (the
-	/// intermediate directory's GlobalUsings.g.cs, AssemblyInfo.cs and generated editorconfig, rewritten by
-	/// design-time builds) are skipped: they derive from the project files, which are checked.
-	/// </summary>
-	private static DateTime NewestCompileInput(Solution solution, Project project)
-	{
-		DateTime newest = DateTime.MinValue;
-		var visited = new HashSet<ProjectId>();
-		var pending = new Stack<ProjectId>();
-		pending.Push(project.Id);
-
-		while (pending.TryPop(out ProjectId? projectId))
-		{
-			if (!visited.Add(projectId) || solution.GetProject(projectId) is not Project current)
-				continue;
-
-			Consider(current.FilePath, current);
-			foreach (Document document in current.Documents)
-			{
-				if (!RazorMapping.IsRazorGeneratedDocument(document))
-					Consider(document.FilePath, current);
-			}
-
-			foreach (TextDocument document in current.AdditionalDocuments)
-				Consider(document.FilePath, current);
-			foreach (TextDocument document in current.AnalyzerConfigDocuments)
-				Consider(document.FilePath, current);
-			foreach (ProjectReference reference in current.ProjectReferences)
-				pending.Push(reference.ProjectId);
-		}
-
-		return newest;
-
-		void Consider(string? path, Project owner)
-		{
-			if (path is null || IsBuildArtifact(path, owner) || !File.Exists(path))
-				return;
-
-			DateTime writtenAt = File.GetLastWriteTimeUtc(path);
-			if (writtenAt > newest)
-				newest = writtenAt;
-		}
-	}
-
-	private static bool IsBuildArtifact(string path, Project project)
-	{
-		if (project.CompilationOutputInfo.AssemblyPath is string assemblyPath
-			&& System.IO.Path.GetDirectoryName(assemblyPath) is { Length: > 0 } intermediate
-			&& IsUnder(path, intermediate))
-		{
-			return true;
-		}
-
-		if (project.FilePath is not string projectFilePath || System.IO.Path.GetDirectoryName(projectFilePath) is not string projectDir || !IsUnder(path, projectDir))
-			return false;
-
-		string firstSegment = System.IO.Path.GetRelativePath(projectDir, path)
-			.Split(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar)[0];
-		return string.Equals(firstSegment, "bin", StringComparison.OrdinalIgnoreCase)
-			|| string.Equals(firstSegment, "obj", StringComparison.OrdinalIgnoreCase);
-	}
-
-	private static bool IsUnder(string path, string directory) =>
-		path.StartsWith(directory.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar) + System.IO.Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
 
 	/// <summary>
 	/// The hint name the razor generator derives from a path: every character that is not a letter or
@@ -256,19 +144,11 @@ internal static class RazorSnapshot
 	private static string FlattenToHintName(string path) =>
 		string.Concat(path.Select(c => char.IsLetterOrDigit(c) ? c : '_')) + ".g.cs";
 
-	private static bool IsDirectiveOnly(string path)
-	{
-		string name = System.IO.Path.GetFileName(path);
-		return string.Equals(name, "_Imports.razor", StringComparison.OrdinalIgnoreCase)
-			|| string.Equals(name, "_ViewImports.cshtml", StringComparison.OrdinalIgnoreCase)
-			|| string.Equals(name, "_ViewStart.cshtml", StringComparison.OrdinalIgnoreCase);
-	}
-
 	/// <summary>
 	/// Enumerates the project's .razor/.cshtml files. The workspace's additional documents are
 	/// included (linked files outside the project directory, exclusions). A disk scan is always
 	/// merged in so files present on disk but not yet in the design-time graph (e.g. a newly written
-	/// <c>_Imports.razor</c>) still participate in snapshot freshness.
+	/// <c>_Imports.razor</c>) still claim their output.
 	/// </summary>
 	private static IEnumerable<string> EnumerateRazorSources(Project project, string projectDir)
 	{

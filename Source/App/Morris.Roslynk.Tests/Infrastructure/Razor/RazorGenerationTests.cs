@@ -58,6 +58,18 @@ public class RazorGenerationTests
 	}
 
 	[Fact]
+	public async Task WhenADependentProjectIsGenerated_ThenTheReferencedCompilationItNeededIsKeptForTheLoadedSolution()
+	{
+		// App's generator input compiles the Lib it references; that compilation must belong to the published
+		// solution, or the first diagnostics pass would compile Lib a second time.
+		using SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(TestSolutions.RazorMultiProject);
+
+		Project app = workspace.Solution.Projects.Single(project => project.Name == "App");
+		Project referenced = workspace.Solution.GetProject(app.ProjectReferences.Single().ProjectId)!;
+		Assert.True(referenced.TryGetCompilation(out _));
+	}
+
+	[Fact]
 	public async Task WhenTheProjectReferencesALoadableRazorCompiler_ThenItsOwnGeneratorInstanceIsUsed()
 	{
 		MsBuildRegistrar.EnsureRegistered();
@@ -69,23 +81,10 @@ public class RazorGenerationTests
 
 		ISourceGenerator? generator = RazorGeneratorLoader.For(project);
 
-		Assert.NotNull(generator);
-		if (own is not null)
-			Assert.Same(own, generator); // no second copy of the compiler is loaded
-	}
-
-	[Fact]
-	public async Task WhenARazorFileHasASyntaxError_ThenTheRazorCompilersDiagnosticIsRecordedAgainstIt()
-	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
-		string broken = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Broken.razor");
-		await File.WriteAllTextAsync(broken, "<h1>Broken</h1>\n@code {\n    private string Value = \"\";\n");
-
-		using SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(solutionPath);
-
-		Diagnostic diagnostic = Assert.Single(workspace.Razor.Diagnostics(workspace.Solution), d => d.Id == "RZ1006");
-		Assert.Equal(DiagnosticSeverity.Error, diagnostic.Severity);
-		Assert.Equal(broken, diagnostic.Location.GetLineSpan().Path, ignoreCase: true);
+		// The SDK's Razor compiler references the Roslyn version Roslynk ships, so the project's own reference
+		// loads; reusing its instance means no second copy of the compiler is loaded.
+		Assert.NotNull(own);
+		Assert.Same(own, generator);
 	}
 
 	[Theory]

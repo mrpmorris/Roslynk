@@ -188,56 +188,6 @@ public class RoslynInstanceTests
 	}
 
 	[Fact]
-	public async Task WhenAnAutoDiagnosticsWriteChangesNothingAfterAnUnbuiltWrite_ThenNoBackgroundBuildRuns()
-	{
-		// The watcher's fold after the server's own write finds nothing to change; the build the write itself
-		// left owed belongs to the next explicit request, which must not queue behind a background pass.
-		using RoslynInstance subject = await LoadReadyAsync();
-		await subject.EnqueueWriteAsync((current, token) =>
-		{
-			DocumentId documentId = current.Projects.First().DocumentIds[0];
-			return Task.FromResult(new WriteResult(current.WithDocumentText(documentId, SourceText.From("// edited")), []));
-		}).WaitAsync(Timeout);
-
-		int compiles = 0;
-		await subject.EnqueueWriteWithAutoDiagnosticsAsync(
-			(current, token) => Task.FromResult(new WriteResult(current, [])),
-			(solution, token) =>
-			{
-				Interlocked.Increment(ref compiles);
-				return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
-			}).WaitAsync(Timeout);
-
-		// A background build is queued from a detached task: give it room to be queued, then drain the queue.
-		await Task.Delay(250);
-		await subject.EnqueueWriteAsync((current, token) => Task.FromResult(new WriteResult(current, []))).WaitAsync(Timeout);
-
-		Assert.Equal(0, compiles);
-		Assert.True(subject.BuildNeeded);
-	}
-
-	[Fact]
-	public async Task WhenAnAutoDiagnosticsWriteChangesTheSolution_ThenABackgroundBuildRuns()
-	{
-		using RoslynInstance subject = await LoadReadyAsync();
-
-		var built = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-		await subject.EnqueueWriteWithAutoDiagnosticsAsync(
-			(current, token) =>
-			{
-				DocumentId documentId = current.Projects.First().DocumentIds[0];
-				return Task.FromResult(new WriteResult(current.WithDocumentText(documentId, SourceText.From("// edited")), []));
-			},
-			(solution, token) =>
-			{
-				built.TrySetResult();
-				return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
-			}).WaitAsync(Timeout);
-
-		await built.Task.WaitAsync(Timeout);
-	}
-
-	[Fact]
 	public async Task WhenAWriteTransformThrows_ThenLaterWorkStillRuns()
 	{
 		using RoslynInstance subject = await LoadReadyAsync();

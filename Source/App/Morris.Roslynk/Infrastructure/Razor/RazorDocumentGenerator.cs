@@ -16,10 +16,8 @@ namespace Morris.Roslynk.Infrastructure.Razor;
 /// <see cref="RazorGeneratorLoader"/>) and adds the generated sources as documents. Best-effort: if the
 /// generator cannot be loaded or run, the project is returned unchanged.
 /// <para>
-/// A fresh snapshot of pre-generated <c>.g.cs</c> files from a previous <c>dotnet build</c> is used instead of
-/// running the generator (see <see cref="RazorSnapshot"/>). An invalid snapshot falls back to the generator;
-/// when that is unavailable the snapshot minus provable orphans is used (stale files are kept — an outdated
-/// partial binds more references than a missing one).
+/// When no generator can be loaded, the pre-generated <c>.g.cs</c> files a previous <c>dotnet build</c> left on
+/// disk are used instead, minus provable orphans (see <see cref="RazorSnapshot"/>).
 /// </para>
 /// <para>
 /// The generator's <see cref="GeneratorDriver"/> is kept in a <see cref="RazorGenerationState"/>, so after a
@@ -80,6 +78,52 @@ public static class RazorDocumentGenerator
 		return solution;
 	}
 
+	/// <summary>
+	/// Regenerates the Razor output a change from <paramref name="before"/> to <paramref name="after"/> can affect,
+	/// so every write publishes generated documents that match its sources. A project counts as changed when its
+	/// Razor sources changed, a document was added or removed, a generated document holds an edit approximating the
+	/// generator's output (a rename reaching .razor files), or a C# declaration changed: generated Razor code binds
+	/// to declarations (a code-behind parameter rename changes every page using the component), never to method
+	/// bodies or initializers, so an edit confined to those regenerates nothing.
+	/// </summary>
+	public static async Task<Solution> RegenerateForChangesAsync(Solution before, Solution after, RazorGenerationState state, CancellationToken cancellationToken = default)
+	{
+		var changedProjects = new HashSet<ProjectId>();
+		foreach (ProjectChanges changes in after.GetChanges(before).GetProjectChanges())
+		{
+			if (changes.GetAddedDocuments().Any()
+				|| changes.GetRemovedDocuments().Any()
+				|| changes.GetAddedAdditionalDocuments().Any()
+				|| changes.GetRemovedAdditionalDocuments().Any()
+				|| changes.GetChangedAdditionalDocuments().Any(id => after.GetAdditionalDocument(id)?.FilePath is string path && IsRazorSourcePath(path))
+				|| await AnyDeclarationChangedAsync(before, after, changes, state, cancellationToken))
+			{
+				changedProjects.Add(changes.ProjectId);
+			}
+		}
+
+		return changedProjects.Count == 0 ? after : await RegenerateAsync(after, changedProjects, state, cancellationToken);
+	}
+
+	private static async Task<bool> AnyDeclarationChangedAsync(Solution before, Solution after, ProjectChanges changes, RazorGenerationState state, CancellationToken cancellationToken)
+	{
+		ImmutableDictionary<string, DocumentId>? generated = state.Get(changes.ProjectId)?.Documents;
+		foreach (DocumentId documentId in changes.GetChangedDocuments())
+		{
+			if (generated?.ContainsValue(documentId) == true)
+				return true;
+
+			if (await before.GetDocument(documentId)!.GetSyntaxTreeAsync(cancellationToken) is not SyntaxTree oldTree
+				|| await after.GetDocument(documentId)!.GetSyntaxTreeAsync(cancellationToken) is not SyntaxTree newTree
+				|| !newTree.IsEquivalentTo(oldTree, topLevel: true))
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	/// <summary>True for a .razor or .cshtml path.</summary>
 	public static bool IsRazorSourcePath(string path) =>
 		path.EndsWith(".razor", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".cshtml", StringComparison.OrdinalIgnoreCase);
@@ -105,42 +149,21 @@ public static class RazorDocumentGenerator
 
 	private static async Task<Solution> AugmentProjectAsync(Solution solution, Project project, RazorGenerationState state, CancellationToken cancellationToken)
 	{
-		string? snapshotDirectory = RazorSnapshot.DirectoryFor(project);
-		RazorSnapshot.Analysis? snapshot = snapshotDirectory is null
-			? null
-			: RazorSnapshot.Analyze(solution, project, snapshotDirectory);
-
 		// Resolved before the native reference is removed: the project's own reference is the preferred source.
-		ISourceGenerator? generator = RazorGeneratorLoader.For(project);
-		string generatedRoot = GeneratedRoot(project);
-
-		if (snapshot is { IsFresh: true })
+		if (RazorGeneratorLoader.For(project) is ISourceGenerator generator)
 		{
-			(Solution withSnapshot, ImmutableDictionary<string, DocumentId> documents) =
-				await AddPreGeneratedFilesAsync(solution, project.Id, snapshot.Files, cancellationToken);
-			if (!documents.IsEmpty)
-			{
-				// With a generator at hand, a later edit regenerates from this snapshot's documents in place.
-				if (generator is not null)
-					state.Set(project.Id, new RazorGenerationState.Entry(generator, Driver: null, generatedRoot, documents, Diagnostics: [], InputCompilations: null));
-				return RemoveNativeRazorGenerator(withSnapshot, project.Id);
-			}
-		}
-
-		if (generator is not null)
-		{
-			state.Set(project.Id, new RazorGenerationState.Entry(generator, Driver: null, generatedRoot, ImmutableDictionary<string, DocumentId>.Empty, Diagnostics: [], InputCompilations: null));
+			state.Set(project.Id, new RazorGenerationState.Entry(generator, Driver: null, GeneratedRoot(project), ImmutableDictionary<string, DocumentId>.Empty, Diagnostics: []));
 			return await RegenerateProjectAsync(solution, project.Id, state, cancellationToken);
 		}
 
-		if (snapshot is not null)
+		// No generator: use the output of the last build minus provable orphans. Stale files are kept
+		// deliberately — an outdated component partial still declares the class and its members, so keeping it
+		// binds far more references than omitting it; only files whose source is gone poison the compilation
+		// with symbols that no longer exist anywhere.
+		if (RazorSnapshot.DirectoryFor(project) is string snapshotDirectory)
 		{
-			// No generator to fall back to: use the snapshot minus provable orphans. Stale files are
-			// kept deliberately — an outdated component partial still declares the class and its
-			// members, so keeping it binds far more references than omitting it; only files whose
-			// source is gone poison the compilation with symbols that no longer exist anywhere.
 			(Solution withSnapshot, ImmutableDictionary<string, DocumentId> documents) =
-				await AddPreGeneratedFilesAsync(solution, project.Id, snapshot.Files, cancellationToken);
+				await AddPreGeneratedFilesAsync(solution, project.Id, RazorSnapshot.Files(project, snapshotDirectory), cancellationToken);
 			if (!documents.IsEmpty)
 				return RemoveNativeRazorGenerator(withSnapshot, project.Id);
 		}
@@ -161,14 +184,12 @@ public static class RazorDocumentGenerator
 		{
 			// Once our documents own the generation, the SDK generator must not also run natively: where it loads,
 			// its source-generated copy of every component partial would duplicate ours (CS0102/CS0111) with
-			// references binding to the immutable copy — breaking rename and diagnostics. Removing its reference
-			// before compiling also keeps the compilation below from running the whole generator a second time.
+			// references binding to the immutable copy — breaking rename and diagnostics.
 			Solution stripped = RemoveNativeRazorGenerator(solution, projectId);
 			Project project = stripped.GetProject(projectId)!;
-			if (project.ParseOptions is not CSharpParseOptions parseOptions || await project.GetCompilationAsync(cancellationToken) is not Compilation compilation)
+			if (project.ParseOptions is not CSharpParseOptions parseOptions || await GeneratorInputAsync(project, entry, cancellationToken) is not Compilation input)
 				return solution;
 
-			Compilation input = await GeneratorInputAsync(project, compilation, entry, cancellationToken);
 			GeneratorDriver driver = entry.Driver is null
 				? CSharpGeneratorDriver.Create(
 					generators: [entry.Generator],
@@ -183,27 +204,17 @@ public static class RazorDocumentGenerator
 			GeneratorDriverRunResult result = driver.GetRunResult();
 
 			// A generator crash (reported as CS8785 among the diagnostics) produces no sources; keeping the previous
-			// documents binds far more than dropping every component partial would.
+			// documents binds far more than dropping every component partial would. The native generator stays
+			// removed: it is the same generator and would only fail the same way inside every compilation.
 			ImmutableArray<GeneratedSourceResult> sources = [.. result.Results.SelectMany(run => run.GeneratedSources)];
 			if (result.Results.Any(run => run.Exception is not null) || (sources.IsEmpty && entry.Documents.IsEmpty))
 			{
 				state.Set(projectId, entry with { Driver = driver, Diagnostics = result.Diagnostics });
-				return solution;
+				return stripped;
 			}
 
 			(Solution applied, ImmutableDictionary<string, DocumentId> documents) = await ApplyAsync(stripped, projectId, entry, sources, cancellationToken);
-
-			// Remember which full compilation the generator's input was derived from: an edit that leaves the
-			// compilation untouched (a .razor-only change) then hands the driver the identical input, and its
-			// incremental pipeline skips component discovery entirely.
-			Compilation? full = await applied.GetProject(projectId)!.GetCompilationAsync(cancellationToken);
-			state.Set(projectId, entry with
-			{
-				Driver = driver,
-				Documents = documents,
-				Diagnostics = result.Diagnostics,
-				InputCompilations = full is null ? null : (full, input),
-			});
+			state.Set(projectId, entry with { Driver = driver, Documents = documents, Diagnostics = result.Diagnostics });
 			return applied;
 		}
 		catch (OperationCanceledException)
@@ -217,27 +228,27 @@ public static class RazorDocumentGenerator
 	}
 
 	/// <summary>
-	/// The compilation the generator sees: the project's, minus the generated Razor documents from a previous
-	/// run — the build never feeds the generator its own output, and a stale partial left in would keep a removed
-	/// parameter or component discoverable.
+	/// The compilation the generator sees, as the build hands it over: the project without the generated Razor
+	/// documents from a previous run (a stale partial left in would keep a removed parameter or component
+	/// discoverable) and without the other source generators, which in the build run beside the Razor generator
+	/// rather than before it. Leaving them out also keeps them from running on this input as well as on the
+	/// project's real compilation.
 	/// </summary>
-	private static async Task<Compilation> GeneratorInputAsync(Project project, Compilation compilation, RazorGenerationState.Entry entry, CancellationToken cancellationToken)
+	private static async Task<Compilation?> GeneratorInputAsync(Project project, RazorGenerationState.Entry entry, CancellationToken cancellationToken)
 	{
-		if (entry.InputCompilations is ({ } full, { } input) && ReferenceEquals(full, compilation))
-			return input;
-
-		var generatedTrees = new List<SyntaxTree>();
-		foreach (DocumentId documentId in entry.Documents.Values)
+		// The input references the compilations of the projects this one references. Roslyn creates compilation
+		// state per solution snapshot on first use, so compiled only inside the throwaway fork below they would be
+		// compiled again for the published solution; compiled here first, the fork shares them.
+		foreach (ProjectReference reference in project.ProjectReferences)
 		{
-			if (project.GetDocument(documentId) is Document document
-				&& await document.GetSyntaxTreeAsync(cancellationToken) is SyntaxTree tree
-				&& compilation.ContainsSyntaxTree(tree))
-			{
-				generatedTrees.Add(tree);
-			}
+			if (project.Solution.GetProject(reference.ProjectId) is Project dependency)
+				await dependency.GetCompilationAsync(cancellationToken);
 		}
 
-		return generatedTrees.Count == 0 ? compilation : compilation.RemoveSyntaxTrees(generatedTrees);
+		return await project
+			.RemoveDocuments([.. entry.Documents.Values.Where(project.ContainsDocument)])
+			.WithAnalyzerReferences([])
+			.GetCompilationAsync(cancellationToken);
 	}
 
 	/// <summary>

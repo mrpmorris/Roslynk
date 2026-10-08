@@ -286,6 +286,26 @@ public class ApplyPatchTests
 		Assert.Equal(original, await File.ReadAllTextAsync(greeter));
 	}
 
+	[Fact]
+	public async Task WhenAPatchRenamesACodeBehindParameter_ThenDependentRazorIsRegeneratedByTheSameWrite()
+	{
+		// App's Page.razor still says Count="3". The patch's own write regenerates App's Razor, so Count becomes a
+		// plain attribute at once; no watcher event is needed (its fold would find the snapshot already current).
+		string solutionPath = TestSolutions.CreateScratchRazorMultiProjectSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string codeBehind = FindFile(solutionPath, "Widget.razor.cs");
+		string original = await File.ReadAllTextAsync(codeBehind);
+		string result = await subject.ApplyPatch(solutionPath, BuildFullReplacePatch("Lib/Widget.razor.cs", original, original.Replace("Count", "Total")));
+
+		Assert.Contains("applied=Y", result);
+		Microsoft.CodeAnalysis.Project app = instance.CurrentSolution.Projects.Single(project => project.Name == "App");
+		Microsoft.CodeAnalysis.Compilation compilation = (await app.GetCompilationAsync())!;
+		Assert.DoesNotContain(compilation.GetDiagnostics(), diagnostic => diagnostic.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error);
+	}
+
 	private static async Task<string> ReadSnapshotTextAsync(RoslynInstance instance, string path)
 	{
 		Microsoft.CodeAnalysis.Solution solution = instance.CurrentSolution;
