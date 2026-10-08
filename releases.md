@@ -11,6 +11,11 @@
 - A `dotnet build` Razor snapshot (`EmitCompilerGeneratedFiles=true`) is used despite `_Imports.razor`/`_ViewImports.cshtml`/`_ViewStart.cshtml` output, found in artifacts/custom layouts, and rejected when another configuration made it or C# it depends on is newer (Fixes #64)
 - Changes under a project's `.git`, `.vs`, `.idea` or `node_modules`, and saves that leave an additional file's content unchanged, no longer reload the solution (Fixes #64)
 - Solutions on different SDKs in one daemon each keep their in-process Razor generation (Fixes #64)
+- `get_diagnostics` reuses each unchanged project's results and computes projects in parallel, so a repeat call is near-instant and one after an edit recomputes only the affected projects (Fixes #64)
+- After a write, `get_diagnostics` no longer waits behind a reload triggered by directory change events or a redundant background compiler pass, and a write reaching `.razor` files regenerates Razor output itself (Fixes #64)
+- Faster `#if` symbol discovery for rename and reference searches (Fixes #64)
+- Editing a source generator's additional file (e.g. a `.csv`) reruns the generator in place instead of reloading the solution (Fixes #64)
+- Files that cannot reach the compiler (content, embedded resources, a build tool's output such as a weaver's `.csv`, `.git` activity) no longer reload the solution (Fixes #64)
 
 - New `get_callees` tool: the inverse of `get_callers` (Fixes #58)
 - `rename_symbol` and `rename_parameter` no longer fail with `error=NotSupported` when the renamed member is referenced from a Razor `@bind-X="Expr"`, `@bind-X:get`/`:set`/`:after` or `@bind="Expr"` attribute (e.g. `<InputDate @bind-Value="Model.InstallDate" />`): the Razor compiler expands the attribute into hidden setter/`ValueExpression` lambdas with no `#line` mapping of their own, and those unmapped edits aborted the whole rename. They are now recognised as copies of the edit already made at the user-written span and collapse into the single `.razor` edit. A scaffolding edit nothing accounts for (e.g. renaming a component whose class is generated) still returns `error=NotSupported` with nothing written (Fixes #59)

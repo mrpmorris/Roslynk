@@ -17,9 +17,11 @@ namespace Morris.Roslynk.Infrastructure.Watching;
 	/// directories, so without this every applied edit would dirty the instance and force a full reload; the
 	/// rewritten target file itself is harmless because its fold compares content and finds the snapshot
 	/// already matches). A <c>.cs</c> edit to a known document is folded into the snapshot incrementally via
-	/// <see cref="Solution.WithDocumentText"/>; every other change outside <c>obj</c>/<c>bin</c> (a project /
-	/// props / sln file, an additional document, or any other watched file) marks the instance dirty so the
-	/// registry reloads it on next use. This is a freshness optimization, not a correctness mechanism; the
+	/// <see cref="Solution.WithDocumentText"/>, and an additional document's edit via
+	/// <see cref="Solution.WithAdditionalDocumentText"/>; a project / props / sln file change, or a file that may
+	/// have joined or left the build, marks the instance dirty so the registry reloads it on next use. Files that
+	/// cannot reach the compiler (a tool's output written beside the sources) are ignored. This is a freshness
+	/// optimization, not a correctness mechanism; the
 	/// apply pipeline's stale-write guard is what actually protects the user, so a missed event only costs a
 	/// stale read until the next one.
 	/// <para>
@@ -44,6 +46,15 @@ namespace Morris.Roslynk.Infrastructure.Watching;
 			".targets",
 			".sln",
 			".slnx",
+		};
+
+		/// <summary>Extensions a new file can join the build with by the SDK's own globs (Razor sources as additional
+		/// files), or as analyzer config; .cs and the build files are handled on their own.</summary>
+		private static readonly HashSet<string> BuildInputExtensions = new(StringComparer.OrdinalIgnoreCase)
+		{
+			".razor",
+			".cshtml",
+			".globalconfig",
 		};
 
 		private static readonly string[] AncestorBuildFileNames =
@@ -142,17 +153,70 @@ public SolutionFileSync(RoslynInstance instance, DiagnosticsService? diagnostics
 		if (await TryHandleAdditionalDocumentAsync(path, cancellationToken))
 			return;
 
-		// Any other file outside obj/bin can still affect the build: a new additional document
-		// (.razor/.cshtml), a .resx, a source-generator input, or content the project globs. It cannot be
-		// folded incrementally, so mark the instance dirty and let the next read reload. MarkDirty is lazy
-		// and idempotent, so even a burst of unrelated changes costs at most one reload.
-		Instance.MarkDirty();
+		// A path the model does not hold as an existing file. Only a change of build membership matters, and
+		// only MSBuild can evaluate that, so mark the instance dirty and let the next read reload. MarkDirty is
+		// lazy and idempotent, so even a burst of such changes costs at most one reload.
+		if (CouldChangeBuildInputs(path))
+			Instance.MarkDirty();
+	}
+
+	/// <summary>
+	/// True when a path the model does not hold as an existing file could still change what the compiler sees.
+	/// Roslyn sees only compile items, additional files and analyzer config; embedded resources, content and
+	/// anything else never reach it (Roslynk never emits). The model already lists every input it loaded, so an
+	/// unknown file is not one: it matters only when it is new and a glob would add it, which is assumed for the
+	/// extensions the SDK globs (.razor/.cshtml) and those of the additional files already loaded. A loaded file
+	/// or directory of loaded files that went away matters too. A tool's output written beside the sources (a
+	/// weaver's .csv, an IDE's state) therefore no longer costs a reload.
+	/// </summary>
+	private bool CouldChangeBuildInputs(string path)
+	{
+		if (Directory.Exists(path))
+			return !IsIrrelevantDirectory(path);
+
+		Solution solution = Instance.CurrentSolution;
+		if (!solution.GetDocumentIdsWithFilePath(path).IsEmpty)
+			return true;
+
+		string prefix = System.IO.Path.TrimEndingDirectorySeparator(path) + System.IO.Path.DirectorySeparatorChar;
+		if (DocumentAndBuildFilePaths(solution).Any(file => file.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)))
+			return true;
+
+		string extension = System.IO.Path.GetExtension(path);
+		return BuildInputExtensions.Contains(extension)
+			|| solution.Projects
+				.SelectMany(project => project.AdditionalDocuments)
+				.Any(document => string.Equals(System.IO.Path.GetExtension(document.FilePath), extension, StringComparison.OrdinalIgnoreCase));
+	}
+
+	/// <summary>
+	/// True for an existing directory whose own event says nothing the files' events do not. Writing a file
+	/// (the server's own <see cref="AtomicFileWriter"/> commits included) raises a change event for its
+	/// directory too, and the shallow watch of a solution folder reports its .git/.vs constantly. Only a
+	/// directory inside a project that holds no loaded documents yet (created, moved in or renamed, whose
+	/// contents raise no events of their own) can bring new build input, so only that one reaches the reload.
+	/// </summary>
+	private bool IsIrrelevantDirectory(string path)
+	{
+		string directory = System.IO.Path.TrimEndingDirectorySeparator(path);
+		if (!ProjectDirectories.Any(projectDirectory => IsUnder(directory, projectDirectory)))
+			return true;
+
+		string name = System.IO.Path.GetFileName(directory);
+		if (name.StartsWith('.') || name.Equals("node_modules", StringComparison.OrdinalIgnoreCase))
+			return true;
+
+		string prefix = directory + System.IO.Path.DirectorySeparatorChar;
+		return DocumentAndBuildFilePaths(Instance.CurrentSolution)
+			.Any(file => file.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
 	}
 
 	/// <summary>
 	/// Handles a change to a known additional document; returns false for a path that is not one (or was
 	/// deleted), which the caller treats as a membership change. Unchanged content needs nothing. A Razor source
-	/// whose projects all have their Razor generated by Roslynk is folded in place; any other change reloads.
+	/// whose projects all have their Razor generated by Roslynk is folded in place and regenerated; any other
+	/// additional file (a source generator's input) is folded in place too, and Roslyn reruns the generators that
+	/// read it on the next compilation. A Razor source Roslynk does not generate for reloads.
 	/// </summary>
 	private async Task<bool> TryHandleAdditionalDocumentAsync(string path, CancellationToken cancellationToken)
 	{
@@ -174,8 +238,15 @@ public SolutionFileSync(RoslynInstance instance, DiagnosticsService? diagnostics
 		SourceText loaded = await current.GetAdditionalDocument(ids[0])!.GetTextAsync(cancellationToken);
 		bool unchanged = string.Equals(loaded.ToString(), diskText, StringComparison.Ordinal);
 
+		if (!RazorDocumentGenerator.IsRazorSourcePath(path))
+		{
+			if (!unchanged)
+				await FoldAdditionalTextAsync(path, diskText, cancellationToken);
+			return true;
+		}
+
 		RazorGenerationState? razor = Instance.Workspace?.Razor;
-		if (!RazorDocumentGenerator.IsRazorSourcePath(path) || razor is null || !ids.All(id => razor.Covers(id.ProjectId)))
+		if (razor is null || !ids.All(id => razor.Covers(id.ProjectId)))
 		{
 			if (!unchanged)
 				Instance.MarkDirty();
@@ -187,6 +258,30 @@ public SolutionFileSync(RoslynInstance instance, DiagnosticsService? diagnostics
 		// real output. Nothing changes otherwise, and an unchanged result costs no diagnostics rebuild.
 		await FoldRazorAsync(path, diskText, cancellationToken);
 		return true;
+	}
+
+	private async Task FoldAdditionalTextAsync(string path, string diskText, CancellationToken cancellationToken)
+	{
+		await Instance.EnqueueWriteWithAutoDiagnosticsAsync(
+			async (current, token) =>
+			{
+				// Compared against the latest snapshot: an equal text published since the event must not fork the
+				// project's compilation.
+				Solution updated = current;
+				foreach (DocumentId id in current.GetDocumentIdsWithFilePath(path))
+				{
+					if (current.GetAdditionalDocument(id) is not TextDocument document)
+						continue;
+
+					SourceText text = await document.GetTextAsync(token);
+					if (!string.Equals(text.ToString(), diskText, StringComparison.Ordinal))
+						updated = updated.WithAdditionalDocumentText(id, SourceText.From(diskText, text.Encoding));
+				}
+
+				return new WriteResult(updated, []);
+			},
+			async (solution, token) => await DiagnosticsService.GetAllDiagnosticsAsync(solution, includeAnalyzers: false, token),
+			cancellationToken);
 	}
 
 	private async Task FoldRazorAsync(string path, string diskText, CancellationToken cancellationToken)
@@ -232,9 +327,9 @@ public SolutionFileSync(RoslynInstance instance, DiagnosticsService? diagnostics
 	{
 		// A .cs file can carry the "C# analyzer additional file" build action, making it an AdditionalDocument
 		// rather than a Document. It must not be folded in as compiled source; a reload re-runs the source
-		// generators that consume it via AnalyzerOptions.AdditionalFiles. (Non-.cs additional files already
-		// reach MarkDirty through the catch-all in OnFileChangedAsync, and a build-action change edits the
-		// .csproj, which is a build file and likewise reloads.)
+		// generators that consume it via AnalyzerOptions.AdditionalFiles. (Non-.cs additional files are folded
+		// in TryHandleAdditionalDocumentAsync, and a build-action change edits the .csproj, which is a build file
+		// and likewise reloads.)
 		if (AdditionalFilePaths.Contains(path))
 		{
 			Instance.MarkDirty();
@@ -297,7 +392,10 @@ public SolutionFileSync(RoslynInstance instance, DiagnosticsService? diagnostics
 				var declarationsChanged = new HashSet<ProjectId>();
 				foreach (DocumentId id in current.GetDocumentIdsWithFilePath(path))
 				{
-					if (current.GetDocument(id) is not Document before)
+					// The pre-check above ran against an older snapshot; a write published since (the event raced the
+					// server's own write) may already hold this text, and replacing it with an equal text would still
+					// fork every compilation downstream.
+					if (current.GetDocument(id) is not Document before || (await before.GetTextAsync(token)).ContentEquals(newText))
 						continue;
 
 					updated = updated.WithDocumentText(id, newText);

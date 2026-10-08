@@ -130,13 +130,15 @@ public sealed class ProjectionService
 		{
 			foreach (Document document in project.Documents)
 			{
-				SyntaxNode? root = await document.GetSyntaxRootAsync(cancellationToken);
-				if (root is null)
+				// The directive chain visits only directives (inactive branches' nested ones included), and a tree
+				// without any is skipped outright; walking every trivia of every tree costs about a second per call
+				// on a large solution.
+				if (await document.GetSyntaxRootAsync(cancellationToken) is not CSharpSyntaxNode root || !root.ContainsDirectives)
 					continue;
 
-				foreach (SyntaxTrivia trivia in root.DescendantTrivia(descendIntoTrivia: true))
+				for (DirectiveTriviaSyntax? directive = root.GetFirstDirective(); directive is not null; directive = directive.GetNextDirective())
 				{
-					ExpressionSyntax? condition = trivia.GetStructure() switch
+					ExpressionSyntax? condition = directive switch
 					{
 						IfDirectiveTriviaSyntax @if => @if.Condition,
 						ElifDirectiveTriviaSyntax elif => elif.Condition,

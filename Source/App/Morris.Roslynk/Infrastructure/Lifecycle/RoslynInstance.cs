@@ -147,10 +147,18 @@ public sealed class RoslynInstance : IDisposable
 			if (diagnosticsCompute is null)
 				throw new ArgumentNullException(nameof(diagnosticsCompute));
 
-			IReadOnlyList<string> changedPaths = await EnqueueWriteAsync(transform, cancellationToken);
+			bool changed = false;
+			IReadOnlyList<string> changedPaths = await EnqueueWriteAsync(async (current, token) =>
+			{
+				WriteResult result = await transform(current, token);
+				changed = !ReferenceEquals(result.Updated, current);
+				return result;
+			}, cancellationToken);
 
-			// A write that changed nothing leaves the last diagnostics build current.
-			if (!BuildNeededField)
+			// A write that changed nothing needs no build of its own: a build still owed for an earlier write (the
+			// fold that follows the server's own write finds nothing to change) is left to the next explicit
+			// request, rather than queueing a compiler-only pass that request would have to wait behind.
+			if (!changed || !BuildNeededField)
 				return changedPaths;
 
 			_ = Task.Run(async () =>

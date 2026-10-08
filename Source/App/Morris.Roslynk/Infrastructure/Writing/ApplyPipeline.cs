@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Observability;
+using Morris.Roslynk.Infrastructure.Razor;
 
 namespace Morris.Roslynk.Infrastructure.Writing;
 
@@ -10,7 +11,7 @@ namespace Morris.Roslynk.Infrastructure.Writing;
 /// Persists a changed <see cref="Solution"/> to disk under the instance's single-writer lock. For each
 /// changed document (regular or additional — .razor/.cshtml) it re-hashes the file on disk against what
 /// was loaded (rejecting as stale if it moved), then hands the batch to <see cref="AtomicFileWriter"/>
-/// for an all-or-nothing commit before advancing the in-memory snapshot.
+/// for an all-or-nothing commit before advancing the in-memory snapshot (with its Razor output regenerated).
 /// </summary>
 public sealed class ApplyPipeline
 {
@@ -40,8 +41,61 @@ public sealed class ApplyPipeline
 			IReadOnlyList<PendingWrite> writes = await BuildWritesAsync(current, target, token);
 			await AtomicFileWriter.WriteAllAsync(writes, token);
 			activity?.SetTag("roslynk.changed.count", writes.Count);
+
+			// Disk is committed, so the model must follow it: regeneration is not cancelled from here on.
+			target = await RegenerateRazorAsync(instance, current, target, CancellationToken.None);
 			return new WriteResult(target, writes.Select(write => write.FilePath).ToArray());
 		}, cancellationToken);
+	}
+
+	/// <summary>
+	/// Replaces folded Razor approximations with real generator output as part of the same write. A rename
+	/// reaching .razor files via the #line mapping edits the generated documents in memory as an
+	/// approximation; regenerating here means the file watcher's later fold finds nothing to change, so it
+	/// cannot invalidate a diagnostics cache built from the post-write state. Runs after the files are
+	/// written, so a stale write never advances the generator state. As in the watcher's C# fold, an edit
+	/// confined to method bodies or initializers cannot change generated code and regenerates nothing.
+	/// </summary>
+	private static async Task<Solution> RegenerateRazorAsync(RoslynInstance instance, Solution current, Solution target, CancellationToken token)
+	{
+		if (instance.Workspace?.Razor is not RazorGenerationState razor)
+			return target;
+
+		var changedProjects = new HashSet<ProjectId>();
+		foreach (ProjectChanges projectChanges in target.GetChanges(current).GetProjectChanges())
+		{
+			if (projectChanges.GetChangedAdditionalDocuments().Any()
+				|| projectChanges.GetAddedDocuments().Any()
+				|| projectChanges.GetRemovedDocuments().Any()
+				|| await AnyDeclarationChangedAsync(current, target, projectChanges.GetChangedDocuments(), token))
+			{
+				changedProjects.Add(projectChanges.ProjectId);
+			}
+		}
+		if (changedProjects.Count == 0)
+			return target;
+
+		return await RazorDocumentGenerator.RegenerateAsync(target, changedProjects, razor, token);
+	}
+
+	/// <summary>True when a changed document is generated (it holds a folded approximation) or its declarations changed.</summary>
+	private static async Task<bool> AnyDeclarationChangedAsync(Solution current, Solution target, IEnumerable<DocumentId> documentIds, CancellationToken token)
+	{
+		foreach (DocumentId documentId in documentIds)
+		{
+			Document before = current.GetDocument(documentId)!;
+			if (before.FilePath is string path && IsGenerated(path))
+				return true;
+
+			if (await before.GetSyntaxTreeAsync(token) is not SyntaxTree oldTree
+				|| await target.GetDocument(documentId)!.GetSyntaxTreeAsync(token) is not SyntaxTree newTree
+				|| !newTree.IsEquivalentTo(oldTree, topLevel: true))
+			{
+				return true;
+			}
+		}
+
+		return false;
 	}
 
 	/// <summary>

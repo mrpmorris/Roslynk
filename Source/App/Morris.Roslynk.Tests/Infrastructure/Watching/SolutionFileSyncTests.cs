@@ -78,23 +78,6 @@ public class SolutionFileSyncTests
 	}
 
 	[Fact]
-	public async Task WhenANonSourceNonBuildFileChangesOutsideBinObj_ThenTheInstanceIsMarkedDirty()
-	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
-		var subject = new SolutionFileSync(instance);
-
-		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
-		string asset = Path.Combine(projectDir, "appsettings.json");
-		await File.WriteAllTextAsync(asset, "{}");
-
-		await subject.OnFileChangedAsync(asset);
-
-		Assert.True(instance.IsDirty);
-	}
-
-	[Fact]
 	public async Task WhenAFileUnderObjOrBinChanges_ThenItIsIgnored()
 	{
 		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
@@ -449,7 +432,7 @@ public class SolutionFileSyncTests
 	}
 
 	[Fact]
-	public async Task WhenANonRazorAdditionalFileIsRewrittenWithIdenticalContent_ThenOnlyARealChangeMarksTheInstanceDirty()
+	public async Task WhenANonRazorAdditionalFileChanges_ThenOnlyARealChangeIsFoldedInWithoutReload()
 	{
 		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
 		string additional = await AddAnalyzerAdditionalFileAsync(solutionPath, "settings.json", "{ \"a\": 1 }", removeFromCompile: false);
@@ -457,13 +440,223 @@ public class SolutionFileSyncTests
 		using var registry = new InstanceRegistry();
 		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
 		var subject = new SolutionFileSync(instance);
+		Solution before = instance.CurrentSolution;
 
 		await File.WriteAllTextAsync(additional, "{ \"a\": 1 }");
 		await subject.OnFileChangedAsync(additional);
-		Assert.False(instance.IsDirty);
+		Assert.Same(before, instance.CurrentSolution);
 
 		await File.WriteAllTextAsync(additional, "{ \"a\": 2 }");
 		await subject.OnFileChangedAsync(additional);
+
+		Assert.False(instance.IsDirty);
+		TextDocument folded = instance.CurrentSolution.GetAdditionalDocument(instance.CurrentSolution.GetDocumentIdsWithFilePath(additional)[0])!;
+		Assert.Equal("{ \"a\": 2 }", (await folded.GetTextAsync()).ToString());
+	}
+
+	[Fact]
+	public async Task WhenASourceGeneratorsAdditionalFileChanges_ThenItsGeneratedCodeIsRegeneratedWithoutReload()
+	{
+		string solutionPath = TestSolutions.CreateScratchGeneratorSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+		Assert.Contains("Hello from a csv", await GeneratedTextAsync(instance.CurrentSolution));
+
+		string csv = FindFile(solutionPath, "Greeting.csv");
+		await File.WriteAllTextAsync(csv, "Bonjour from a csv\n");
+		await subject.OnFileChangedAsync(csv);
+
+		Assert.False(instance.IsDirty);
+		string generated = await GeneratedTextAsync(instance.CurrentSolution);
+		Assert.Contains("Bonjour from a csv", generated);
+		Assert.DoesNotContain("Hello from a csv", generated);
+
+		static async Task<string> GeneratedTextAsync(Solution solution)
+		{
+			Project consumer = solution.Projects.Single(project => project.Name == "ConsumerLib");
+			IEnumerable<SourceGeneratedDocument> generated = await consumer.GetSourceGeneratedDocumentsAsync();
+			return string.Join("\n", await Task.WhenAll(generated.Select(async document => (await document.GetTextAsync()).ToString())));
+		}
+	}
+
+	[Fact]
+	public async Task WhenAFileThatCannotReachTheCompilerChanges_ThenItIsIgnored()
+	{
+		// Content, embedded resources and a tool's output written beside the sources (a weaver's .csv) are not
+		// compile items, additional files or analyzer config, so Roslyn never sees them.
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
+		foreach (string name in new[] { "appsettings.json", "SimpleLibrary.Weaver.csv", "Strings.resx" })
+		{
+			string path = Path.Combine(projectDir, name);
+			await File.WriteAllTextAsync(path, "noise");
+			await subject.OnFileChangedAsync(path);
+			File.Delete(path);
+			await subject.OnFileChangedAsync(path);
+		}
+
+		Assert.False(instance.IsDirty);
+	}
+
+	[Theory]
+	[InlineData("Other.json")]
+	[InlineData("Analyzers.globalconfig")]
+	public async Task WhenANewFileAGlobCouldAddAppears_ThenTheInstanceIsMarkedDirty(string name)
+	{
+		// .json is the extension of an additional file already loaded, so a glob may well add this one too.
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		_ = await AddAnalyzerAdditionalFileAsync(solutionPath, "settings.json", "{ }", removeFromCompile: false);
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string path = Path.Combine(Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!, name);
+		await File.WriteAllTextAsync(path, "{ }");
+		await subject.OnFileChangedAsync(path);
+
+		Assert.True(instance.IsDirty);
+	}
+
+	[Fact]
+	public async Task WhenAKnownAdditionalFileIsDeleted_ThenTheInstanceIsMarkedDirty()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string additional = await AddAnalyzerAdditionalFileAsync(solutionPath, "settings.json", "{ }", removeFromCompile: false);
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		File.Delete(additional);
+		await subject.OnFileChangedAsync(additional);
+
+		Assert.True(instance.IsDirty);
+	}
+
+	[Fact]
+	public async Task WhenADirectoryHoldingLoadedDocumentsIsMovedAway_ThenTheInstanceIsMarkedDirty()
+	{
+		// Moving a directory out raises one event for its old path, none for the files it took along.
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
+		string folder = Path.Combine(projectDir, "Nested");
+		Directory.CreateDirectory(folder);
+		await File.WriteAllTextAsync(Path.Combine(folder, "Nested.cs"), "namespace Nested; public class Thing { }");
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		Directory.Move(folder, Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N")));
+		await subject.OnFileChangedAsync(folder);
+
+		Assert.True(instance.IsDirty);
+	}
+
+	[Fact]
+	public async Task WhenASourceEventRacesTheServersOwnWrite_ThenTheFoldChangesNothing()
+	{
+		// The event is classified against the snapshot from before the write publishes; by the time its fold runs
+		// the write has published the very same text, so replacing it would only fork every compilation.
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		string written = (await File.ReadAllTextAsync(greeter)) + "\n// written by the server\n";
+		_ = await ReadDocumentTextAsync(instance.CurrentSolution, greeter); // loaded lazily from disk otherwise
+
+		var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+		Task write = instance.EnqueueWriteAsync(async (current, token) =>
+		{
+			entered.TrySetResult();
+			await release.Task;
+			Solution updated = current;
+			foreach (DocumentId id in current.GetDocumentIdsWithFilePath(greeter))
+				updated = updated.WithDocumentText(id, SourceText.From(written));
+			return new WriteResult(updated, [greeter]);
+		});
+		await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+		// Replaced whole, as the server's own writer does, so the live watcher never reads a half-written file.
+		await File.WriteAllTextAsync(greeter + AtomicFileWriter.TempFileSuffix, written);
+		File.Move(greeter + AtomicFileWriter.TempFileSuffix, greeter, overwrite: true);
+		int enqueued = instance.EnqueuedWrites;
+
+		Task fold = subject.OnFileChangedAsync(greeter);
+		using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+		{
+			while (instance.EnqueuedWrites == enqueued)
+				await Task.Delay(10, timeout.Token);
+		}
+		release.TrySetResult();
+		await write.WaitAsync(TimeSpan.FromSeconds(30));
+		Solution afterWrite = instance.CurrentSolution;
+		await fold.WaitAsync(TimeSpan.FromSeconds(30));
+
+		Assert.Same(afterWrite, instance.CurrentSolution);
+		Assert.False(instance.IsDirty);
+	}
+
+	[Fact]
+	public async Task WhenADirectoryHoldingLoadedDocumentsChanges_ThenItIsIgnored()
+	{
+		// Writing a file raises a change event for its directory too; the file's own event covers the edit.
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+		Solution before = instance.CurrentSolution;
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		await subject.OnFileChangedAsync(Path.GetDirectoryName(greeter)!);
+
+		Assert.False(instance.IsDirty);
+		Assert.Same(before, instance.CurrentSolution);
+	}
+
+	[Fact]
+	public async Task WhenADotFolderOrAFolderOutsideTheProjectsChanges_ThenItIsIgnored()
+	{
+		// The solution folder is watched shallowly for build files, so git's own activity reports .git there.
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string solutionDir = Path.GetDirectoryName(solutionPath)!;
+		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
+		string[] directories = [Path.Combine(solutionDir, ".git"), Path.Combine(solutionDir, "docs"), Path.Combine(projectDir, ".vs")];
+		foreach (string directory in directories)
+		{
+			Directory.CreateDirectory(directory);
+			await subject.OnFileChangedAsync(directory);
+		}
+
+		Assert.False(instance.IsDirty);
+	}
+
+	[Fact]
+	public async Task WhenANewDirectoryAppearsUnderAProject_ThenTheInstanceIsMarkedDirty()
+	{
+		// A directory moved or copied in raises one event for itself, none for the files inside it.
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var subject = new SolutionFileSync(instance);
+
+		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
+		string movedIn = Path.Combine(projectDir, "MovedIn");
+		Directory.CreateDirectory(movedIn);
+		await File.WriteAllTextAsync(Path.Combine(movedIn, "Extra.cs"), "namespace MovedIn; public class Extra { }");
+
+		await subject.OnFileChangedAsync(movedIn);
+
 		Assert.True(instance.IsDirty);
 	}
 
