@@ -24,7 +24,7 @@ Each tool's exact contract — parameters, output format, limits, error codes �
 
 | You want to... | Use | Why not grep / reading files |
 |---|---|---|
-| Check it compiles / see warnings | `get_diagnostics` | instant vs `dotnet build` |
+| Check it compiles / see warnings | `get_diagnostics`, once after the task's edits | far faster than `dotnet build`, but still costly per call |
 | Find where a symbol is used, or who calls it | `find_references` / `get_callers` | text search finds false hits and misses partial classes, generated code, `#if` branches |
 | See what a member calls (its callees) | `get_callees` | reading the body and tracing each call by eye misses overloads and extension-method bindings |
 | Find where a field, property or parameter is read or written (assign, `+=`, `++`, `ref`/`out`, initialisers) | `find_reads` / `find_writes` | text search cannot tell a read from a write; `compound`/`increment`/`ref` appear in both results, so do not add the counts |
@@ -70,8 +70,8 @@ To rename a parameter, call `rename_parameter` with the declaring member's `meth
 
 To pull code into its own method, call `extract_method` with the selection (1-based; end column exclusive - `endLine+1`, column `1` takes whole lines) and a `methodName`; add `asLocalFunction=true` for a local function. Preview with `checkOnly=true` to see the `signature` and `call` Roslyn chose. It writes nothing when the selection cannot be extracted safely or the result would not compile - read the `NotSupported` reason and adjust the selection (whole statements from one block, or one complete expression) rather than extracting by hand.
 
-## Check diagnostics after every change
+## Check diagnostics once a task's edits are done
 
-The core edit cycle: make the change (any write tool) → `get_diagnostics` (bare call; the header always reports error/warning/info/hidden counts) → if counts are non-zero, re-call with `includeErrors=true` to see the details → fix each entry via `apply_code_fix` with its id, `line` and `column` → if that returns `error=Conflict` with `candidate=` lines, the diagnostic has several fixes: pick the one whose title matches your intent and pass its actionId (the text before the first comma) to `apply_code_action`; do not retry `apply_code_fix` → repeat until clean. This replaces `dotnet build` during development. Pass `includeAnalyzers=false` for a faster compiler-only pass when style rules don't matter yet.
+The core edit cycle: make all the changes the task needs (any write tools) → `get_diagnostics` once at the end (bare call; the header always reports error/warning/info/hidden counts; each call compiles and analyzes everything the edits affect, so do not run it after every edit) → if counts are non-zero, re-call with `includeErrors=true` to see the details → fix each entry via `apply_code_fix` with its id, `line` and `column` → if that returns `error=Conflict` with `candidate=` lines, the diagnostic has several fixes: pick the one whose title matches your intent and pass its actionId (the text before the first comma) to `apply_code_action`; do not retry `apply_code_fix` → repeat until clean. This replaces `dotnet build` during development. Pass `includeAnalyzers=false` for a faster compiler-only pass when style rules don't matter yet.
 
 `find_dead_code` and `find_dead_conditionals` never delete anything — treat the results as candidates (public or reflection-used API can be a false positive), confirm intent with the user before bulk-removing, and hand each reported `loc` span to `apply_patch`.

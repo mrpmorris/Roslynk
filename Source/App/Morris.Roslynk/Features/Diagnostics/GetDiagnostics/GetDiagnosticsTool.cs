@@ -37,6 +37,9 @@ public sealed class GetDiagnosticsTool
 	[Description(
 		$"""
 		Returns diagnostics for an opened solution.
+		Costly: it compiles and analyzes every project the edits since the last call affect, which takes seconds on a
+		large solution. Make all the edits a task needs first and call this once at the end, not after every edit; a
+		repeat call with nothing changed in between is near-instant.
 		{OutlineDescriptions.CommonMethodInstructions}
 		Per-severity counts are always in the header so filtering is never silent; diagnostics nest file -> severity:
 		  errors=<n>

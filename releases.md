@@ -9,6 +9,7 @@
 - Faster `rename_symbol` and reference searches in solutions using `#if` (Fixes #64)
 - Razor: multi-targeted projects get generated code for every target framework, and a referenced library's components bind instead of becoming plain HTML (Fixes #64)
 - `get_diagnostics` reports the Razor compiler's own `RZ*` errors against the `.razor`/`.cshtml` file (Fixes #64)
+- `get_diagnostics` guidance: call it once after a task's edits rather than after every edit (Fixes #64)
 - New `get_callees` tool: the inverse of `get_callers` (Fixes #58)
 - `rename_symbol` and `rename_parameter` no longer fail with `error=NotSupported` when the renamed member is referenced from a Razor `@bind-X="Expr"`, `@bind-X:get`/`:set`/`:after` or `@bind="Expr"` attribute (e.g. `<InputDate @bind-Value="Model.InstallDate" />`): the Razor compiler expands the attribute into hidden setter/`ValueExpression` lambdas with no `#line` mapping of their own, and those unmapped edits aborted the whole rename. They are now recognised as copies of the edit already made at the user-written span and collapse into the single `.razor` edit. A scaffolding edit nothing accounts for (e.g. renaming a component whose class is generated) still returns `error=NotSupported` with nothing written (Fixes #59)
 
