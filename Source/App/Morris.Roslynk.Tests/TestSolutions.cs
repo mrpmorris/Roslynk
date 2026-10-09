@@ -159,6 +159,9 @@ internal static class TestSolutions
 	/// <summary>A writable scratch copy of the RazorMultiProjectSolution fixture.</summary>
 	public static string CreateScratchRazorMultiProjectSolution() => CreateScratch("RazorMultiProjectSolution", "RazorMultiProjectSolution.slnx");
 
+	/// <summary>A writable scratch copy of the MultiTargetSolution fixture (solution under <c>src/</c>), for tests that edit it.</summary>
+	public static string CreateScratchMultiTargetSolution() => CreateScratch("MultiTargetSolution", Path.Combine("src", "MultiTarget.slnx"));
+
 	/// <summary>A writable scratch copy of the LocalFunctionSolution fixture, for tests that rename or edit it.</summary>
 	public static string CreateScratchLocalFunctionSolution() => CreateScratch("LocalFunctionSolution", "LocalFunctionSolution.slnx");
 

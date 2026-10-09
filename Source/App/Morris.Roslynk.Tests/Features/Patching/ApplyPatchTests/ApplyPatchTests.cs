@@ -179,7 +179,7 @@ public class ApplyPatchTests
 	}
 
 	[Fact]
-	public async Task WhenThePatchTargetsANonExistentFile_ThenItIsNotSupported()
+	public async Task WhenThePatchTargetsANonExistentFile_ThenItIsNotFound()
 	{
 		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
 		using var registry = new InstanceRegistry();
@@ -190,8 +190,87 @@ public class ApplyPatchTests
 			solutionPath,
 			BuildFullReplacePatch("SimpleLibrary/Missing.cs", "anything\n", "else\n"));
 
-		Assert.Contains("error=NotSupported", result);
-		Assert.Contains("rejected=", result);
+		Assert.Contains("error=NotFound", result);
+		Assert.Contains("rejected=SimpleLibrary/Missing.cs", result);
+		Assert.Contains("relative to the solution folder", result);
+	}
+
+	[Fact]
+	public async Task WhenAPathIsRelativeToTheRepoRootAndTheProjectIsMultiTargeted_ThenThePatchResolves()
+	{
+		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string result = await subject.ApplyPatch(
+			solutionPath,
+			"--- a/src/Multi/Api.cs\n+++ b/src/Multi/Api.cs\n@@\n-    public int Count() => 0;\n+    public int Count() => 1;\n",
+			checkOnly: true);
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("applied=N", result);
+	}
+
+	[Fact]
+	public async Task WhenAPathIsRelativeToTheRepoRootAndTheProjectIsMultiTargeted_ThenTheFileIsPatchedOnce()
+	{
+		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string result = await subject.ApplyPatch(
+			solutionPath,
+			"--- a/src/Multi/Api.cs\n+++ b/src/Multi/Api.cs\n@@\n-    public int Count() => 0;\n+    public int Count() => 1;\n");
+
+		Assert.Contains("applied=Y", result);
+		string api = Path.Combine(Path.GetDirectoryName(solutionPath)!, "Multi", "Api.cs");
+		Assert.Contains("Count() => 1;", await File.ReadAllTextAsync(api));
+	}
+
+	[Fact]
+	public async Task WhenASuffixMatchesTwoDistinctFiles_ThenTheErrorIsAmbiguousWithCandidates()
+	{
+		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
+		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "Multi");
+		foreach (string folder in new[] { "A", "B" })
+		{
+			Directory.CreateDirectory(Path.Combine(projectDirectory, folder));
+			File.WriteAllText(Path.Combine(projectDirectory, folder, "Shared.cs"), "namespace Repro." + folder + ";\n\npublic class Shared { }\n");
+		}
+
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string result = await subject.ApplyPatch(
+			solutionPath,
+			BuildFullReplacePatch("Shared.cs", "public class Shared { }\n", "public class Shared { public int X; }\n"));
+
+		Assert.Contains("error=Ambiguous", result);
+		Assert.Contains("rejected=Shared.cs", result);
+		Assert.Contains("candidate=Multi/A/Shared.cs", result);
+		Assert.Contains("candidate=Multi/B/Shared.cs", result);
+	}
+
+	[Fact]
+	public async Task WhenRejectionsHaveDifferentReasons_ThenTheMostActionableCodeIsReportedWithEveryReason()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(registry);
+
+		string result = await subject.ApplyPatch(
+			solutionPath,
+			BuildFullReplacePatch("SimpleLibrary/Missing.cs", "a\n", "b\n")
+			+ "--- /dev/null\n+++ b/SimpleLibrary/New.txt\n@@ -0,0 +1,1 @@\n+hello\n");
+
+		Assert.Contains("error=NotFound", result);
+		Assert.Contains("rejected=SimpleLibrary/Missing.cs", result);
+		Assert.Contains("rejected=SimpleLibrary/New.txt", result);
+		Assert.Contains("creation/deletion", result);
 	}
 
 	[Fact]

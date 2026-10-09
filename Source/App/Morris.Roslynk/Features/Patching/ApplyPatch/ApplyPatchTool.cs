@@ -7,6 +7,7 @@ using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Patching;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Features.Patching.ApplyPatch;
@@ -39,8 +40,11 @@ public sealed class ApplyPatchTool
 		on success (applied is N for a checkOnly preview). {OutlineDescriptions.Freshness} Prefer this over the host's raw file
 		edit for .cs so the in-memory model stays in sync. Hunk headers may omit line numbers (a bare '@@'); a
 		content-anchored hunk must match exactly one place, so include enough surrounding context that it is
-		unambiguous. Edits existing files only; creation/deletion, binary files, and paths outside the solution
-		folder are rejected as 'error=NotSupported' with 'rejected=<path>' lines. Pass baseVersions (the
+		unambiguous. Paths are relative to the solution folder; a path that is a unique suffix of a solution file
+		(e.g. relative to the repository root) also resolves. Edits existing files only: creation/deletion,
+		binary files and paths outside the solution folder are rejected as 'error=NotSupported'; a file that
+		does not exist is 'error=NotFound'; a path matching several distinct files is 'error=Ambiguous' with
+		'candidate=<solution-relative path>' lines. Rejections list 'rejected=<path>' lines. Pass baseVersions (the
 		documentVersion each file was read at) to be told if a file moved since (returned as 'error=Stale' with
 		'stale=<path>' lines); pass checkOnly to validate without writing. An unmatched or ambiguous hunk is
 		error=Conflict naming the file and reason; a patch with no file sections is error=Invalid.
@@ -71,31 +75,25 @@ public sealed class ApplyPatchTool
 			return Failure(Error.Invalid($"The patch for '{hunkless.NewPath ?? hunkless.OldPath ?? "(unknown)"}' contains no hunks; nothing would change."));
 
 		var targets = new List<PatchTarget>();
-		var rejected = new List<string>();
+		var rejected = new List<Rejection>();
 		foreach (FilePatch filePatch in patches)
 		{
 			if (filePatch.IsCreation || filePatch.IsDeletion)
 			{
-				rejected.Add(filePatch.Path ?? "(unknown)");
+				rejected.Add(new Rejection(filePatch.Path ?? "(unknown)", RejectionKind.NotSupported, []));
 				continue;
 			}
 
 			TargetResolution resolution = ResolveTarget(solution, filePatch.Path);
 			if (resolution.FilePath is null)
-				rejected.Add(resolution.RejectReason ?? filePatch.Path ?? "(unknown)");
+				rejected.Add(resolution.Rejection ?? new Rejection(filePatch.Path ?? "(unknown)", RejectionKind.NotSupported, []));
 			else
 				targets.Add(new PatchTarget(filePatch, resolution.FilePath));
 		}
 
 		if (rejected.Count > 0)
 		{
-			var builder = new OutlineBuilder();
-			builder.Header("error", ErrorCode.NotSupported.ToString());
-			builder.Header("errorMessage", "apply_patch edits existing text files inside the solution folder only; file creation/deletion, binary files, and paths outside the solution are not supported.");
-			foreach (string path in rejected)
-				builder.Header("rejected", path);
-			builder.Status(model.Status);
-			return builder.ToString();
+			return FormatRejections(rejected, solution, model.Status);
 		}
 
 		IReadOnlyDictionary<string, string> expectedVersions = BuildExpectedVersions(baseVersions);
@@ -188,6 +186,40 @@ public sealed class ApplyPatchTool
 		return stale.Count > 0 ? PatchComputation.FromStale(stale) : PatchComputation.FromPending(pending);
 	}
 
+	/// <summary>
+	/// One error for all rejected files. When they failed for different reasons the code is the most
+	/// actionable one (NotFound, then Ambiguous, then NotSupported) and the message explains every reason.
+	/// </summary>
+	private static string FormatRejections(IReadOnlyList<Rejection> rejected, Solution solution, SolutionStatus status)
+	{
+		string solutionDirectory = SolutionRelativePath.DirectoryOf(solution) ?? "(unknown)";
+		RejectionKind[] kinds = [.. rejected.Select(item => item.Kind).Distinct().Order()];
+
+		string Message(RejectionKind kind) => kind switch
+		{
+			RejectionKind.NotFound => $"The file does not exist. Patch paths are relative to the solution folder '{solutionDirectory}'.",
+			RejectionKind.Ambiguous => $"The path matches several files; use a longer path relative to the solution folder '{solutionDirectory}'.",
+			_ => "apply_patch edits existing text files inside the solution folder only; file creation/deletion, binary files, and paths outside the solution are not supported."
+		};
+
+		ErrorCode code = kinds[0] switch
+		{
+			RejectionKind.NotFound => ErrorCode.NotFound,
+			RejectionKind.Ambiguous => ErrorCode.Ambiguous,
+			_ => ErrorCode.NotSupported
+		};
+
+		var builder = new OutlineBuilder();
+		builder.Header("error", code.ToString());
+		builder.Header("errorMessage", string.Join(" ", kinds.Select(Message)));
+		foreach (Rejection item in rejected)
+			builder.Header("rejected", item.Path);
+		foreach (string candidate in rejected.SelectMany(item => item.Candidates).Distinct())
+			builder.Header("candidate", candidate);
+		builder.Status(status);
+		return builder.ToString();
+	}
+
 	private static IReadOnlyDictionary<string, string> BuildExpectedVersions(IReadOnlyList<FileVersion>? baseVersions)
 	{
 		var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -229,28 +261,32 @@ public sealed class ApplyPatchTool
 	private static TargetResolution ResolveTarget(Solution solution, string? patchPath)
 	{
 		if (string.IsNullOrWhiteSpace(patchPath))
-			return new TargetResolution(null, "(unknown)");
+			return TargetResolution.Rejected("(unknown)", RejectionKind.NotSupported);
 
-		string? modelPath = ResolveModelPath(solution, patchPath);
+		(string? modelPath, IReadOnlyList<string> ambiguous) = ResolveModelPath(solution, patchPath);
 		if (modelPath is not null)
-			return new TargetResolution(modelPath, null);
+			return TargetResolution.Resolved(modelPath);
 
-		string? solutionDir = solution.FilePath is null ? null : System.IO.Path.GetDirectoryName(solution.FilePath);
+		string? solutionDir = SolutionRelativePath.DirectoryOf(solution);
 		if (solutionDir is null)
-			return new TargetResolution(null, patchPath);
+			return TargetResolution.Rejected(patchPath, RejectionKind.NotSupported);
 
 		string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(solutionDir, NormalizeSeparators(patchPath)));
 		if (!IsUnder(fullPath, solutionDir))
-			return new TargetResolution(null, patchPath);
+			return TargetResolution.Rejected(patchPath, RejectionKind.NotSupported);
 		if (!File.Exists(fullPath))
-			return new TargetResolution(null, patchPath);
+		{
+			return ambiguous.Count > 0
+				? TargetResolution.Rejected(patchPath, RejectionKind.Ambiguous, [.. ambiguous.Select(path => SolutionRelativePath.Of(solutionDir, path)!)])
+				: TargetResolution.Rejected(patchPath, RejectionKind.NotFound);
+		}
 		if (IsBuildOutput(fullPath))
-			return new TargetResolution(null, patchPath);
+			return TargetResolution.Rejected(patchPath, RejectionKind.NotSupported);
 
 		try
 		{
 			if (ReadTextPreservingEncoding(fullPath).Text.Contains('\0'))
-				return new TargetResolution(null, patchPath); // A NUL byte marks binary content.
+				return TargetResolution.Rejected(patchPath, RejectionKind.NotSupported); // A NUL byte marks binary content.
 		}
 		catch (Exception exception) when (exception is IOException
 			or UnauthorizedAccessException
@@ -258,13 +294,18 @@ public sealed class ApplyPatchTool
 			or ArgumentException)
 		{
 			// Unreadable or not decodable as text; not a patchable file.
-			return new TargetResolution(null, patchPath);
+			return TargetResolution.Rejected(patchPath, RejectionKind.NotSupported);
 		}
 
-		return new TargetResolution(fullPath, null);
+		return TargetResolution.Resolved(fullPath);
 	}
 
-	private static string? ResolveModelPath(Solution solution, string patchPath)
+	/// <summary>
+	/// The solution document a patch path names, exactly or as a unique suffix. A suffix matching several
+	/// distinct files returns no path and those files as the ambiguous matches; matches are counted by file
+	/// (a multi-targeted project has one document per target framework for the same file).
+	/// </summary>
+	private static (string? Path, IReadOnlyList<string> Ambiguous) ResolveModelPath(Solution solution, string patchPath)
 	{
 		string normalized = NormalizeSeparators(patchPath);
 
@@ -272,29 +313,23 @@ public sealed class ApplyPatchTool
 		{
 			string? rooted = DocumentOrAdditionalAt(solution, System.IO.Path.GetFullPath(normalized));
 			if (rooted is not null)
-				return rooted;
+				return (rooted, []);
 		}
 
-		string? solutionDir = solution.FilePath is null ? null : System.IO.Path.GetDirectoryName(solution.FilePath);
+		string? solutionDir = SolutionRelativePath.DirectoryOf(solution);
 		if (solutionDir is not null)
 		{
 			string? relative = DocumentOrAdditionalAt(solution, System.IO.Path.GetFullPath(System.IO.Path.Combine(solutionDir, normalized)));
 			if (relative is not null)
-				return relative;
+				return (relative, []);
 		}
 
-		string? suffixMatch = null;
-		int matches = 0;
-		foreach (string filePath in AllDocumentPaths(solution))
-		{
-			if (PathEndsWith(filePath, normalized))
-			{
-				suffixMatch = filePath;
-				matches++;
-			}
-		}
+		string[] matches = [.. AllDocumentPaths(solution)
+			.Where(filePath => PathEndsWith(filePath, normalized))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.Order(StringComparer.OrdinalIgnoreCase)];
 
-		return matches == 1 ? suffixMatch : null;
+		return matches.Length == 1 ? (matches[0], []) : (null, matches);
 	}
 
 	/// <summary>A regular or additional document at the given full path; the path itself on success.</summary>
@@ -379,16 +414,31 @@ public sealed class ApplyPatchTool
 		return new UnicodeEncoding(bigEndian, byteOrderMark: false).GetString(bytes, preambleLength, bytes.Length - preambleLength);
 	}
 
+	/// <summary>Why a patch path was rejected, ordered by how actionable the error code is.</summary>
+	private enum RejectionKind
+	{
+		NotFound,
+		Ambiguous,
+		NotSupported
+	}
+
+	private sealed record Rejection(string Path, RejectionKind Kind, IReadOnlyList<string> Candidates);
+
 	private readonly struct TargetResolution
 	{
 		public string? FilePath { get; }
-		public string? RejectReason { get; }
+		public Rejection? Rejection { get; }
 
-		public TargetResolution(string? filePath, string? rejectReason)
+		private TargetResolution(string? filePath, Rejection? rejection)
 		{
 			FilePath = filePath;
-			RejectReason = rejectReason;
+			Rejection = rejection;
 		}
+
+		public static TargetResolution Resolved(string filePath) => new(filePath, null);
+
+		public static TargetResolution Rejected(string path, RejectionKind kind, IReadOnlyList<string>? candidates = null) =>
+			new(null, new Rejection(path, kind, candidates ?? []));
 	}
 
 	private readonly struct PatchTarget
