@@ -72,20 +72,20 @@ public sealed class SearchSymbolsTool
 		// Search every projection so declarations that compile only in a branch inactive in the loaded
 		// configuration are included; dedupe by fully-qualified name across projections.
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
-		var seen = new HashSet<string>(StringComparer.Ordinal);
+		var seen = new SymbolIdentityIndex();
 		var matched = new List<(ISymbol Symbol, Solution Solution)>();
 		foreach (Projection projection in projections)
 		{
 			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(projection.Solution, name => name.Contains(query, StringComparison.OrdinalIgnoreCase)))
 			{
-				if (seen.Add(SymbolSignature.Of(symbol, SignatureTier.FullyQualifiedWithRefKinds)))
+				if (seen.Add(symbol))
 					matched.Add((symbol, projection.Solution));
 			}
 
 			// Local functions are not in the declaration index, so they are found by walking the syntax.
 			foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(projection.Solution, name => name.Contains(query, StringComparison.OrdinalIgnoreCase), token))
 			{
-				if (seen.Add(SymbolSignature.Of(local, SignatureTier.FullyQualifiedWithRefKinds)))
+				if (seen.Add(local))
 					matched.Add((local, projection.Solution));
 			}
 		}

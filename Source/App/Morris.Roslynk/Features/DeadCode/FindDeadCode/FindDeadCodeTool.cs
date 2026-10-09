@@ -100,7 +100,7 @@ public sealed class FindDeadCodeTool
 		HashSet<ProjectId> testProjects = IdentifyTestProjects(solution);
 
 		var candidates = new List<ISymbol>();
-		var seen = new HashSet<string>(StringComparer.Ordinal);
+		var seen = new SymbolIdentityIndex();
 		foreach (Project project in solution.Projects)
 		{
 			Compilation? compilation = await project.GetCompilationAsync();
@@ -117,7 +117,7 @@ public sealed class FindDeadCodeTool
 				// dedupe key carries the signature so two unused overloads are two findings, not one.
 				if (scope is not null && !SymbolResolver.FullyQualifiedName(symbol).StartsWith(scope, StringComparison.OrdinalIgnoreCase))
 					continue;
-				if (!seen.Add(SymbolSignature.Of(symbol, SignatureTier.FullyQualifiedWithRefKinds)))
+				if (!seen.Add(symbol))
 					continue;
 
 				candidates.Add(symbol);

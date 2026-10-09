@@ -4,6 +4,7 @@
 
 - `find_references` handles unresolved analyzers without crashing (Fixes #66)
 - `get_solution_status` lists load diagnostic messages (Fixes #69)
+- Multi-targeted projects no longer list duplicate members or report `Ambiguous` (Fixes #67)
 
 ## 2.1.0
 

@@ -87,13 +87,13 @@ public sealed class GetCallersTool
 
 		// Union callers across every projection, deduped by stable symbol identity, so a caller that only
 		// compiles in a branch inactive in the loaded configuration is still reported.
-		var seen = new HashSet<string>(StringComparer.Ordinal);
+		var seen = new SymbolIdentityIndex();
 		var root = new SymbolNode();
 		foreach (ProjectionSymbol projectionSymbol in resolved)
 		{
 			foreach (SymbolCallerInfo caller in await SymbolFinder.FindCallersAsync(projectionSymbol.Symbol, projectionSymbol.Projection.Solution))
 			{
-				if (seen.Add(ProjectionService.KeyOf(caller.CallingSymbol)))
+				if (seen.Add(caller.CallingSymbol))
 					SymbolPlacement.Place(root, caller.CallingSymbol, projectionSymbol.Projection.Solution, solutionDirectory);
 			}
 		}
