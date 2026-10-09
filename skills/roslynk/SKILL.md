@@ -32,7 +32,7 @@ Each tool's exact contract â€” parameters, output format, limits, error codes â€
 | Know what an expression means before editing it (type, overload chosen, nullability, constant, conversion) | `get_expression_info` | `var`, overloads, implicit conversions and nullable flow are invisible in the text |
 | Find implementations of an interface/abstract member | `find_implementations` | compiler's type graph |
 | See a type's members (and their local functions) / what a name refers to | `get_members` / `get_symbol` | compiler's view; correct across partial classes |
-| Read a member's implementation | `get_symbol_body` | returns the declaration verbatim |
+| Read a member's implementation (incl. a partial method's implementation part) | `get_symbol_body` | returns the declaration verbatim; a path marked `generated=Y` is virtual - read it with this tool, not from disk |
 | Explore base/derived types | `get_type_hierarchy` | includes referenced-assembly base types |
 | Find a symbol by partial name | `search_symbols` | compiler-declared symbols |
 | Rename a symbol everywhere (incl. `.razor`/`.cshtml`) | `rename_symbol` | find-and-replace misses markup and same-named text |

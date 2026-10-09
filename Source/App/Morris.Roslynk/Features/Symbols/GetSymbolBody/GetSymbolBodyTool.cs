@@ -56,7 +56,10 @@ public sealed class GetSymbolBodyTool
 		  public int Compute(int value) => value * 2;
 		A partial type or partial method declared in several places instead returns a '#parts=<n>' header, then
 		one block per part in the body: a 'part=<n>,project=...,path=...,loc=...' line, the
-		verbatim text, and a blank line before the next part.
+		verbatim text, and a blank line before the next part. A partial method, property or event returns its
+		defining declaration and its implementation as separate parts, including an implementation supplied by a
+		source generator (e.g. [GeneratedRegex], [LoggerMessage], [LibraryImport]).
+		{OutlineDescriptions.GeneratedLocations}
 		{OutlineDescriptions.Project}. A name matching several distinct symbols (overloads included) returns
 		error=Ambiguous with candidate names; a symbol with no source (a metadata/referenced-assembly symbol,
 		a namespace) returns error=NotSupported. {OutlineDescriptions.ErrorBlock}
@@ -110,7 +113,7 @@ public sealed class GetSymbolBodyTool
 		ProjectionSymbol resolved = groups[0][0];
 		ISymbol symbol = resolved.Symbol;
 
-		if (symbol.DeclaringSyntaxReferences.Length == 0)
+		if (!DeclarationReferences(symbol).Any())
 		{
 			string where = symbol.ContainingAssembly is { } assembly ? $" It comes from '{assembly.Name}'." : "";
 			return Failure(Error.NotSupported(
@@ -118,7 +121,7 @@ public sealed class GetSymbolBodyTool
 		}
 
 		var parts = new List<Part>();
-		foreach (SyntaxReference reference in symbol.DeclaringSyntaxReferences)
+		foreach (SyntaxReference reference in DeclarationReferences(symbol))
 		{
 			Part? part = await BuildPartAsync(reference, resolved.Projection.Solution, solutionDirectory, includeLeadingTrivia, cancellationToken);
 			if (part is not null)
@@ -131,6 +134,29 @@ public sealed class GetSymbolBodyTool
 		return parts.Count == 1 ? Single(parts[0]) : Multiple(parts);
 	}
 
+	/// <summary>
+	/// The syntax references of every declaration of the symbol. A partial method, property or event is two
+	/// symbols in Roslyn - the defining declaration and the implementation - and name lookup returns only the
+	/// definition, so the implementation part (hand-written, or supplied by a source generator) is followed
+	/// explicitly. The definition comes first.
+	/// </summary>
+	private static IEnumerable<SyntaxReference> DeclarationReferences(ISymbol symbol)
+	{
+		(ISymbol definition, ISymbol? implementation) = symbol switch
+		{
+			IMethodSymbol method => (method.PartialDefinitionPart ?? method, method.PartialImplementationPart),
+			IPropertySymbol property => (property.PartialDefinitionPart ?? property, property.PartialImplementationPart),
+			IEventSymbol @event => (@event.PartialDefinitionPart ?? @event, @event.PartialImplementationPart),
+			_ => (symbol, (ISymbol?)null)
+		};
+
+		IEnumerable<SyntaxReference> references = definition.DeclaringSyntaxReferences;
+		if (implementation is not null)
+			references = references.Concat(implementation.DeclaringSyntaxReferences);
+
+		return references.Distinct();
+	}
+
 	private static string Single(Part part)
 	{
 		var builder = new OutlineBuilder();
@@ -138,6 +164,12 @@ public sealed class GetSymbolBodyTool
 			builder.Header("project", part.Project);
 		builder.Header("path", part.Path);
 		builder.Header("loc", part.Location);
+		if (part.Generated)
+		{
+			builder.Header("generated", true);
+			if (part.Generator is not null)
+				builder.Header("generator", part.Generator);
+		}
 		builder.BeginBody();
 		builder.Line(0, part.Text);
 		return builder.ToString();
@@ -156,7 +188,10 @@ public sealed class GetSymbolBodyTool
 				builder.Line(0, "");
 
 			string project = part.Project is null ? "" : $"project={OutlineBuilder.Field(part.Project)},";
-			builder.Line(0, $"part={index + 1},{project}path={part.Path},loc={part.Location}");
+			string generated = part.Generated
+				? ",generated=Y" + (part.Generator is null ? "" : $",generator={OutlineBuilder.Field(part.Generator)}")
+				: "";
+			builder.Line(0, $"part={index + 1},{project}path={part.Path},loc={part.Location}{generated}");
 			builder.Line(0, part.Text);
 		}
 
@@ -189,7 +224,9 @@ public sealed class GetSymbolBodyTool
 			ProjectName.Of(solution, reference.SyntaxTree),
 			path,
 			$"{display.StartLinePosition.Line + 1}:{display.StartLinePosition.Character + 1}-{display.EndLinePosition.Line + 1}:{display.EndLinePosition.Character + 1}",
-			text.ToString(span));
+			text.ToString(span),
+			GeneratedSource.IsGenerated(solution, reference.SyntaxTree),
+			GeneratedSource.GeneratorOf(solution, reference.SyntaxTree));
 	}
 
 	/// <summary>
@@ -214,5 +251,5 @@ public sealed class GetSymbolBodyTool
 		return node.Span;
 	}
 
-	private sealed record Part(string? Project, string Path, string Location, string Text);
+	private sealed record Part(string? Project, string Path, string Location, string Text, bool Generated, string? Generator);
 }

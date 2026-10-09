@@ -70,7 +70,7 @@ public sealed class GetCalleesTool
 		accessors, a field its initializer. Lambdas and local functions declared inside the member belong to
 		it. A member with no code in the solution (an abstract or interface declaration, an auto-property)
 		calls nothing.
-		{OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading the body and tracing each
+		{OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading the body and tracing each
 		call by eye: the compiler's operation model binds every call to the overload that actually runs.
 		"""
 	)]

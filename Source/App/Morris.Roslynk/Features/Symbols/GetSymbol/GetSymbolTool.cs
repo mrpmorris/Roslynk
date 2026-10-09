@@ -51,7 +51,7 @@ public sealed class GetSymbolTool
 
 		  private Task Search(CancellationToken cancellationToken)
 		A metadata symbol (no source) instead returns '#source=metadata', '#kind', '#signature', '#assembly'.
-		{OutlineDescriptions.Project}. {OutlineDescriptions.ErrorBlock} Prefer this over reading the file to identify a symbol.
+		{OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.ErrorBlock} Prefer this over reading the file to identify a symbol.
 		""")]
 	public async Task<string> GetSymbol(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
@@ -114,6 +114,7 @@ public sealed class GetSymbolTool
 			builder.Header("project", project);
 		builder.Header("path", SolutionRelativePath.Of(solutionDirectory, span.Path)!);
 		builder.Header("loc", $"{span.StartLinePosition.Line + 1}:{span.StartLinePosition.Character + 1}-{span.EndLinePosition.Line + 1}:{span.EndLinePosition.Character + 1}");
+		GeneratedSource.AppendHeaders(builder, solution, reference.SyntaxTree);
 		builder.BeginBody();
 		builder.Line(0, DeclarationHeader(node, text));
 		return builder.ToString();

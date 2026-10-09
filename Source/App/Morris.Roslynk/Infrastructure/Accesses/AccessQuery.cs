@@ -148,7 +148,7 @@ public static class AccessQuery
 				? outline.Child(project)
 				: outline;
 			SymbolNode node = fileParent
-				.ChildPath(SolutionRelativePath.Of(solutionDirectory, span.Path)!)
+				.ChildPath(GeneratedSource.MarkPath(SolutionRelativePath.Of(solutionDirectory, span.Path)!, locationSolution, location.SourceTree))
 				.Child(enclosing.Namespace);
 			for (int index = 0; index < enclosing.Segments.Count - 1; index++)
 				node = node.Child($"{enclosing.Segments[index].Kind},{OutlineBuilder.Field(enclosing.Segments[index].Name)}");

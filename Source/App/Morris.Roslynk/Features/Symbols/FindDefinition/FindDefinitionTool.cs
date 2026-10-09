@@ -42,7 +42,7 @@ public sealed class FindDefinitionTool
 		{OutlineDescriptions.CommonMethodInstructions}
 		The result is a '#fullName' (parameter types included for a method or indexer, so it can be passed
 		straight to the name-based tools), '#kind' header plus '#project=<project>', '#path=<relative/path.cs>' and '#loc=<line:col>' for a source symbol,
-		or '#assembly=<name>' for a metadata symbol. {OutlineDescriptions.Project}. A position that binds to no
+		or '#assembly=<name>' for a metadata symbol. {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} A position that binds to no
 		symbol in any projection is error=NotFound. {OutlineDescriptions.ErrorBlock} Prefer this over grepping
 		to chase a definition; it follows the compiler's binding, so it lands on the right symbol even when
 		names are overloaded or shadowed.
@@ -103,6 +103,7 @@ public sealed class FindDefinitionTool
 			builder.Header("project", project);
 		builder.Header("path", SolutionRelativePath.Of(solutionDirectory, span.Path)!);
 		builder.Header("loc", $"{span.StartLinePosition.Line + 1}:{span.StartLinePosition.Character + 1}-{span.EndLinePosition.Line + 1}:{span.EndLinePosition.Character + 1}");
+		GeneratedSource.AppendHeaders(builder, resolvedSolution, location.SourceTree);
 		return builder.ToString();
 	}
 }

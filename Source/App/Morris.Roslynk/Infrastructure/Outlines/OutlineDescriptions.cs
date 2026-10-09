@@ -23,6 +23,13 @@ internal static class OutlineDescriptions
 		+ "but others such as .vbproj kept): as a #project=<project> header before a single #path, or as the "
 		+ "outermost node above the path in a nested body; it is absent when the result has no source (a metadata symbol)";
 
+	/// <summary>How a location declared by a source generator is marked, since its path is virtual.</summary>
+	public const string GeneratedLocations =
+		"A location declared by a source generator has a virtual path that does not exist on disk (unless the "
+		+ "project emits compiler-generated files): it is marked generated=Y (with generator=<generator type> beside "
+		+ "a single path or on a get_symbol_body part line), or in a nested body its file name line ends ',generated=Y'. "
+		+ "Read such code with get_symbol_body, not from disk; edit tools reject generated paths.";
+
 	/// <summary>How a file path in a nested body is split into a folder line and a file-name child.</summary>
 	public const string FilePathSplit =
 		"in a nested body a file path is split into a folder line with the file name nested beneath it, so files "

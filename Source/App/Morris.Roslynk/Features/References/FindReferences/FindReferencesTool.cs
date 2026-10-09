@@ -50,7 +50,7 @@ public sealed class FindReferencesTool
 		  \t\t\t\t<typeKind>,<typeName>,<loc|loc|...>   (locations present only when the type declaration itself references the symbol)
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc|loc|...>
 		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.Loc}; {OutlineDescriptions.LocList}; {OutlineDescriptions.ListFieldQuoting}.
-		{OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} It matches the compiler's
+		{OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} It matches the compiler's
 		symbol, not text, so it skips comments, strings and unrelated same-named members, and still finds
 		usages in code-behind and partial classes.
 		{OutlineDescriptions.ProjectionCoverage}
@@ -129,7 +129,7 @@ public sealed class FindReferencesTool
 				? root.Child(project)
 				: root;
 			SymbolNode node = fileParent
-				.ChildPath(SolutionRelativePath.Of(solutionDirectory, span.Path)!)
+				.ChildPath(GeneratedSource.MarkPath(SolutionRelativePath.Of(solutionDirectory, span.Path)!, locationSolution, location.SourceTree))
 				.Child(enclosing.Namespace);
 			foreach (EnclosingSegment segment in enclosing.Segments)
 				node = node.Child($"{segment.Kind},{OutlineBuilder.Field(segment.Name)}");

@@ -20,7 +20,7 @@ public static class SymbolPlacement
 	{
 		Location? location = symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
 		string file = location?.SourceTree?.FilePath is string path
-			? SolutionRelativePath.Of(solutionDirectory, path)!
+			? GeneratedSource.MarkPath(SolutionRelativePath.Of(solutionDirectory, path)!, solution, location.SourceTree)
 			: MetadataBucket;
 
 		SymbolNode start = location?.SourceTree is SyntaxTree tree && ProjectName.Of(solution, tree) is string project

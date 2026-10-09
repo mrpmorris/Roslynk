@@ -6,6 +6,7 @@
 - `get_solution_status` lists load diagnostic messages (Fixes #69)
 - Multi-targeted projects no longer list duplicate members or report `Ambiguous` (Fixes #67)
 - `apply_patch` resolves repo-root-relative paths in multi-targeted projects and reports `NotFound`/`Ambiguous` instead of a generic `NotSupported` (Fixes #74)
+- `get_symbol_body` returns a partial method/property/event's implementation part (hand-written or generator-supplied); locations declared by source generators are marked `generated=Y` (Fixes #70)
 - A generator project built (or rebuilt) after the solution loaded is picked up on the next call without a reload, and a missing generator DLL's load diagnostic names the project to build (Fixes #68)
 
 ## 2.1.0
