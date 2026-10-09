@@ -61,10 +61,17 @@ report a local function's kind as `localfunction` and nest it under its containi
 
 ### open_solution
 `solutionPath` (required): absolute path to `.sln`/`.slnx`.
-Returns `solutionId` (= the path you passed), `status`, `projects`, `loadDiagnostics`, then one `<projectPath>,<documentCount>` line per project. Loads in the background; idempotent; missing file → `NotFound`, failed load → `Faulted`. While loading, other tools return `error=Indexing` — retry them shortly; never fall back to raw file edits.
+Returns `solutionId` (= the path you passed), `status`, `projects`, `loadDiagnostics` (a count; `get_solution_status` lists the messages), then one `<projectPath>,<documentCount>` line per project. Loads in the background; idempotent; missing file → `NotFound`, failed load → `Faulted`. While loading, other tools return `error=Indexing` — retry them shortly; never fall back to raw file edits.
 
 ### get_solution_status
-No parameters. Lists every solution loaded by the daemon (daemon-wide, not session-scoped): `<solutionId>,<status>,<loaded>/<total>` per line. `total` is `?` until the first load completes. Status values: `Building`, `Updating`, `Ready`, `Faulted`.
+`allLoadDiagnostics` (optional, default false). Lists every solution loaded by the daemon (daemon-wide, not session-scoped): `<solutionId>,<status>,<loaded>/<total>` per line. `total` is `?` until the first load completes. Status values: `Building`, `Updating`, `Ready`, `Faulted`.
+
+When the load reported messages (the count `open_solution` shows as `loadDiagnostics`: a skipped or unloadable analyzer/generator such as an unbuilt generator DLL, a project that failed to evaluate, an SDK that was not found), each is a tab-indented `loadDiagnostic=<message>` line under its solution line, shown only once that solution is `Ready` (never while `Building`, `Updating` or `Faulted`); a solution with none stays one line. These often explain a batch of confusing compiler errors. Messages are sorted, and without `solutionId` only the first 20 per solution are listed, followed by `\tloadDiagnosticsTruncated=<n>` for the rest. With `solutionId` only that solution is listed, with every message. A `solutionId` that is not loaded → `error=NotFound`. Not batchable in `multi_query`.
+
+```
+C:\repo\GeneratorSolution.slnx,Ready,2/2
+	loadDiagnostic=Skipped unresolved analyzer in project 'ConsumerLib': C:\repo\GeneratorLib\bin\Debug\netstandard2.0\GeneratorLib.dll (...)
+```
 
 ### reload_solution
 `solutionId` (required). Forces a from-disk MSBuild re-evaluation; the old snapshot keeps serving as `Building` until the fresh one is ready. Manual backstop for missed watcher events (network/WSL filesystems), `dotnet restore`, SDK/`global.json`/`Directory.Build.props` changes, branch switches, or retrying a `Faulted` load. **Never call it unless the user explicitly instructs you to** — suggest it instead.

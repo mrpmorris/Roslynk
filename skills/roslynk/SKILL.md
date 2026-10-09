@@ -16,7 +16,7 @@ Each tool's exact contract — parameters, output format, limits, error codes �
 ## Solution setup
 
 1. Call `open_solution` with the absolute path to the `.sln`/`.slnx`. It returns immediately and loads in the background; the returned `solutionId` is the handle every other tool needs.
-2. While loading, other tools return `error=Indexing` — retry the call shortly, or poll `get_solution_status` (~1s) and report progress. Do **not** fall back to reading or editing files directly; loading finishes within seconds to a minute.
+2. While loading, other tools return `error=Indexing` — retry the call shortly, or poll `get_solution_status` (~1s) and report progress. Do **not** fall back to reading or editing files directly; loading finishes within seconds to a minute. If `open_solution` reports `loadDiagnostics` above 0, call `get_solution_status` to read the messages (skipped analyzers, failed project loads): they often explain confusing compiler errors.
 3. `open_solution` is idempotent and the daemon keeps solutions warm across sessions — calling it again is cheap and safe.
 4. Never call `reload_solution` on your own initiative: the file watcher picks up all changes, including your own edits. If results look stale (branch switch, `dotnet restore`, SDK/props change, a rebuilt source generator or analyzer project), *suggest* it to the user.
 

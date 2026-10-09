@@ -3,6 +3,7 @@
 ## Unreleased
 
 - `find_references` handles unresolved analyzers without crashing (Fixes #66)
+- `get_solution_status` lists load diagnostic messages (Fixes #69)
 
 ## 2.1.0
 
