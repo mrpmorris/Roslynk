@@ -18,6 +18,7 @@ internal static class TestSolutions
 	private static readonly Lazy<string> LocalFunctionSolutionPath = new(() => Prepare("LocalFunctionSolution", "LocalFunctionSolution.slnx"));
 	private static readonly Lazy<string> ExpressionSolutionPath = new(() => Prepare("ExpressionSolution", "ExpressionSolution.slnx"));
 	private static readonly Lazy<string> AccessSolutionPath = new(() => Prepare("AccessSolution", "AccessSolution.slnx"));
+	private static readonly Lazy<string> RazorMultiProjectSolutionPath = new(() => Prepare("RazorMultiProjectSolution", "RazorMultiProjectSolution.slnx"));
 	private static readonly Lazy<string> GeneratorSolutionPath = new(() =>
 	{
 		string path = Prepare("GeneratorSolution", "GeneratorSolution.slnx");
@@ -141,6 +142,16 @@ internal static class TestSolutions
 	/// <summary>A single-project solution touching fields, properties and parameters in every read/write form.</summary>
 	public static string Access => AccessSolutionPath.Value;
 
+	/// <summary>
+	/// Two Razor projects, the dependent one listed first: App's Page.razor uses Lib's Widget component, whose
+	/// <c>Count</c> parameter and a <c>StateHasChanged</c> call live in the code-behind Widget.razor.cs. Lib is
+	/// multi-targeted (net8.0;net10.0) and has an _Imports.razor.
+	/// </summary>
+	public static string RazorMultiProject => RazorMultiProjectSolutionPath.Value;
+
+	/// <summary>A writable scratch copy of the RazorMultiProjectSolution fixture.</summary>
+	public static string CreateScratchRazorMultiProjectSolution() => CreateScratch("RazorMultiProjectSolution", "RazorMultiProjectSolution.slnx");
+
 	/// <summary>A writable scratch copy of the LocalFunctionSolution fixture, for tests that rename or edit it.</summary>
 	public static string CreateScratchLocalFunctionSolution() => CreateScratch("LocalFunctionSolution", "LocalFunctionSolution.slnx");
 
@@ -149,6 +160,14 @@ internal static class TestSolutions
 	/// built, for tests asserting how an unloadable analyzer reference is reported.
 	/// </summary>
 	public static string CreateScratchGeneratorSolutionWithoutBuiltGenerator() => CreateScratch("GeneratorSolution", "GeneratorSolution.slnx");
+
+	/// <summary>A writable scratch copy of the GeneratorSolution fixture with its generator DLL built, for tests that edit generator inputs.</summary>
+	public static string CreateScratchGeneratorSolution()
+	{
+		string path = CreateScratch("GeneratorSolution", "GeneratorSolution.slnx");
+		Build(Path.Combine(Path.GetDirectoryName(path)!, "GeneratorLib", "GeneratorLib.csproj"));
+		return path;
+	}
 
 	private static string CreateScratch(string fixtureName, string solutionFile)
 	{

@@ -131,7 +131,7 @@ public sealed class InstanceRegistry : IDisposable
 
 	private static void AttachWatcher(RoslynInstance instance)
 	{
-		var sync = new SolutionFileSync(instance, new DiagnosticsService());
+		var sync = new SolutionFileSync(instance);
 		instance.AttachWatcher(new SolutionFileWatcher(sync));
 	}
 

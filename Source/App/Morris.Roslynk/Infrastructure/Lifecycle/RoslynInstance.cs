@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
 using Morris.Roslynk.Infrastructure.Observability;
+using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.Lifecycle;
@@ -13,8 +14,10 @@ namespace Morris.Roslynk.Infrastructure.Lifecycle;
 /// deferred diagnostics build are ordered work items on a single-consumer channel, so writes never overlap
 /// and a build queued after pending writes drains them first. A <see cref="SemaphoreSlimReadWriteLock"/>
 /// makes reads wait for an in-flight write to publish its new model; reads otherwise run lock-free on the
-/// immutable snapshot. Compilation is forced only by the diagnostics build, gated by <see cref="BuildNeeded"/>
-/// with a cached result so repeat calls with no intervening write are free.
+/// immutable snapshot. Every write regenerates the Razor output it affects before publishing, which compiles
+/// the affected projects' declarations for the Razor generator; full compilation is forced only by the
+/// diagnostics build, gated by <see cref="BuildNeeded"/> with a cached result so repeat calls with no
+/// intervening write are free.
 /// </summary>
 public sealed class RoslynInstance : IDisposable
 {
@@ -115,7 +118,8 @@ public sealed class RoslynInstance : IDisposable
 	/// <summary>
 	/// Enqueues a write. The single consumer takes the write side of the lock (so reads wait), publishes
 	/// <see cref="SolutionStatus.Updating"/>, runs <paramref name="transform"/> against the latest snapshot,
-	/// publishes the edited snapshot as Ready, marks a build needed, and completes with the changed paths.
+	/// regenerates the Razor output the transform's changes affect, publishes the result as Ready, marks a
+	/// build needed, and completes with the changed paths.
 	/// </summary>
 	public Task<IReadOnlyList<string>> EnqueueWriteAsync(Func<Solution, CancellationToken, Task<WriteResult>> transform, CancellationToken cancellationToken = default)
 	{
@@ -131,37 +135,6 @@ public sealed class RoslynInstance : IDisposable
 			Interlocked.Increment(ref EnqueuedWritesField);
 
 			return completion.Task;
-		}
-	}
-
-	/// <summary>
-	/// Enqueues a write and automatically triggers background diagnostics computation after the write completes.
-	/// This provides Visual Studio-like behavior where editing a file immediately updates diagnostics in the background.
-	/// </summary>
-	public async Task<IReadOnlyList<string>> EnqueueWriteWithAutoDiagnosticsAsync(Func<Solution, CancellationToken, Task<WriteResult>> transform, Func<Solution, CancellationToken, Task<IReadOnlyList<Diagnostic>>> diagnosticsCompute, CancellationToken cancellationToken = default)
-	{
-		using (RoslynkActivitySource.Instance.StartActivity($"{nameof(RoslynInstance)}.{nameof(RoslynInstance.EnqueueWriteWithAutoDiagnosticsAsync)}"))
-		{
-			if (transform is null)
-				throw new ArgumentNullException(nameof(transform));
-			if (diagnosticsCompute is null)
-				throw new ArgumentNullException(nameof(diagnosticsCompute));
-
-			IReadOnlyList<string> changedPaths = await EnqueueWriteAsync(transform, cancellationToken);
-
-			_ = Task.Run(async () =>
-			{
-				try
-				{
-					await RequestDiagnosticsAsync("auto", diagnosticsCompute, cancellationToken);
-				}
-				catch
-				{
-					// Background diagnostics failed silently diagnostics will be recomputed on next explicit request
-				}
-			});
-
-			return changedPaths;
 		}
 	}
 
@@ -231,9 +204,24 @@ public sealed class RoslynInstance : IDisposable
 			try
 			{
 				WriteResult result = await transform(current, cancellationToken);
-				AdvanceTo(result.Updated);
-				BuildNeededField = true;
-				Volatile.Write(ref DiagnosticsCacheField, null);
+
+				// A transform that found nothing to change (a watcher event for content the snapshot already
+				// holds) leaves the snapshot, and so the last diagnostics build, as it was.
+				bool changed = !ReferenceEquals(result.Updated, current);
+
+				// Regenerated here, once for every kind of write, so no write publishes generated Razor documents that
+				// disagree with its sources. Not cancellable: the transform may already have written to disk.
+				Solution updated = changed && Workspace?.Razor is RazorGenerationState razor
+					? await RazorDocumentGenerator.RegenerateForChangesAsync(current, result.Updated, razor, CancellationToken.None)
+					: result.Updated;
+				AdvanceTo(updated);
+
+				if (changed)
+				{
+					BuildNeededField = true;
+					Volatile.Write(ref DiagnosticsCacheField, null);
+				}
+
 				completion.TrySetResult(result.ChangedPaths);
 			}
 			catch (Exception exception)
@@ -307,7 +295,7 @@ public sealed class RoslynInstance : IDisposable
 					Volatile.Write(ref WorkspaceField, workspace);
 					BuildNeededField = true;
 					Volatile.Write(ref DiagnosticsCacheField, null);
-					Swap(SolutionModel.Ready(workspace.Solution, workspace.ProjectModels));
+					Swap(SolutionModel.Ready(workspace.Solution));
 					activity?.SetTag(ActivityTags.ProjectCountTag, workspace.Solution.Projects.Count());
 				}
 
@@ -419,7 +407,7 @@ public sealed class RoslynInstance : IDisposable
 				{
 					SolutionWorkspace? previous = Volatile.Read(ref WorkspaceField);
 					Volatile.Write(ref WorkspaceField, workspace);
-					Swap(SolutionModel.Ready(workspace.Solution, workspace.ProjectModels));
+					Swap(SolutionModel.Ready(workspace.Solution));
 					BuildNeededField = true;
 					Volatile.Write(ref DiagnosticsCacheField, null);
 					onReady(this);

@@ -1,7 +1,5 @@
 using System.Collections.Concurrent;
-using System.Collections.Immutable;
 using System.Diagnostics;
-using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.MSBuild;
@@ -13,8 +11,6 @@ namespace Morris.Roslynk.Infrastructure.Workspaces;
 
 public sealed class SolutionWorkspace : IDisposable
 {
-	private static readonly string[] RelevantProperties = ["EmitCompilerGeneratedFiles", "CompilerGeneratedFilesOutputPath"];
-
 	// MSBuildWorkspace loads analyzer/source-generator assemblies directly from their build-output
 	// path and holds a file lock for the lifetime of the workspace. Because Roslynk keeps solutions
 	// loaded, that lock never releases and a concurrent `dotnet build` cannot overwrite the generator's
@@ -28,20 +24,21 @@ public sealed class SolutionWorkspace : IDisposable
 
 	public Solution Solution { get; }
 
-	public ImmutableDictionary<ProjectId, ProjectModel> ProjectModels { get; }
-
 	public IReadOnlyList<string> LoadDiagnostics { get; }
+
+	/// <summary>The in-process Razor generation for this workspace's solution, for regenerating after edits.</summary>
+	public RazorGenerationState Razor { get; }
 
 	private SolutionWorkspace(
 		MSBuildWorkspace workspace,
 		Solution solution,
-		ImmutableDictionary<ProjectId, ProjectModel> projectModels,
-		IReadOnlyList<string> loadDiagnostics)
+		IReadOnlyList<string> loadDiagnostics,
+		RazorGenerationState razor)
 	{
 		Workspace = workspace;
 		Solution = solution;
-		ProjectModels = projectModels;
 		LoadDiagnostics = loadDiagnostics;
+		Razor = razor;
 	}
 
 	public static async Task<SolutionWorkspace> LoadAsync(
@@ -116,14 +113,6 @@ public sealed class SolutionWorkspace : IDisposable
 					openActivity?.SetTag(ActivityTags.ProjectCountTag, solution.Projects.Count());
 				}
 
-				ImmutableDictionary<ProjectId, ProjectModel> immutableModels;
-				using (Activity? propsActivity = RoslynkActivitySource.Instance.StartActivity("capture_project_properties"))
-				{
-					propsActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
-					immutableModels = CaptureProjectProperties(solution, workspace.Properties);
-					propsActivity?.SetTag(ActivityTags.ProjectCountTag, immutableModels.Count);
-				}
-
 				// Shadow-copy remap MUST precede the Razor augmentation: AugmentAsync requests compilations,
 				// which run source generators and therefore load every analyzer reference. If the references
 				// still use MSBuildWorkspace's default loader at that point, the originals in bin/obj get
@@ -134,92 +123,17 @@ public sealed class SolutionWorkspace : IDisposable
 					solution = UseShadowCopyAnalyzerLoaders(solution, loadDiagnostics);
 				}
 
+				var razor = new RazorGenerationState();
 				using (Activity? razorActivity = RoslynkActivitySource.Instance.StartActivity("razor_augment"))
 				{
 					razorActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
-					solution = await RazorDocumentGenerator.AugmentAsync(solution, immutableModels, cancellationToken);
+					solution = await RazorDocumentGenerator.AugmentAsync(solution, razor, cancellationToken);
 				}
 
 				loadActivity?.SetTag(ActivityTags.ProjectCountTag, solution.Projects.Count());
-				return new SolutionWorkspace(workspace, solution, immutableModels, loadDiagnostics.ToArray());
+				return new SolutionWorkspace(workspace, solution, loadDiagnostics.ToArray(), razor);
 			}
 		}
-	}
-
-	private static ImmutableDictionary<ProjectId, ProjectModel> CaptureProjectProperties(
-		Solution solution,
-		ImmutableDictionary<string, string> workspaceProperties)
-	{
-		var result = new Dictionary<ProjectId, ProjectModel>();
-
-		(Type type, ConstructorInfo ctor, MethodInfo getProp)? found = FindProjectInstanceApi();
-		if (found is null)
-			return result.ToImmutableDictionary();
-
-		var (projectInstanceType, ctor, getProp) = found.Value;
-		int ctorParamCount = ctor.GetParameters().Length;
-
-		foreach (Project project in solution.Projects)
-		{
-			if (project.FilePath is not string path)
-				continue;
-
-			var props = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-			try
-			{
-				IDictionary<string, string> globalProps = workspaceProperties.ToDictionary(
-					kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
-
-				object instance = ctorParamCount == 2
-					? ctor.Invoke([path, globalProps])
-					: ctor.Invoke([path, globalProps, null]);
-
-				foreach (string name in RelevantProperties)
-				{
-					string? value = (string?)getProp.Invoke(instance, [name]);
-					if (!string.IsNullOrEmpty(value))
-						props[name] = value;
-				}
-			}
-			catch
-			{
-			}
-
-			result[project.Id] = new ProjectModel(project.Id, path, props.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase));
-		}
-
-		return result.ToImmutableDictionary();
-	}
-
-	private static (Type, ConstructorInfo, MethodInfo)? FindProjectInstanceApi()
-	{
-		Assembly? buildAssembly = AppDomain.CurrentDomain.GetAssemblies()
-			.FirstOrDefault(a => a.GetName().Name == "Microsoft.Build");
-
-		if (buildAssembly is null) return null;
-
-		Type? type;
-		try { type = buildAssembly.GetType("Microsoft.Build.Execution.ProjectInstance"); }
-		catch { return null; }
-
-		if (type is null) return null;
-
-		MethodInfo? getProp = type.GetMethod("GetPropertyValue", [typeof(string)]);
-		if (getProp is null) return null;
-
-		ConstructorInfo? ctor = type.GetConstructors()
-			.FirstOrDefault(c =>
-			{
-				ParameterInfo[] p = c.GetParameters();
-				return p.Length >= 2 &&
-					p[0].ParameterType == typeof(string) &&
-					p[1].ParameterType == typeof(IDictionary<string, string>);
-			});
-
-		if (ctor is null) return null;
-
-		return (type, ctor, getProp);
 	}
 
 	private static Solution UseShadowCopyAnalyzerLoaders(Solution solution, ConcurrentBag<string> loadDiagnostics)

@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
@@ -155,9 +156,35 @@ public class RoslynInstanceTests
 		await subject.RequestDiagnosticsAsync("key", Compute).WaitAsync(Timeout);
 		Assert.Equal(1, compiles);
 
-		await subject.EnqueueWriteAsync((current, token) => Task.FromResult(new WriteResult(current, []))).WaitAsync(Timeout);
+		await subject.EnqueueWriteAsync((current, token) =>
+		{
+			DocumentId documentId = current.Projects.First().DocumentIds[0];
+			return Task.FromResult(new WriteResult(current.WithDocumentText(documentId, SourceText.From("// edited")), []));
+		}).WaitAsync(Timeout);
 		await subject.RequestDiagnosticsAsync("key", Compute).WaitAsync(Timeout);
 		Assert.Equal(2, compiles);
+	}
+
+	[Fact]
+	public async Task WhenAWriteChangesNothing_ThenTheCachedDiagnosticsAreStillReused()
+	{
+		using RoslynInstance subject = await LoadReadyAsync();
+
+		int compiles = 0;
+		Task<IReadOnlyList<Diagnostic>> Compute(Solution solution, CancellationToken token)
+		{
+			Interlocked.Increment(ref compiles);
+			return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
+		}
+
+		await subject.RequestDiagnosticsAsync("key", Compute).WaitAsync(Timeout);
+
+		// A watcher event for content the snapshot already holds returns the snapshot unchanged.
+		await subject.EnqueueWriteAsync((current, token) => Task.FromResult(new WriteResult(current, []))).WaitAsync(Timeout);
+		await subject.RequestDiagnosticsAsync("key", Compute).WaitAsync(Timeout);
+
+		Assert.Equal(1, compiles);
+		Assert.False(subject.BuildNeeded);
 	}
 
 	[Fact]

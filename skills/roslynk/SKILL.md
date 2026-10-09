@@ -9,7 +9,7 @@ Roslynk is an MCP server holding a live Roslyn compilation of a .NET solution. T
 
 **Default to Roslynk for all semantic work on `*.cs`, `*.cshtml` and `*.razor` files in the loaded solution.** Plain file tools remain only for what Roslynk doesn't cover: files outside the solution folder, file creation/deletion, and non-compiled files (`.csproj`, `.json`, `.md` — still editable safely via `apply_patch`).
 
-Tools that take a `documentPath` accept `.razor` and `.cshtml` files as well as `.cs`: give positions in the Razor file itself, inside its C# (`@code`/`@functions`, `@{ }`, expressions). Edits are written back to the Razor source in the file's own indentation; renames and other edits that reach a `@bind-X="Expr"` attribute's generated lambdas update the Razor source once at the attribute itself. Analyzer (`IDE*`/`CA*`) fixes are not available in Razor files, and `_Imports.razor`/`_ViewImports.cshtml` usings are never removed. In a `.cshtml` view where a new method cannot be added, `extract_method` suggests `asLocalFunction=true`.
+Tools that take a `documentPath` accept `.razor` and `.cshtml` files as well as `.cs`: give positions in the Razor file itself, inside its C# (`@code`/`@functions`, `@{ }`, expressions). Edits are written back to the Razor source in the file's own indentation; renames and other edits that reach a `@bind-X="Expr"` attribute's generated lambdas update the Razor source once at the attribute itself. Analyzer (`IDE*`/`CA*`) fixes are not available in Razor files, and `_Imports.razor`/`_ViewImports.cshtml` usings are never removed. `get_diagnostics` also reports the Razor compiler's own `RZ*` errors against the Razor file. In a `.cshtml` view where a new method cannot be added, `extract_method` suggests `asLocalFunction=true`.
 
 Each tool's exact contract — parameters, output format, limits, error codes — lives in that tool's own MCP description. This skill covers *when* to use the tools and *how* to combine them; [references/tools.md](references/tools.md) holds the deeper reference (exact output envelopes, `#if` projection mechanics) for when a tool's behavior surprises you.
 
@@ -18,13 +18,13 @@ Each tool's exact contract — parameters, output format, limits, error codes �
 1. Call `open_solution` with the absolute path to the `.sln`/`.slnx`. It returns immediately and loads in the background; the returned `solutionId` is the handle every other tool needs.
 2. While loading, other tools return `error=Indexing` — retry the call shortly, or poll `get_solution_status` (~1s) and report progress. Do **not** fall back to reading or editing files directly; loading finishes within seconds to a minute.
 3. `open_solution` is idempotent and the daemon keeps solutions warm across sessions — calling it again is cheap and safe.
-4. Never call `reload_solution` on your own initiative: the file watcher picks up all changes, including your own edits. If results look stale (branch switch, `dotnet restore`, SDK/props change), *suggest* it to the user.
+4. Never call `reload_solution` on your own initiative: the file watcher picks up all changes, including your own edits. If results look stale (branch switch, `dotnet restore`, SDK/props change, a rebuilt source generator or analyzer project), *suggest* it to the user.
 
 ## Choose semantic tools over text search
 
 | You want to... | Use | Why not grep / reading files |
 |---|---|---|
-| Check it compiles / see warnings | `get_diagnostics` | instant vs `dotnet build` |
+| Check it compiles / see warnings | `get_diagnostics`, once after the task's edits | far faster than `dotnet build`, but still costly per call |
 | Find where a symbol is used, or who calls it | `find_references` / `get_callers` | text search finds false hits and misses partial classes, generated code, `#if` branches |
 | See what a member calls (its callees) | `get_callees` | reading the body and tracing each call by eye misses overloads and extension-method bindings |
 | Find where a field, property or parameter is read or written (assign, `+=`, `++`, `ref`/`out`, initialisers) | `find_reads` / `find_writes` | text search cannot tell a read from a write; `compound`/`increment`/`ref` appear in both results, so do not add the counts |
@@ -70,8 +70,8 @@ To rename a parameter, call `rename_parameter` with the declaring member's `meth
 
 To pull code into its own method, call `extract_method` with the selection (1-based; end column exclusive - `endLine+1`, column `1` takes whole lines) and a `methodName`; add `asLocalFunction=true` for a local function. Preview with `checkOnly=true` to see the `signature` and `call` Roslyn chose. It writes nothing when the selection cannot be extracted safely or the result would not compile - read the `NotSupported` reason and adjust the selection (whole statements from one block, or one complete expression) rather than extracting by hand.
 
-## Check diagnostics after every change
+## Check diagnostics once a task's edits are done
 
-The core edit cycle: make the change (any write tool) → `get_diagnostics` (bare call; the header always reports error/warning/info/hidden counts) → if counts are non-zero, re-call with `includeErrors=true` to see the details → fix each entry via `apply_code_fix` with its id, `line` and `column` → if that returns `error=Conflict` with `candidate=` lines, the diagnostic has several fixes: pick the one whose title matches your intent and pass its actionId (the text before the first comma) to `apply_code_action`; do not retry `apply_code_fix` → repeat until clean. This replaces `dotnet build` during development. Pass `includeAnalyzers=false` for a faster compiler-only pass when style rules don't matter yet.
+The core edit cycle: make all the changes the task needs (any write tools) → `get_diagnostics` once at the end (bare call; the header always reports error/warning/info/hidden counts; each call compiles and analyzes everything the edits affect, so do not run it after every edit) → if counts are non-zero, re-call with `includeErrors=true` to see the details → fix each entry via `apply_code_fix` with its id, `line` and `column` → if that returns `error=Conflict` with `candidate=` lines, the diagnostic has several fixes: pick the one whose title matches your intent and pass its actionId (the text before the first comma) to `apply_code_action`; do not retry `apply_code_fix` → repeat until clean. This replaces `dotnet build` during development. Pass `includeAnalyzers=false` for a faster compiler-only pass when style rules don't matter yet.
 
 `find_dead_code` and `find_dead_conditionals` never delete anything — treat the results as candidates (public or reflection-used API can be a false positive), confirm intent with the user before bulk-removing, and hand each reported `loc` span to `apply_patch`.

@@ -11,4 +11,8 @@
     <ProjectReference Include="..\GeneratorLib\GeneratorLib.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
+  <ItemGroup>
+    <AdditionalFiles Include="*.csv" />
+  </ItemGroup>
+
 </Project>

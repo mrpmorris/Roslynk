@@ -25,12 +25,12 @@ public static class RazorMapping
 			&& !filePath.EndsWith("_cshtml.g.cs", StringComparison.OrdinalIgnoreCase))
 			return false;
 
-		// Pre-generated files loaded from a prior dotnet build, or documents produced by the in-process
-		// generator run (RazorDocumentGenerator's obj/RoslynkRazorGenerated folder).
-		return filePath.Contains("generated" + System.IO.Path.DirectorySeparatorChar + "Microsoft.CodeAnalysis.Razor.Compiler", StringComparison.OrdinalIgnoreCase)
-			|| filePath.Contains("generated/Microsoft.CodeAnalysis.Razor.Compiler", StringComparison.OrdinalIgnoreCase)
-			|| filePath.Contains("obj" + System.IO.Path.DirectorySeparatorChar + "RoslynkRazorGenerated", StringComparison.OrdinalIgnoreCase)
-			|| filePath.Contains("obj/RoslynkRazorGenerated", StringComparison.OrdinalIgnoreCase);
+		// Pre-generated files loaded from a prior dotnet build (under the generator's own folder, wherever
+		// CompilerGeneratedFilesOutputPath put it), or documents produced by the in-process generator run
+		// (RazorDocumentGenerator's RoslynkRazorGenerated folder). Generated paths can mix separators.
+		string normalized = filePath.Replace('\\', '/');
+		return normalized.Contains("/Microsoft.CodeAnalysis.Razor.Compiler/", StringComparison.OrdinalIgnoreCase)
+			|| normalized.Contains("/RoslynkRazorGenerated/", StringComparison.OrdinalIgnoreCase);
 	}
 
 	public static FileLinePositionSpan GetDisplaySpan(this Location location)

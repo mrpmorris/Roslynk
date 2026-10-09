@@ -3,7 +3,7 @@ namespace Morris.Roslynk.Infrastructure.Watching;
 /// <summary>
 /// The OS-facing half of the watcher: owns the <see cref="FileSystemWatcher"/>s over the directories that
 /// back the loaded documents and build files, debounces their noisy event bursts (editors save in 2-3
-/// events), and hands each changed path to <see cref="SolutionFileSync"/>. Deliberately thin and
+/// events), and hands each batch of changed paths to <see cref="SolutionFileSync"/>. Deliberately thin and
 /// best-effort; a dropped, late, or duplicated event only costs freshness, never safety, because the
 /// apply pipeline's stale-write guard is what protects the user.
 /// </summary>
@@ -35,7 +35,9 @@ public sealed class SolutionFileWatcher : IDisposable
 		var watcher = new FileSystemWatcher(target.Directory)
 		{
 			IncludeSubdirectories = target.Recursive,
-			NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Size,
+			// DirectoryName: a directory created, moved in, renamed or moved out raises one event for itself and
+			// none for the files it holds.
+			NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size,
 		};
 
 		watcher.Changed += OnChanged;
@@ -47,7 +49,14 @@ public sealed class SolutionFileWatcher : IDisposable
 		Watchers.Add(watcher);
 	}
 
-	private void OnChanged(object sender, FileSystemEventArgs e) => Queue(e.FullPath);
+	private void OnChanged(object sender, FileSystemEventArgs e)
+	{
+		// A directory's own Changed event only says a file inside it was written, which that file's event covers.
+		if (e.ChangeType == WatcherChangeTypes.Changed && Directory.Exists(e.FullPath))
+			return;
+
+		Queue(e.FullPath);
+	}
 
 	private void OnRenamed(object sender, RenamedEventArgs e)
 	{
@@ -77,15 +86,14 @@ public sealed class SolutionFileWatcher : IDisposable
 			Pending.Clear();
 		}
 
-		foreach (string path in paths)
-			_ = HandleAsync(path);
+		_ = HandleAsync(paths);
 	}
 
-	private async Task HandleAsync(string path)
+	private async Task HandleAsync(IReadOnlyList<string> paths)
 	{
 		try
 		{
-			await Sync.OnFileChangedAsync(path);
+			await Sync.OnFilesChangedAsync(paths);
 		}
 		catch
 		{

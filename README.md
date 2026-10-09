@@ -250,7 +250,7 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > - `get_type_hierarchy`: Base types, interfaces and derived types. Parameters: `solutionId`, `typeName`.
 >
 > **Diagnostics:**
-> - `get_diagnostics`: Compile check — this replaces `dotnet build`. Parameters: `solutionId`, `includeErrors`, `includeWarnings`, `includeInfo`, `includeHidden` (**all default false**), `includeAnalyzers`. The header always reports `errors=`/`warnings=`/`infos=`/`hidden=` counts, so a bare call is a cheap "does it compile?"; opt into detail only when the counts are non-zero.
+> - `get_diagnostics`: Compile check — this replaces `dotnet build`. Parameters: `solutionId`, `includeErrors`, `includeWarnings`, `includeInfo`, `includeHidden` (**all default false**), `includeAnalyzers`. The header always reports `errors=`/`warnings=`/`infos=`/`hidden=` counts; opt into detail only when they are non-zero. Costly per call (it compiles and analyzes everything the edits affect), so run it once after a task's edits, not after each one. Razor compiler (`RZ*`) errors are included, reported against the `.razor`/`.cshtml` file.
 >
 > **Code actions:**
 > - `get_code_actions`: List fixes and refactorings at a position. Parameters: `solutionId`, `documentPath`, `line`, `column`, `endLine`, `endColumn`.
@@ -288,7 +288,7 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > clobbering the other edit. Successful writes advance the in-memory model immediately, so
 > `get_diagnostics` straight afterwards reflects the change — no reload, no rebuild.
 >
-> **The edit loop:** make a change → `get_diagnostics` (bare call, read the counts) → if errors
+> **The edit loop:** make the task's changes → `get_diagnostics` once at the end (bare call, read the counts) → if errors
 > appeared, re-call with `includeErrors=true` → fix with `apply_code_fix` at each entry's `line`/`column`
 > (or `apply_code_action` with a `candidate` it offers) or `apply_patch` → repeat.
 
