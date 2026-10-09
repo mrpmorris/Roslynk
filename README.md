@@ -2,9 +2,9 @@
 
 **Roslyn + link** — the link between AI test harnesses and Roslyn.
 
-<a href="https://www.yourkit.com/"><img src="https://www.yourkit.com/images/yklogo.png" alt="YourKit" /></a>
-
-Roslynk is an open-source project using <a href="https://www.yourkit.com/dotnet-profiler/">YourKit .NET Profiler</a>.
+> <a href="https://www.yourkit.com/"><img src="https://www.yourkit.com/images/yklogo.png" alt="YourKit" /></a>
+>
+> Roslynk is an open-source project using <a href="https://www.yourkit.com/dotnet-profiler/">YourKit .NET Profiler</a>.
 
 Add the MCP to your AI harness, then type "Open (solution file name)" - that's it!
 
