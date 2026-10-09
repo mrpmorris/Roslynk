@@ -29,7 +29,7 @@ public static class CalleePlacement
 		if (location?.SourceTree is SyntaxTree tree && location.SourceTree.FilePath is string path)
 		{
 			SymbolNode start = ProjectName.Of(solution, tree) is string project ? root.Child(project) : root;
-			node = start.ChildPath(SolutionRelativePath.Of(solutionDirectory, path)!);
+			node = start.ChildPath(GeneratedSource.MarkPath(SolutionRelativePath.Of(solutionDirectory, path)!, solution, tree));
 		}
 		else
 		{

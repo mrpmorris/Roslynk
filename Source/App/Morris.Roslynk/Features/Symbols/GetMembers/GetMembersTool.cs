@@ -58,7 +58,7 @@ public sealed class GetMembersTool
 		accessibilities including private are listed; inherited members are excluded unless requested; narrow
 		a large type with nameFilter (a trailing '*' matches by prefix, otherwise a case-insensitive
 		substring) and the include* kind toggles.
-		{OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading the .cs or .razor file; it is the compiler's view,
+		{OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading the .cs or .razor file; it is the compiler's view,
 		correct across partial classes and (with includeInherited) base types.
 		""")]
 	public async Task<string> GetMembers(
@@ -227,7 +227,7 @@ public sealed class GetMembersTool
 		FileLinePositionSpan? span = reference?.SyntaxTree.GetDisplaySpan(reference.Span);
 
 		string file = span is { } located
-			? SolutionRelativePath.Of(solutionDirectory, located.Path)!
+			? GeneratedSource.MarkPath(SolutionRelativePath.Of(solutionDirectory, located.Path)!, solution, reference!.SyntaxTree)
 			: MetadataBucket;
 		string? project = reference is null ? null : ProjectName.Of(solution, reference.SyntaxTree);
 		int order = span is { } start ? start.StartLinePosition.Line + 1 : 0;

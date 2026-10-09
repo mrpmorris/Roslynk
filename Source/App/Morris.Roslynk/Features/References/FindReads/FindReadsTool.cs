@@ -47,7 +47,7 @@ public sealed class FindReadsTool
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc>,<accessKind>
 		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}.
 		{OutlineDescriptions.AccessKinds}
-		{OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock}
+		{OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock}
 		error=NotSupported is returned for a symbol that cannot be read or written (a method, type, event or local variable).
 		{OutlineDescriptions.AccessCoverage}
 		""")]
