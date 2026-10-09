@@ -101,22 +101,24 @@ public sealed class GetMembersTool
 		// configuration are included; group by fully-qualified name so the same type across projections is one.
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
 		var typeInstances = new List<(INamedTypeSymbol Type, Solution Solution)>();
-		// Keyed by signature and holding the symbol, so an ambiguous match can emit candidates that are
-		// distinguishable from each other and accepted back verbatim.
-		var distinctTypes = new Dictionary<string, INamedTypeSymbol>(StringComparer.Ordinal);
+		// Holding the symbols, so an ambiguous match can emit candidates that are distinguishable from each
+		// other and accepted back verbatim.
+		var typeIdentities = new SymbolIdentityIndex();
+		var distinctTypes = new List<INamedTypeSymbol>();
 		foreach (Projection projection in projections)
 		{
 			foreach (INamedTypeSymbol candidate in (await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(projection.Solution, typeName)).OfType<INamedTypeSymbol>())
 			{
 				typeInstances.Add((candidate, projection.Solution));
-				distinctTypes.TryAdd(ProjectionService.KeyOf(candidate), candidate);
+				if (typeIdentities.Add(candidate))
+					distinctTypes.Add(candidate);
 			}
 		}
 
 		if (distinctTypes.Count == 0)
 			return Failure(Error.NotFound($"No type matched '{typeName}'."));
 		if (distinctTypes.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(typeName, distinctTypes.Values));
+			return Failure(SymbolAmbiguity.Ambiguous(typeName, distinctTypes));
 
 		INamedTypeSymbol type = typeInstances[0].Type;
 
@@ -143,7 +145,7 @@ public sealed class GetMembersTool
 
 		// Union members across every projection instance of the type, deduped by stable identity so a member
 		// in shared code is listed once while a member declared only in an inactive branch still appears.
-		var seen = new HashSet<string>(StringComparer.Ordinal);
+		var seen = new SymbolIdentityIndex();
 		var entries = new List<(string? Project, string File, int Order, string Line, IReadOnlyList<(int Depth, string Line)> LocalFunctions)>();
 		foreach ((INamedTypeSymbol typeInstance, Solution typeSolution) in typeInstances)
 		{
@@ -152,7 +154,7 @@ public sealed class GetMembersTool
 				.Where(KindIncluded)
 				.Where(member => NameMatches(member.Name)))
 			{
-				if (!seen.Add(ProjectionService.KeyOf(member)))
+				if (!seen.Add(member))
 					continue;
 
 				(string? project, string file, int order, string line) = Render(member, typeSolution, solutionDirectory);

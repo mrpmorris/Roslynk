@@ -68,8 +68,8 @@ public sealed class ProjectionService
 	}
 
 	/// <summary>
-	/// Resolves <paramref name="name"/> in every projection and groups the results by a stable, signature-aware
-	/// key, so the same logical symbol appearing in several projections (e.g. one per TFM, or base + a toggled
+	/// Resolves <paramref name="name"/> in every projection and groups the results by <see cref="SymbolIdentityIndex"/>
+	/// identity, so the same logical symbol appearing in several projections (e.g. one per TFM, or base + a toggled
 	/// variant) collapses to a single group. Each group carries every per-projection instance, so a follow-up
 	/// query can run against the solution each instance belongs to.
 	/// </summary>
@@ -84,26 +84,22 @@ public sealed class ProjectionService
 		if (projections is null)
 			throw new ArgumentNullException(nameof(projections));
 
-		var groups = new Dictionary<string, List<ProjectionSymbol>>(StringComparer.Ordinal);
-		var order = new List<string>();
+		var identities = new SymbolIdentityIndex();
+		var groups = new List<List<ProjectionSymbol>>();
 
 		foreach (Projection projection in projections)
 		{
 			foreach (ISymbol symbol in await resolver.FindByFullyQualifiedNameAsync(projection.Solution, name, cancellationToken))
 			{
-				string key = KeyOf(symbol);
-				if (!groups.TryGetValue(key, out List<ProjectionSymbol>? group))
-				{
-					group = [];
-					groups[key] = group;
-					order.Add(key);
-				}
+				int index = identities.GroupOf(symbol, out bool isNew);
+				if (isNew)
+					groups.Add([]);
 
-				group.Add(new ProjectionSymbol(projection, symbol));
+				groups[index].Add(new ProjectionSymbol(projection, symbol));
 			}
 		}
 
-		return order.Select(key => (IReadOnlyList<ProjectionSymbol>)groups[key]).ToList();
+		return groups.Select(group => (IReadOnlyList<ProjectionSymbol>)group).ToList();
 	}
 
 	/// <summary>

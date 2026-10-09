@@ -75,28 +75,27 @@ public sealed class GetSymbolTool
 		// Resolve across every projection (with metadata fallback) so a symbol declared only in a branch
 		// inactive in the loaded configuration is still found; group by stable identity.
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
-		var bySymbol = new Dictionary<string, (ISymbol Symbol, Solution Solution)>(StringComparer.Ordinal);
-		var order = new List<string>();
+		var identities = new SymbolIdentityIndex();
+		var matches = new List<(ISymbol Symbol, Solution Solution)>();
 		foreach (Projection projection in projections)
 		{
 			foreach (ISymbol candidate in await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(projection.Solution, symbolName, cancellationToken))
 			{
-				string key = ProjectionService.KeyOf(candidate);
-				if (bySymbol.TryAdd(key, (candidate, projection.Solution)))
-					order.Add(key);
+				if (identities.Add(candidate))
+					matches.Add((candidate, projection.Solution));
 			}
 		}
 
-		if (order.Count == 0)
+		if (matches.Count == 0)
 		{
 			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
 			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", suggestions.Count > 0 ? suggestions : null));
 		}
 
-		if (order.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(symbolName, order.Select(key => bySymbol[key].Symbol)));
+		if (matches.Count > 1)
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, matches.Select(item => item.Symbol)));
 
-		(ISymbol Symbol, Solution Solution) match = bySymbol[order[0]];
+		(ISymbol Symbol, Solution Solution) match = matches[0];
 		return await DetailLeanAsync(match.Symbol, match.Solution, solutionDirectory, cancellationToken);
 	}
 

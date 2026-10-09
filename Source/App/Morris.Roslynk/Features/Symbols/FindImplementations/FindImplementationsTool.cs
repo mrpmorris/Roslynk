@@ -80,13 +80,13 @@ public sealed class FindImplementationsTool
 
 		// Union implementors across every projection (per-TFM + #if-toggle), deduped by stable symbol identity,
 		// so implementors declared in a branch that is inactive in the loaded configuration are still listed.
-		var seen = new HashSet<string>(StringComparer.Ordinal);
+		var seen = new SymbolIdentityIndex();
 		var root = new SymbolNode();
 		foreach (ProjectionSymbol projectionSymbol in resolved)
 		{
 			foreach (ISymbol implementation in await SymbolFinder.FindImplementationsAsync(projectionSymbol.Symbol, projectionSymbol.Projection.Solution))
 			{
-				if (seen.Add(ProjectionService.KeyOf(implementation)))
+				if (seen.Add(implementation))
 					SymbolPlacement.Place(root, implementation, projectionSymbol.Projection.Solution, solutionDirectory);
 			}
 		}

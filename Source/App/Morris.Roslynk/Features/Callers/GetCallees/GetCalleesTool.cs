@@ -109,7 +109,7 @@ public sealed class GetCalleesTool
 
 		// Union callees across every projection, deduped by stable symbol identity, so a callee that only
 		// compiles in a branch inactive in the loaded configuration is still reported.
-		var seen = new HashSet<string>(StringComparer.Ordinal);
+		var seen = new SymbolIdentityIndex();
 		var root = new SymbolNode();
 		foreach (ProjectionSymbol projectionSymbol in resolved)
 		{
@@ -118,7 +118,7 @@ public sealed class GetCalleesTool
 				if (excludeExternal && CalleePlacement.IsExternal(callee))
 					continue;
 
-				if (seen.Add(ProjectionService.KeyOf(callee)))
+				if (seen.Add(callee))
 					CalleePlacement.Place(root, callee, projectionSymbol.Projection.Solution, solutionDirectory);
 			}
 		}

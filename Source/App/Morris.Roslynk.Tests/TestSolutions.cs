@@ -16,6 +16,7 @@ internal static class TestSolutions
 	private static readonly Lazy<string> CodeStyleSolutionPath = new(() => Prepare("CodeStyleSolution", "CodeStyleSolution.slnx"));
 	private static readonly Lazy<string> ConditionalSolutionPath = new(() => Prepare("ConditionalSolution", "ConditionalSolution.slnx"));
 	private static readonly Lazy<string> LocalFunctionSolutionPath = new(() => Prepare("LocalFunctionSolution", "LocalFunctionSolution.slnx"));
+	private static readonly Lazy<string> MultiTargetSolutionPath = new(() => Prepare("MultiTargetSolution", "src", "MultiTarget.slnx"));
 	private static readonly Lazy<string> ExpressionSolutionPath = new(() => Prepare("ExpressionSolution", "ExpressionSolution.slnx"));
 	private static readonly Lazy<string> AccessSolutionPath = new(() => Prepare("AccessSolution", "AccessSolution.slnx"));
 	private static readonly Lazy<string> RazorMultiProjectSolutionPath = new(() => Prepare("RazorMultiProjectSolution", "RazorMultiProjectSolution.slnx"));
@@ -56,6 +57,12 @@ internal static class TestSolutions
 
 	/// <summary>A single-project solution whose method is called in both the #if DEBUG and #else branches.</summary>
 	public static string Conditional => ConditionalSolutionPath.Value;
+
+	/// <summary>
+	/// A multi-targeted (net8.0, netstandard2.0) library whose <c>Api.Accepts(Type)</c> parameter type binds in
+	/// net8.0 only.
+	/// </summary>
+	public static string MultiTarget => MultiTargetSolutionPath.Value;
 
 	/// <summary>A consumer using a type emitted by a project-referenced source generator (built on first use).</summary>
 	public static string Generator => GeneratorSolutionPath.Value;
