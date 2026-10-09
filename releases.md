@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `find_references` handles unresolved analyzers without crashing (Fixes #66)
+
 ## 2.1.0
 
 - Faster loading of solutions with Razor projects (Fixes #64)
