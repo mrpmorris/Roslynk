@@ -175,9 +175,13 @@ internal static class TestSolutions
 	public static string CreateScratchGeneratorSolution()
 	{
 		string path = CreateScratch("GeneratorSolution", "GeneratorSolution.slnx");
-		Build(Path.Combine(Path.GetDirectoryName(path)!, "GeneratorLib", "GeneratorLib.csproj"));
+		BuildScratchGenerator(path);
 		return path;
 	}
+
+	/// <summary>Builds (Debug) the generator project of a GeneratorSolution scratch copy, as a user would after load.</summary>
+	public static void BuildScratchGenerator(string solutionPath) =>
+		Build(Path.Combine(Path.GetDirectoryName(solutionPath)!, "GeneratorLib", "GeneratorLib.csproj"));
 
 	private static string CreateScratch(string fixtureName, string solutionFile)
 	{

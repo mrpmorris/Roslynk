@@ -24,7 +24,19 @@ public sealed class SolutionWorkspace : IDisposable
 
 	public Solution Solution { get; }
 
-	public IReadOnlyList<string> LoadDiagnostics { get; }
+	private readonly IReadOnlyList<string> FixedLoadDiagnostics;
+
+	/// <summary>
+	/// The load's messages: those fixed at load, plus the tracked analyzers' messages that still apply (a
+	/// skipped generator DLL drops out once it is built and attached).
+	/// </summary>
+	public IReadOnlyList<string> LoadDiagnostics => [.. FixedLoadDiagnostics, .. TrackedAnalyzers.Messages];
+
+	/// <summary>
+	/// The analyzer DLLs kept fresh after load: skipped ones that were missing, and those built by a project
+	/// of the solution. <see cref="Lifecycle.RoslynInstance"/> refreshes them on use.
+	/// </summary>
+	public TrackedAnalyzers TrackedAnalyzers { get; }
 
 	/// <summary>The in-process Razor generation for this workspace's solution, for regenerating after edits.</summary>
 	public RazorGenerationState Razor { get; }
@@ -33,11 +45,13 @@ public sealed class SolutionWorkspace : IDisposable
 		MSBuildWorkspace workspace,
 		Solution solution,
 		IReadOnlyList<string> loadDiagnostics,
+		TrackedAnalyzers trackedAnalyzers,
 		RazorGenerationState razor)
 	{
 		Workspace = workspace;
 		Solution = solution;
-		LoadDiagnostics = loadDiagnostics;
+		FixedLoadDiagnostics = loadDiagnostics;
+		TrackedAnalyzers = trackedAnalyzers;
 		Razor = razor;
 	}
 
@@ -117,10 +131,11 @@ public sealed class SolutionWorkspace : IDisposable
 				// which run source generators and therefore load every analyzer reference. If the references
 				// still use MSBuildWorkspace's default loader at that point, the originals in bin/obj get
 				// memory-mapped and locked for the lifetime of the process.
+				TrackedAnalyzers trackedAnalyzers;
 				using (Activity? shadowActivity = RoslynkActivitySource.Instance.StartActivity("shadow_copy_analyzers"))
 				{
 					shadowActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
-					solution = UseShadowCopyAnalyzerLoaders(solution, loadDiagnostics);
+					(solution, trackedAnalyzers) = UseShadowCopyAnalyzerLoaders(solution, loadDiagnostics);
 				}
 
 				var razor = new RazorGenerationState();
@@ -131,18 +146,23 @@ public sealed class SolutionWorkspace : IDisposable
 				}
 
 				loadActivity?.SetTag(ActivityTags.ProjectCountTag, solution.Projects.Count());
-				return new SolutionWorkspace(workspace, solution, loadDiagnostics.ToArray(), razor);
+				return new SolutionWorkspace(workspace, solution, loadDiagnostics.ToArray(), trackedAnalyzers, razor);
 			}
 		}
 	}
 
-	private static Solution UseShadowCopyAnalyzerLoaders(Solution solution, ConcurrentBag<string> loadDiagnostics)
+	private static (Solution Solution, TrackedAnalyzers Tracked) UseShadowCopyAnalyzerLoaders(Solution solution, ConcurrentBag<string> loadDiagnostics)
 	{
 		// One reference per path per load: projects share analyzer paths heavily (SDK analyzers), and a
 		// shared instance avoids re-reflecting over the same assembly per project. Scoped to this load —
 		// not static — so a reload after a generator rebuild creates fresh references that observe the
 		// new bits through the stamp-keyed shadow loader.
 		var referencesByPath = new Dictionary<string, AnalyzerFileReference>(StringComparer.OrdinalIgnoreCase);
+
+		// Paths kept fresh after load (see TrackedAnalyzers): a reference whose DLL did not exist, and a DLL
+		// that a project of the solution builds.
+		var tracked = new Dictionary<string, TrackedAnalyzer>(StringComparer.OrdinalIgnoreCase);
+		Dictionary<string, string> producers = ProducersByOutputPath(solution);
 
 		foreach (Project project in solution.Projects)
 		{
@@ -154,48 +174,116 @@ public sealed class SolutionWorkspace : IDisposable
 
 			foreach (AnalyzerReference reference in project.AnalyzerReferences)
 			{
-				if (reference is UnresolvedAnalyzerReference unresolvedReference)
+				string? fullPath = reference switch
 				{
-					loadDiagnostics.Add($"Skipped unresolved analyzer in project '{project.Name}': {unresolvedReference.FullPath} ({unresolvedReference.Display})");
-					changed = true;
+					UnresolvedAnalyzerReference unresolved => AbsolutePath(unresolved.FullPath, project),
+					AnalyzerFileReference file => FileStamp.NormalizePath(file.FullPath),
+					_ => null,
+				};
+
+				if (fullPath is null)
+				{
+					remapped.Add(reference);
 					continue;
 				}
 
-				if (reference is AnalyzerFileReference fileReference)
+				changed = true;
+				producers.TryGetValue(fullPath, out string? producer);
+
+				TrackedAnalyzer? entry = null;
+				if (reference is UnresolvedAnalyzerReference || producer is not null)
 				{
-					if (!referencesByPath.TryGetValue(fileReference.FullPath, out AnalyzerFileReference? shadowReference))
+					if (!tracked.TryGetValue(fullPath, out entry))
 					{
-						shadowReference = new AnalyzerFileReference(fileReference.FullPath, ShadowCopyAnalyzerLoader);
-
-						// A reference that fails to load otherwise vanishes silently: AnalyzerFileReference
-						// reports failures only through this event, and the compilation proceeds without
-						// the reference's analyzers and generators — phantom CS0246s with no visible cause.
-						shadowReference.AnalyzerLoadFailed += (_, e) =>
-							loadDiagnostics.Add($"Analyzer load failed for '{fileReference.FullPath}': {e.Message}");
-
-						// Force the load now so failures land in LoadDiagnostics before it is snapshotted;
-						// the first compilation would load these assemblies anyway.
-						_ = shadowReference.GetAnalyzers(project.Language);
-						_ = shadowReference.GetGenerators(project.Language);
-
-						referencesByPath[fileReference.FullPath] = shadowReference;
+						entry = new TrackedAnalyzer(fullPath, producer, CreateShadowReference);
+						tracked[fullPath] = entry;
 					}
 
+					entry.AddConsumer(project);
+				}
+
+				if (referencesByPath.TryGetValue(fullPath, out AnalyzerFileReference? shadowReference))
+				{
 					remapped.Add(shadowReference);
-					changed = true;
+					continue;
+				}
+
+				if (entry is null)
+				{
+					shadowReference = CreateShadowReference(fullPath, loadDiagnostics.Add, [project.Language]);
 				}
 				else
 				{
-					remapped.Add(reference);
+					// A DLL the design-time build did not find stays out of the compilation until it is built: its
+					// entry reports it (naming the project to build) and attaches it on the first use after it
+					// appears. One that appeared while the solution was loading is attached now.
+					if (FileStamp.Of(fullPath) is not string stamp)
+						continue;
+
+					// A tracked DLL reports load failures as its own message, which a later successful load
+					// clears. Stamped before loading, so a rebuild landing after this point is seen as one.
+					shadowReference = entry.Load(stamp);
+					entry.Attached = true;
 				}
+
+				referencesByPath[fullPath] = shadowReference;
+				remapped.Add(shadowReference);
 			}
 
 			if (changed)
 				solution = solution.WithProjectAnalyzerReferences(project.Id, remapped);
 		}
 
-		return solution;
+		return (solution, tracked.Count == 0 ? TrackedAnalyzers.None : new TrackedAnalyzers([.. tracked.Values]));
 	}
+
+	/// <summary>
+	/// A shadow-copied reference to <paramref name="fullPath"/>, loaded now for each of
+	/// <paramref name="languages"/>. A reference that fails to load otherwise vanishes silently:
+	/// AnalyzerFileReference reports failures only through its event, and the compilation proceeds without the
+	/// reference's analyzers and generators — phantom CS0246s with no visible cause. Forcing the load makes
+	/// failures reach <paramref name="reportFailure"/> before the caller snapshots them; the first compilation
+	/// would load these assemblies anyway.
+	/// </summary>
+	private static AnalyzerFileReference CreateShadowReference(string fullPath, Action<string> reportFailure, IEnumerable<string> languages)
+	{
+		var reference = new AnalyzerFileReference(fullPath, ShadowCopyAnalyzerLoader);
+		reference.AnalyzerLoadFailed += (_, e) => reportFailure($"Analyzer load failed for '{fullPath}': {e.Message}");
+
+		foreach (string language in languages)
+		{
+			_ = reference.GetAnalyzers(language);
+			_ = reference.GetGenerators(language);
+		}
+
+		return reference;
+	}
+
+	/// <summary>
+	/// The name of the project that builds each output path of the solution, so an analyzer reference to one
+	/// is recognized as a DLL the solution builds. Both the published path (bin) analyzer references resolve
+	/// to and the intermediate one (obj) are indexed.
+	/// </summary>
+	private static Dictionary<string, string> ProducersByOutputPath(Solution solution)
+	{
+		var producers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+		foreach (Project project in solution.Projects)
+		{
+			foreach (string? path in (string?[])[project.OutputFilePath, project.CompilationOutputInfo.AssemblyPath])
+			{
+				if (!string.IsNullOrEmpty(path))
+					producers.TryAdd(FileStamp.NormalizePath(path), project.Name);
+			}
+		}
+
+		return producers;
+	}
+
+	/// <summary>The normalized absolute path of a reference, relative ones taken from the project's directory.</summary>
+	private static string AbsolutePath(string path, Project project) =>
+		FileStamp.NormalizePath(Path.IsPathRooted(path) || project.FilePath is null
+			? path
+			: Path.Combine(Path.GetDirectoryName(project.FilePath)!, path));
 
 	public void Dispose() => Workspace.Dispose();
 }

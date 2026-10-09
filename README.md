@@ -229,7 +229,7 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 >
 > **Lifecycle:**
 > - `open_solution`: Load a solution. Parameters: `solutionPath` (absolute). Idempotent, cheap to repeat.
-> - `get_solution_status`: List every loaded solution and its progress, with the messages behind `loadDiagnostics` (skipped analyzers, failed project loads) indented under each Ready solution. Optional parameter: `allLoadDiagnostics` (every message instead of the first 20 per solution).
+> - `get_solution_status`: List every loaded solution and its progress, with the messages behind `loadDiagnostics` (skipped analyzers, failed project loads) indented under each Ready solution. A missing generator DLL names the project to build; once built, the next call picks it up without a reload. Optional parameter: `allLoadDiagnostics` (every message instead of the first 20 per solution).
 > - `reload_solution`: Force a from-disk re-evaluation. Parameter: `solutionId`. Only when the user explicitly asks.
 >
 > **Navigation:**
