@@ -5,6 +5,7 @@
 - `find_references` handles unresolved analyzers without crashing (Fixes #66)
 - `get_solution_status` lists load diagnostic messages (Fixes #69)
 - Multi-targeted projects no longer list duplicate members or report `Ambiguous` (Fixes #67)
+- `apply_patch` resolves repo-root-relative paths in multi-targeted projects and reports `NotFound`/`Ambiguous` instead of a generic `NotSupported` (Fixes #74)
 
 ## 2.1.0
 
