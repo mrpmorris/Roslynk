@@ -88,6 +88,10 @@ public sealed class InstanceRegistry : IDisposable
 				await instance.EnsureRebuiltAsync(progress => SolutionWorkspace.LoadAsync(key.FilePath, progress), AttachWatcher);
 			}
 
+			// Build output is invisible to the watcher, so a generator DLL built or rebuilt since the last use is
+			// noticed here, and attached before the caller reads.
+			await instance.RefreshTrackedAnalyzersAsync();
+
 			instance.Touch();
 			return instance;
 		}

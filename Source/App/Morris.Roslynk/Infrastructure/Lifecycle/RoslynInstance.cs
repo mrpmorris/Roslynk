@@ -98,6 +98,20 @@ public sealed class RoslynInstance : IDisposable
 		Watcher = watcher;
 	}
 
+	/// <summary>
+	/// Attaches a fresh reference for every tracked analyzer DLL (see <see cref="TrackedAnalyzers"/>) built or
+	/// rebuilt since it was last attached, as a write ordered with every other, and completes once that write
+	/// is published, so the caller's next read compiles with the new generator. Free when nothing changed.
+	/// </summary>
+	public Task RefreshTrackedAnalyzersAsync()
+	{
+		if (Workspace is not SolutionWorkspace workspace || CurrentModel.Solution is null)
+			return Task.CompletedTask;
+
+		return workspace.TrackedAnalyzers.RefreshAsync(transform =>
+			EnqueueWriteAsync((current, _) => Task.FromResult(new WriteResult(transform(current), []))));
+	}
+
 	/// <summary>A task that completes when the first load finishes, whether it became Ready or Faulted.</summary>
 	public Task WaitUntilReadyAsync() => ReadySignal.Task;
 

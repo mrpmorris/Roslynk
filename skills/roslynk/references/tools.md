@@ -70,8 +70,10 @@ When the load reported messages (the count `open_solution` shows as `loadDiagnos
 
 ```
 C:\repo\GeneratorSolution.slnx,Ready,2/2
-	loadDiagnostic=Skipped unresolved analyzer in project 'ConsumerLib': C:\repo\GeneratorLib\bin\Debug\netstandard2.0\GeneratorLib.dll (...)
+	loadDiagnostic=Skipped unresolved analyzer in project 'ConsumerLib': 'C:\repo\GeneratorLib\bin\Debug\netstandard2.0\GeneratorLib.dll' does not exist, so the generated code of project 'GeneratorLib' is unavailable. Build project 'GeneratorLib' in the configuration this path names; the next call picks it up without a reload.
 ```
+
+A missing generator DLL (typically a generator project referenced as an analyzer and built only in Release, while Roslynk loads Debug) is reported with the project that builds it. Every data tool call compares the file stamps of such DLLs, and of every analyzer DLL a project of the solution builds, with the ones loaded: a DLL built or rebuilt since is attached before the call reads, so that call already sees the new generated code, wherever the DLL lives (`bin`, an artifacts directory, outside the solution). No reload is needed. The message goes away once the DLL exists; a DLL that then fails to load is reported as `Analyzer load failed for '<path>': ...` until a later build loads.
 
 ### reload_solution
 `solutionId` (required). Forces a from-disk MSBuild re-evaluation; the old snapshot keeps serving as `Building` until the fresh one is ready. Manual backstop for missed watcher events (network/WSL filesystems), `dotnet restore`, SDK/`global.json`/`Directory.Build.props` changes, branch switches, or retrying a `Faulted` load. **Never call it unless the user explicitly instructs you to** — suggest it instead.
