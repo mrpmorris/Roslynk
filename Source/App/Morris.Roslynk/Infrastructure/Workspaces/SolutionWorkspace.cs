@@ -154,6 +154,13 @@ public sealed class SolutionWorkspace : IDisposable
 
 			foreach (AnalyzerReference reference in project.AnalyzerReferences)
 			{
+				if (reference is UnresolvedAnalyzerReference unresolvedReference)
+				{
+					loadDiagnostics.Add($"Skipped unresolved analyzer in project '{project.Name}': {unresolvedReference.FullPath} ({unresolvedReference.Display})");
+					changed = true;
+					continue;
+				}
+
 				if (reference is AnalyzerFileReference fileReference)
 				{
 					if (!referencesByPath.TryGetValue(fileReference.FullPath, out AnalyzerFileReference? shadowReference))
