@@ -1,6 +1,8 @@
 # Releases
 
-# Unreleased
+## Unreleased
+
+## 2.1.0
 
 - Faster loading of solutions with Razor projects (Fixes #64)
 - `get_diagnostics` recomputes only the projects an edit can affect, so a repeat call with nothing changed is near-instant (Fixes #64)
