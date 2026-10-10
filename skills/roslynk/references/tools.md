@@ -189,9 +189,19 @@ MyApp
 ## Diagnostics
 
 ### get_diagnostics
-`solutionId`, `includeErrors`/`includeWarnings`/`includeInfo`/`includeHidden` (**all default false**), `includeAnalyzers` (default true; `false` = faster compiler-only pass).
+`solutionId`, `includeErrors`/`includeWarnings`/`includeInfo`/`includeHidden` (**all default false**), `includeAnalyzers` (default true; `false` = faster compiler-only pass), and five optional filters: `projectName`, `filePath`, `ids` (a JSON array of strings - the tool surface's only array parameter), `maxResults` and `summaryOnly`.
 
 **Costly:** it compiles and analyzes every project the edits since the last call affect (seconds on a large solution), so make all of a task's edits first and call it once at the end rather than after every edit. Header always carries `errors=`, `warnings=`, `infos=`, `hidden=` counts regardless of include flags, so filtering is never silent. Body (per included severity) nests file→severity→`<id>,<line:col>,<message>`. Ids that exist only to trigger a code fix (they carry no message and accompany a public rule, as IDE0005's does) are not listed; fix the public id instead. Multi-targeted projects report diagnostics across their loaded target frameworks. The Razor compiler's own diagnostics (`RZ*`, e.g. `RZ1006` for an unclosed `@code` block) are reported against the `.razor`/`.cshtml` file with Razor-source positions, once even for a multi-targeted project (not when the Razor compiler cannot be loaded and the last build's generated output is used instead). Results are cached per `includeAnalyzers`: a repeat call with no change in between is near-instant, and after a change only the edited projects and the projects depending on them are recomputed. This replaces `dotnet build` for correctness checking.
+
+**Filters** narrow the result after compilation, so a filtered call still reuses the cached result and recompiles nothing; they combine (AND):
+
+- `projectName`: only that project's diagnostics - exactly the name the outline prints (the project file name with the `.csproj` extension omitted; other extensions such as `.vbproj` are kept, and a trailing `.csproj` you pass is stripped). Case-insensitive, and it matches every loaded target framework of a multi-targeted project.
+- `filePath`: only diagnostics located in that file - absolute or relative to the solution folder (the same spellings `find_definition` accepts), case-insensitive. A `.razor`/`.cshtml` path also matches the C# diagnostics `#line`-mapped into it and the `RZ*` diagnostics reported against it.
+- `ids`: only those diagnostic ids, e.g. `["CS0246","CS0103"]`, case-insensitive. Omit, or pass an empty list, for every id.
+- `maxResults`: caps the entries listed in the body (id rows in summary mode). When something is dropped, `count=<total available>` and `truncated=Y` precede the body; both are absent otherwise, so the body is then the complete set. The per-severity header counts always stay complete.
+- `summaryOnly`: `true` replaces the body with one line per id - `<id>,<count>,<project>,<path>,<line:col>,<message>` - ordered by count descending then id, carrying each id's count, one example location (its first diagnostic in body order) and that example's message. It covers every severity unless an include flag is set. `maxResults` caps the id rows, with `count=` counting rows.
+
+Every active filter is echoed as a `filter=<parameter>:<value>` header before the counts, and the counts describe the **filtered** set - `errors=3` under a `filter=` line means 3 errors in that filtered scope, not 3 in the solution. An empty body with a `filter=` header means the filter matched nothing, NOT that the solution is clean. A `projectName` or `filePath` that is not in the solution is `error=NotFound` with `candidate=` values (one of which the tool would accept); one that exists but has no diagnostics returns zero counts, not an error. An `ids` entry that matches nothing is zero counts too - ids are open-ended and never validated.
 
 ## Razor and CSHTML
 
