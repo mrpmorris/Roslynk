@@ -70,6 +70,7 @@ internal static class OutlineDescriptions
 		the solution is not Ready (Building or Faulted); its absence means Ready.
 		When a parameter specifies a default value you should not pass a value to it unless you certainly need
 		the non-default behaviour.
+		{OutputBudget}
 		{Freshness}
 		""";
 
@@ -77,6 +78,12 @@ internal static class OutlineDescriptions
 	public const string Truncation =
 		"If the result is capped at maxResults, a count=<total available> and truncated=Y header precede the "
 		+ "body; both are absent when nothing was dropped, so the body is then the complete set.";
+
+	/// <summary>How an oversized result announces the generic budget cut (the wrapper's last resort).</summary>
+	public const string OutputBudget =
+		"A result longer than the response budget (about 80,000 characters) is cut after its last whole line "
+		+ "and starts with outputTruncated=Y and fullOutputChars=<n>; narrow the request (a filter, maxResults "
+		+ "or a paging parameter) to see the rest.";
 
 	/// <summary>
 	/// How a capped result announces truncation when it cannot cheaply know the total (a scan that

@@ -21,7 +21,7 @@ builder.Services.AddWindowsService(options => options.ServiceName = "Roslynk");
 builder.AddLoopbackOnlyKestrel();
 builder.AddRoslynkObservability();
 
-builder.Services.AddRoslynk();
+builder.Services.AddRoslynk(ResponseBudgetConfiguration.FromConfiguration(builder.Configuration));
 builder.Services.AddHostedService<IdleEvictionService>();
 
 builder.Services

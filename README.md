@@ -240,10 +240,10 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > - `find_definition`: Go to definition from a cursor position. Parameters: `solutionId`, `filePath`, `line`, `column` (1-based).
 > - `get_expression_info`: Compiler facts about the expression at a position: type and converted type, bound symbol and selected overload, nullability, constant value, implicit conversion, origin and doc summary; on a declared name, the declared symbol and its type. Parameters: `solutionId`, `filePath` (`.cs`/`.razor`/`.cshtml`), `line`, `column` (1-based).
 > - `get_symbol`: Identify a symbol and get its declaration. Parameters: `solutionId`, `symbolName` (fully-qualified).
-> - `get_symbol_body`: Read a symbol's complete source text, body included. Parameters: `solutionId`, `symbolName` (fully-qualified), `includeLeadingTrivia`.
+> - `get_symbol_body`: Read a symbol's source text, body included. Parameters: `solutionId`, `symbolName` (fully-qualified), `includeLeadingTrivia`, `startLine` (page a long declaration; the response reports `truncated=Y`/`totalLines`/`nextStartLine`), `maxLines` (default 400), `part` (fetch one declaration of a partial type; oversized parts are listed with `omitted=Y` and line counts).
 > - `get_members`: List a type's members with their locations. Parameters: `solutionId`, `typeName`, `includeInherited`, `nameFilter`, `includeMethods`/`includeFields`/`includeProperties`/`includeEvents`/`includeNestedTypes`.
 > - `search_symbols`: Find symbols by partial name. Parameters: `solutionId`, `query`, `maxResults`.
-> - `multi_query`: Run several of the read-only queries above in one call, against a single snapshot of the solution. Parameters: `solutionId`, `operations` (each names a tool and carries that tool's own parameters), optional `expectSnapshot`. See the skill's multi_query section. For impact questions ("what uses X?", "what breaks if I change X?"), batch `find_references`, `get_callers`, `get_callees`, `find_implementations` and `get_type_hierarchy` in one call.
+> - `multi_query`: Run several of the read-only queries above in one call, against a single snapshot of the solution. Parameters: `solutionId`, `operations` (each names a tool and carries that tool's own parameters), optional `expectSnapshot`. The whole response stays within the server's response budget (80,000 characters by default); an over-budget slot is cut at a line boundary and marked `truncated=Y`, remaining slots return `error=Truncated` with `truncatedSlots=<n>`. See the skill's multi_query section. For impact questions ("what uses X?", "what breaks if I change X?"), batch `find_references`, `get_callers`, `get_callees`, `find_implementations` and `get_type_hierarchy` in one call.
 >
 > **Relationships:**
 > - `find_references`: Every usage of a symbol. Parameters: `solutionId`, `symbolName`, `maxResults`.
@@ -308,6 +308,8 @@ For a foreground daemon with visible logs:
 ```
 
 Listens on `http://localhost:6502`. Point your MCP client at that URL (streamable HTTP). Ctrl+C stops it.
+
+The response budget (the character cap every tool result is held under; default 80,000) is read once at startup from `Roslynk:MaxResponseChars` in `appsettings.json` or the `Roslynk__MaxResponseChars` environment variable. A shared daemon serves every client with one value — set the smallest cap your clients need, and restart the daemon to change it.
 
 ## Run (Windows)
 

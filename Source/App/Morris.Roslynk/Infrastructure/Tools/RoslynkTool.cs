@@ -10,10 +10,12 @@ using Morris.Roslynk.Infrastructure.Results;
 namespace Morris.Roslynk.Infrastructure.Tools;
 
 /// <summary>
-/// Wraps every Roslynk tool so the two failure modes that bypass a tool's own error handling are covered:
-/// the published schema is rewritten so defaulted parameters are genuinely omittable, and an argument the
+/// Wraps every Roslynk tool so three failure modes that bypass a tool's own error handling are covered:
+/// the published schema is rewritten so defaulted parameters are genuinely omittable, an argument the
 /// SDK cannot bind - a wrong type, an unparseable value - comes back as the standard header-only
-/// 'error='/'errorMessage=' result instead of an unhandled exception.
+/// 'error='/'errorMessage=' result instead of an unhandled exception, and a result larger than the
+/// server-wide <see cref="ResponseBudget"/> is cut after its last whole line and marked (the backstop for
+/// tools that cannot page yet; multi_query and get_symbol_body stay under the budget by construction).
 /// </summary>
 /// <remarks>
 /// A C# optional parameter is emitted by the MCP SDK as a property that is absent from "required" but
@@ -30,11 +32,13 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 		new() { MoveDefaultKeywordToDescription = true };
 
 	private readonly Tool Published;
+	private readonly ResponseBudget Budget;
 
-	public RoslynkTool(McpServerTool innerTool)
+	public RoslynkTool(McpServerTool innerTool, ResponseBudget? budget = null)
 		: base(innerTool)
 	{
 		Published = Republish(innerTool.ProtocolTool);
+		Budget = budget ?? ResponseBudget.Default;
 	}
 
 	public override Tool ProtocolTool => Published;
@@ -45,7 +49,19 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 	{
 		try
 		{
-			return await base.InvokeAsync(request, cancellationToken);
+			CallToolResult result = await base.InvokeAsync(request, cancellationToken);
+
+			// Last line of defence for tools that cannot page yet (get_members on a huge type, get_callers,
+			// get_diagnostics with detail flags): a result over the budget is cut after its last whole line
+			// and marked. multi_query (exact reservation) and get_symbol_body (self-paging) never hit this.
+			if (result.Content is [TextContentBlock { } text, ..] && text.Text.Length > Budget.MaxChars)
+				result = new CallToolResult
+				{
+					Content = [new TextContentBlock { Text = ResponseBudget.Fit(text.Text, Budget.MaxChars) }],
+					IsError = result.IsError
+				};
+
+			return result;
 		}
 		catch (OperationCanceledException)
 		{

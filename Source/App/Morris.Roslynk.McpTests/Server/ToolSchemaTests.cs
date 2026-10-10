@@ -164,6 +164,27 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 			: type.GetString()!;
 	}
 
+	[Fact]
+	public void WhenGetSymbolBodyIsPublished_ThenItsPagingParametersAreOptionalIntegers()
+	{
+		JsonElement schema = Tools.Single(tool => tool.ProtocolTool.Name == "get_symbol_body").ProtocolTool.InputSchema;
+		IReadOnlyDictionary<string, JsonElement> properties = Properties(schema);
+		IReadOnlyCollection<string> required = Required(schema);
+
+		// The paging parameters are plain omittable integers - their defaults live in the descriptions, the
+		// MoveDefaultKeywordToDescription transform having stripped the schema's default keyword.
+		foreach (string name in new[] { "startLine", "maxLines", "part" })
+		{
+			Assert.True(properties.ContainsKey(name), $"{name} is missing from the get_symbol_body schema.");
+			Assert.Equal("integer", properties[name].GetProperty("type").GetString());
+			Assert.DoesNotContain(name, required);
+		}
+
+		Assert.Contains("Default 400", properties["maxLines"].GetProperty("description").GetString(), StringComparison.Ordinal);
+		Assert.Contains("Default 1", properties["startLine"].GetProperty("description").GetString(), StringComparison.Ordinal);
+		Assert.Contains("Default 0", properties["part"].GetProperty("description").GetString(), StringComparison.Ordinal);
+	}
+
 	private static IEnumerable<(string ToolName, MethodInfo Method)> ToolMethods()
 	{
 		foreach (Type type in typeof(ServicesRegistration).Assembly.GetTypes())
