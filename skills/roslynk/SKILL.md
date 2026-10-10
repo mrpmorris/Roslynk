@@ -34,7 +34,7 @@ Each tool's exact contract — parameters, output format, limits, error codes �
 | See a type's members (and their local functions) / what a name refers to | `get_members` / `get_symbol` | compiler's view; correct across partial classes |
 | Read a member's implementation (incl. a partial method's implementation part, and members only a generator declares) | `get_symbol_body` | returns the declaration verbatim, paged when long (`truncated=Y` → re-call with `startLine=<nextStartLine>`; a partial type's `omitted=Y` part is fetched with `part=<n>`); a path marked `generated=Y` is virtual - read it with this tool, not from disk |
 | Explore base/derived types | `get_type_hierarchy` | includes referenced-assembly base types |
-| Find a symbol by partial name | `search_symbols` | compiler-declared symbols |
+| Find a symbol by partial name | `search_symbols` | compiler-declared symbols, generated code included |
 | Rename a symbol everywhere (incl. `.razor`/`.cshtml`) | `rename_symbol` | find-and-replace misses markup and same-named text; a symbol only a source generator declares is refused (`error=NotSupported`) - change the generator's input instead |
 | Rename one parameter of a method/constructor/indexer | `rename_parameter` | also fixes named arguments, `<paramref>` docs and the override/interface family |
 | Fix a diagnostic `get_diagnostics` reported (incl. `.razor`/`.cshtml`) | `apply_code_fix` with that entry's id, `line` and `column`; on `error=Conflict`, ask the user which candidate, unless the request names one, then `apply_code_action` with its actionId | hand-editing |

@@ -35,7 +35,7 @@ public sealed class SearchSymbolsTool
 	[Description(
 		$"""
 		Searches source-declared symbols whose name contains the query (case-insensitive), across the
-		solution.
+		solution, declarations a source generator emits included.
 		{OutlineDescriptions.ProjectionCoverage}
 		{OutlineDescriptions.CommonMethodInstructions}
 		Local functions are included, nesting under the member (and any outer local functions) that declares
@@ -71,19 +71,29 @@ public sealed class SearchSymbolsTool
 
 		// Search every projection so declarations that compile only in a branch inactive in the loaded
 		// configuration are included; dedupe by fully-qualified name across projections.
-		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution, token);
 		var seen = new SymbolIdentityIndex();
 		var matched = new List<(ISymbol Symbol, Solution Solution)>();
+		Func<string, bool> predicate = name => name.Contains(query, StringComparison.OrdinalIgnoreCase);
 		foreach (Projection projection in projections)
 		{
-			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(projection.Solution, name => name.Contains(query, StringComparison.OrdinalIgnoreCase)))
+			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(projection.Solution, predicate, token))
 			{
 				if (seen.Add(symbol))
 					matched.Add((symbol, projection.Solution));
 			}
 
-			// Local functions are not in the declaration index, so they are found by walking the syntax.
-			foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(projection.Solution, name => name.Contains(query, StringComparison.OrdinalIgnoreCase), token))
+			// Roslyn's declaration search covers source-generated documents only when a hand-written
+			// declaration in the same project also matches, so the generated ones are asked for directly.
+			foreach (ISymbol symbol in await SourceGeneratedDeclarations.FindAsync(projection.Solution, predicate, token))
+			{
+				if (seen.Add(symbol))
+					matched.Add((symbol, projection.Solution));
+			}
+
+			// Local functions are not in the declaration index, so they are found by walking the syntax
+			// (source-generated documents included).
+			foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(projection.Solution, predicate, token))
 			{
 				if (seen.Add(local))
 					matched.Add((local, projection.Solution));
