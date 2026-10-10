@@ -12,67 +12,7 @@ namespace Morris.Roslynk.Tests.Features.Callers.GetCalleesTests;
 /// </summary>
 public class GetCalleesCoverageTests : IClassFixture<GetCalleesCoverageTests.ScratchSolution>
 {
-	private const string Source = """
-		using System;
-		using System.Collections.Generic;
-		using System.Threading.Tasks;
-
-		namespace SimpleLibrary;
-
-		public struct Money
-		{
-			public int Value;
-			public static Money operator +(Money left, Money right) => left;
-			public static Money operator ++(Money value) => value;
-			public static implicit operator int(Money value) => value.Value;
-		}
-
-		public class Resource : IDisposable
-		{
-			public void Dispose() { }
-		}
-
-		public class CoverageProbe
-		{
-			public event EventHandler? Changed;
-			public int Prop { get; set; }
-			public static int StaticField = StaticInit();
-			public int Field = FieldInit();
-			public int Computed => ExpressionBodied();
-			public int Accessors { get => AccessorGet(); set => AccessorSet(value); }
-			public int AutoWithInitializer { get; set; } = PropertyInit();
-
-			public CoverageProbe() { DefaultBody(); }
-			public CoverageProbe(int chained) : this() { ChainedBody(); }
-
-			public void UserOperators(Money money)
-			{
-				money += money;
-				money++;
-				int number = money;
-			}
-
-			public void ForEach(List<int> numbers) { foreach (int number in numbers) { } }
-			public async Task Awaits() { await Task.Delay(1); }
-			public void ExplicitAwaiter(Task task) { task.GetAwaiter().GetResult(); }
-			public void Uses() { using var resource = new Resource(); }
-			public void Subscribes() { Changed += Handler; }
-			public void MethodGroup(List<int> numbers) { numbers.ForEach(Visit); }
-			public void Increments() { Prop++; }
-			public void ReadsEventField() { Changed?.Invoke(this, EventArgs.Empty); }
-
-			private void Handler(object? sender, EventArgs e) { }
-			private void Visit(int number) { }
-			private static int StaticInit() => 0;
-			private static int FieldInit() => 0;
-			private static int PropertyInit() => 0;
-			private static int ExpressionBodied() => 0;
-			private static int AccessorGet() => 0;
-			private static void AccessorSet(int value) { }
-			private static void DefaultBody() { }
-			private static void ChainedBody() { }
-		}
-		""";
+	private const string Source = CoverageFixture.Probe;
 
 	private readonly ScratchSolution Scratch;
 

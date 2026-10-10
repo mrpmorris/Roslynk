@@ -22,12 +22,16 @@ public sealed class SymbolResolver
 	/// <summary>
 	/// The namespace-qualified name (no <c>global::</c> prefix) used as a symbol's identity. A local function is
 	/// named as a member of the member declaring it, <c>N.T.Method.local</c>, which Roslyn's own display (the
-	/// bare <c>local</c>) does not do.
+	/// bare <c>local</c>) does not do. Operators and conversions are named by their metadata name
+	/// (<c>N.T.op_Addition</c>) — the leaf get_callees prints — rather than Roslyn's display
+	/// (<c>N.T.operator +(T, T)</c>), which no query accepts.
 	/// </summary>
 	public static string FullyQualifiedName(ISymbol symbol) =>
 		symbol is IMethodSymbol local && LocalFunctions.IsLocalFunction(local)
 			? $"{FullyQualifiedName(LocalFunctions.NamedContainer(local))}.{local.ToDisplayString(FullyQualifiedFormat)}"
-			: symbol.ToDisplayString(FullyQualifiedFormat);
+			: symbol is IMethodSymbol { MethodKind: MethodKind.UserDefinedOperator or MethodKind.Conversion } @operator
+				? $"{@operator.ContainingType.ToDisplayString(FullyQualifiedFormat)}.{@operator.Name}"
+				: symbol.ToDisplayString(FullyQualifiedFormat);
 
 	/// <summary>
 	/// The name a caller should send to reach this exact symbol: <see cref="FullyQualifiedName"/> plus a
@@ -104,6 +108,27 @@ public sealed class SymbolResolver
 					SymbolSignature.SymbolMatchKind kind = SymbolSignature.Classify(local, query);
 					if (kind != SymbolSignature.SymbolMatchKind.None && seen.Add(local))
 						(kind == SymbolSignature.SymbolMatchKind.Exact ? exact : relaxed).Add(local);
+				}
+			}
+
+			// Operators are not in the declaration index either (they are declared with an operator token, not a
+			// name), but get_callees prints their metadata names as leaves. After an ordinary miss, scan the named
+			// container's members for that exact name; the classification below still applies.
+			if (exact.Count == 0 && relaxed.Count == 0 && query.Qualified && query.ListKind != ParameterListKind.Brackets
+				&& query.SimpleName.StartsWith("op_", StringComparison.Ordinal))
+			{
+				string containerName = query.QualifiedName[..query.QualifiedName.LastIndexOf('.')];
+				foreach (ISymbol container in await FindByFullyQualifiedNameAsync(solution, containerName, cancellationToken))
+				{
+					if (container is not INamedTypeSymbol type)
+						continue;
+
+					foreach (ISymbol member in type.GetMembers(query.SimpleName))
+					{
+						SymbolSignature.SymbolMatchKind kind = SymbolSignature.Classify(member, query);
+						if (kind != SymbolSignature.SymbolMatchKind.None && seen.Add(member))
+							(kind == SymbolSignature.SymbolMatchKind.Exact ? exact : relaxed).Add(member);
+					}
 				}
 			}
 
