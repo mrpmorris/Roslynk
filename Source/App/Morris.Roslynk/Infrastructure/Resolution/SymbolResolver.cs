@@ -377,7 +377,9 @@ public sealed class SymbolResolver
 
 	/// <summary>
 	/// Resolves the symbol referenced at a 1-based <paramref name="line"/>/<paramref name="column"/> in
-	/// the given file, or null if the file is not in the solution or no symbol sits there.
+	/// the given file, or null if the file is not in the solution or no symbol sits there. A file compiled
+	/// into several projects (one per target framework) is resolved in each, and the answer whose signature
+	/// binds (<see cref="ErrorTypeCount"/>) is kept; a bound answer stops the walk early.
 	/// </summary>
 	public async Task<ISymbol?> ResolveAtPositionAsync(Solution solution, string filePath, int line, int column, CancellationToken cancellationToken = default)
 	{
@@ -387,26 +389,46 @@ public sealed class SymbolResolver
 			activity?.SetTag("roslynk.line", line);
 			activity?.SetTag("roslynk.column", column);
 
-			Document? document = FindDocument(solution, filePath);
-			if (document is null)
-				return null;
+			ISymbol? best = null;
+			int bestErrors = int.MaxValue;
+			foreach (Document document in FindDocuments(solution, filePath))
+			{
+				ISymbol? symbol = await ResolveInAsync(document, line, column, solution.Workspace, cancellationToken);
+				if (symbol is null)
+					continue;
 
-			SourceText text = await document.GetTextAsync(cancellationToken);
-			if (line < 1 || line > text.Lines.Count)
-				return null;
+				int errors = ErrorTypeCount.Of(symbol);
+				if (errors < bestErrors)
+				{
+					best = symbol;
+					bestErrors = errors;
+				}
 
-			TextLine textLine = text.Lines[line - 1];
-			int position = Math.Min(textLine.Start + Math.Max(0, column - 1), textLine.End);
+				if (bestErrors == 0)
+					break;
+			}
 
-			SemanticModel? semanticModel = await document.GetSemanticModelAsync(cancellationToken);
-			if (semanticModel is null)
-				return null;
-
-			return await SymbolFinder.FindSymbolAtPositionAsync(semanticModel, position, solution.Workspace, cancellationToken);
+			return best;
 		}
 	}
 
-	private static Document? FindDocument(Solution solution, string filePath)
+	private static async Task<ISymbol?> ResolveInAsync(Document document, int line, int column, Workspace workspace, CancellationToken cancellationToken)
+	{
+		SourceText text = await document.GetTextAsync(cancellationToken);
+		if (line < 1 || line > text.Lines.Count)
+			return null;
+
+		TextLine textLine = text.Lines[line - 1];
+		int position = Math.Min(textLine.Start + Math.Max(0, column - 1), textLine.End);
+
+		SemanticModel? semanticModel = await document.GetSemanticModelAsync(cancellationToken);
+		if (semanticModel is null)
+			return null;
+
+		return await SymbolFinder.FindSymbolAtPositionAsync(semanticModel, position, workspace, cancellationToken);
+	}
+
+	private static IEnumerable<Document> FindDocuments(Solution solution, string filePath)
 	{
 		string fullPath = SolutionRelativePath.ToAbsolute(SolutionRelativePath.DirectoryOf(solution), filePath);
 		foreach (Project project in solution.Projects)
@@ -416,11 +438,9 @@ public sealed class SymbolResolver
 				if (document.FilePath is not null
 					&& string.Equals(Path.GetFullPath(document.FilePath), fullPath, StringComparison.OrdinalIgnoreCase))
 				{
-					return document;
+					yield return document;
 				}
 			}
 		}
-
-		return null;
 	}
 }

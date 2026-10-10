@@ -74,7 +74,8 @@ public sealed class GetSymbolTool
 
 		// Resolve across every projection (with metadata fallback) so a symbol declared only in a branch
 		// inactive in the loaded configuration is still found; the strictest matching level any projection
-		// reached decides for all of them, and grouping is by stable identity.
+		// reached decides for all of them, and grouping is by stable identity, keeping the best-bound copy
+		// of each declaration so its spelling is the one echoed.
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
 		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups =
 			await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName, includeMetadata: true, accept: null, cancellationToken);

@@ -71,7 +71,9 @@ public sealed class ProjectionService
 	/// Resolves <paramref name="name"/> in every projection and groups the results by <see cref="SymbolIdentityIndex"/>
 	/// identity, so the same logical symbol appearing in several projections (e.g. one per TFM, or base plus a toggled
 	/// variant) collapses to a single group. Each group carries every per-projection instance, so a follow-up
-	/// query can run against the solution each instance belongs to.
+	/// query can run against the solution each instance belongs to. Within a group the copies are ordered
+	/// best-bound first (<see cref="ErrorTypeCount.Of(ISymbol)"/>), so <c>group[0]</c> — the copy whose name the
+	/// tools echo — is one whose signature actually bound.
 	/// </summary>
 	public Task<IReadOnlyList<IReadOnlyList<ProjectionSymbol>>> ResolveAsync(
 		SymbolResolver resolver,
@@ -143,7 +145,17 @@ public sealed class ProjectionService
 			}
 		}
 
-		return groups.Select(group => (IReadOnlyList<ProjectionSymbol>)group).ToList();
+		// Within a group, prefer the copy whose signature bound: the tools echo the head of the group (and feed
+		// it to candidates, hierarchy walks and source resolution), and a copy from a target framework where a
+		// parameter type failed to bind would leak that unresolved spelling into every name Roslynk prints.
+		// OrderBy is stable, so copies that bind equally keep discovery order — base projection first, then
+		// project order — and an all-bound group is unchanged. Grouping itself is untouched: GroupOf computed
+		// each copy's signature/location keys at insertion, so reordering cannot merge or split groups.
+		return groups
+			.Select(group => (IReadOnlyList<ProjectionSymbol>)group
+				.OrderBy(copy => ErrorTypeCount.Of(copy.Symbol))
+				.ToList())
+			.ToList();
 	}
 
 	/// <summary>

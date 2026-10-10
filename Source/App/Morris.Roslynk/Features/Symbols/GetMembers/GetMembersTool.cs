@@ -99,7 +99,8 @@ public sealed class GetMembersTool
 
 		// Resolve the type in every projection so members declared in a branch inactive in the loaded
 		// configuration are included; the strictest matching level any projection reached decides for all
-		// of them, and grouping by fully-qualified name keeps the same type across projections one.
+		// of them, and grouping by fully-qualified name keeps the same type across projections one. The
+		// copy kept as the representative is the best bound, so its parameter types are the ones echoed.
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
 		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(
 			SymbolResolver,
@@ -118,7 +119,13 @@ public sealed class GetMembersTool
 		var typeInstances = groups[0]
 			.Select(projectionSymbol => (Type: (INamedTypeSymbol)projectionSymbol.Symbol, projectionSymbol.Projection.Solution))
 			.ToList();
-		INamedTypeSymbol type = typeInstances[0].Type;
+
+		// Of the copies of the same type across projections, the best-bound one is the representative
+		// whose signature is echoed.
+		var typeCopies = new DeclarationCopies<Solution>();
+		foreach ((INamedTypeSymbol typeInstance, Solution typeSolution) in typeInstances)
+			typeCopies.Add(typeInstance, typeSolution);
+		INamedTypeSymbol type = (INamedTypeSymbol)typeCopies.Items.Single().Symbol;
 
 		bool NameMatches(string name)
 		{
@@ -142,9 +149,9 @@ public sealed class GetMembersTool
 			};
 
 		// Union members across every projection instance of the type, deduped by stable identity so a member
-		// in shared code is listed once while a member declared only in an inactive branch still appears.
-		var seen = new SymbolIdentityIndex();
-		var entries = new List<(string? Project, string File, int Order, string Line, IReadOnlyList<(int Depth, string Line)> LocalFunctions)>();
+		// in shared code is listed once while a member declared only in an inactive branch still appears;
+		// the copy kept is the one whose signature binds best, so its parameter types are the ones echoed.
+		var memberCopies = new DeclarationCopies<Solution>();
 		foreach ((INamedTypeSymbol typeInstance, Solution typeSolution) in typeInstances)
 		{
 			foreach (ISymbol member in Collect(typeInstance, includeInherited)
@@ -152,14 +159,17 @@ public sealed class GetMembersTool
 				.Where(KindIncluded)
 				.Where(member => NameMatches(member.Name)))
 			{
-				if (!seen.Add(member))
-					continue;
-
-				(string? project, string file, int order, string line) = Render(member, typeSolution, solutionDirectory);
-				var localFunctions = new List<(int Depth, string Line)>();
-				await AddLocalFunctionsAsync(localFunctions, member, depth: 1, typeSolution, solutionDirectory, token);
-				entries.Add((project, file, order, line, localFunctions));
+				memberCopies.Add(member, typeSolution);
 			}
+		}
+
+		var entries = new List<(string? Project, string File, int Order, string Line, IReadOnlyList<(int Depth, string Line)> LocalFunctions)>();
+		foreach ((ISymbol member, Solution memberSolution) in memberCopies.Items)
+		{
+			(string? project, string file, int order, string line) = Render(member, memberSolution, solutionDirectory);
+			var localFunctions = new List<(int Depth, string Line)>();
+			await AddLocalFunctionsAsync(localFunctions, member, depth: 1, memberSolution, solutionDirectory, token);
+			entries.Add((project, file, order, line, localFunctions));
 		}
 
 		var builder = new OutlineBuilder();

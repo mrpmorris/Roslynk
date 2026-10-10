@@ -67,19 +67,30 @@ public sealed class FindDefinitionTool
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
-		// Try each projection in turn: a position inside a branch inactive in the loaded configuration resolves
-		// to no symbol in the base projection but binds in the projection where that branch is active.
+		// Resolve in every projection: a position inside a branch inactive in the loaded configuration resolves
+		// to no symbol in the base projection but binds in the projection where that branch is active, and a
+		// copy whose parameter types failed to bind must not win over one where they bind. A bound answer
+		// stops the walk, so a position that binds in the first projection costs exactly one resolution.
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
 		ISymbol? symbol = null;
 		Solution resolvedSolution = model.Solution;
+		int bestErrors = int.MaxValue;
 		foreach (Projection projection in projections)
 		{
-			symbol = await SymbolResolver.ResolveAtPositionAsync(projection.Solution, filePath, line, column);
-			if (symbol is not null)
+			ISymbol? resolved = await SymbolResolver.ResolveAtPositionAsync(projection.Solution, filePath, line, column);
+			if (resolved is null)
+				continue;
+
+			int errors = ErrorTypeCount.Of(resolved);
+			if (errors < bestErrors)
 			{
+				symbol = resolved;
 				resolvedSolution = projection.Solution;
-				break;
+				bestErrors = errors;
 			}
+
+			if (bestErrors == 0)
+				break;
 		}
 
 		if (symbol is null)
