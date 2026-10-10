@@ -70,37 +70,34 @@ public sealed class SearchSymbolsTool
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		// Search every projection so declarations that compile only in a branch inactive in the loaded
-		// configuration are included; dedupe by fully-qualified name across projections.
+		// configuration are included; dedupe by fully-qualified name across projections, keeping the
+		// best-bound copy of each declaration so a degraded rendering never wins.
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution, token);
-		var seen = new SymbolIdentityIndex();
-		var matched = new List<(ISymbol Symbol, Solution Solution)>();
+		var matched = new DeclarationCopies<Solution>();
 		Func<string, bool> predicate = name => name.Contains(query, StringComparison.OrdinalIgnoreCase);
 		foreach (Projection projection in projections)
 		{
 			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(projection.Solution, predicate, token))
 			{
-				if (seen.Add(symbol))
-					matched.Add((symbol, projection.Solution));
+				matched.Add(symbol, projection.Solution);
 			}
 
 			// Roslyn's declaration search covers source-generated documents only when a hand-written
 			// declaration in the same project also matches, so the generated ones are asked for directly.
 			foreach (ISymbol symbol in await SourceGeneratedDeclarations.FindAsync(projection.Solution, predicate, token))
 			{
-				if (seen.Add(symbol))
-					matched.Add((symbol, projection.Solution));
+				matched.Add(symbol, projection.Solution);
 			}
 
 			// Local functions are not in the declaration index, so they are found by walking the syntax
 			// (source-generated documents included).
 			foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(projection.Solution, predicate, token))
 			{
-				if (seen.Add(local))
-					matched.Add((local, projection.Solution));
+				matched.Add(local, projection.Solution);
 			}
 		}
 
-		List<(ISymbol Symbol, Solution Solution)> results = matched.Take(Math.Max(0, maxResults)).ToList();
+		List<(ISymbol Symbol, Solution Solution)> results = matched.Items.Take(Math.Max(0, maxResults)).ToList();
 
 		var root = new SymbolNode();
 		foreach ((ISymbol symbol, Solution symbolSolution) in results)

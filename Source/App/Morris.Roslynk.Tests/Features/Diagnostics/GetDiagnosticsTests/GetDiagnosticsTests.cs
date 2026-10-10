@@ -210,9 +210,14 @@ public class GetDiagnosticsTests
 		string result = await subject.GetDiagnostics(
 			solutionPath, includeErrors: true, includeAnalyzers: false, projectName: "Multi");
 
-		Assert.Contains("errors=1", result);
+		// Legacy.cs fails to bind in net8.0 (two CS0246 'Int32' parameters plus two CS1503 call sites) on
+		// top of Api.cs's CS0246 'Type', which is reported against netstandard2.0 only.
+		Assert.Contains("errors=5", result);
 		Assert.Contains("filter=projectName:Multi", result);
-		Assert.Contains("CS0246,", result);
+		// The Api.cs diagnostic is the every-target-framework proof: it exists only in the netstandard2.0
+		// framework, so a filter that dropped later target frameworks would not list it.
+		Assert.Contains("Api.cs", result);
+		Assert.Contains("CS0246,9:25,The type or namespace name 'Type'", result);
 	}
 
 	[Fact]

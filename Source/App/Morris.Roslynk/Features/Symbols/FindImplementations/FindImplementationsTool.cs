@@ -79,17 +79,20 @@ public sealed class FindImplementationsTool
 		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
 
 		// Union implementors across every projection (per-TFM + #if-toggle), deduped by stable symbol identity,
-		// so implementors declared in a branch that is inactive in the loaded configuration are still listed.
-		var seen = new SymbolIdentityIndex();
-		var root = new SymbolNode();
+		// so implementors declared in a branch that is inactive in the loaded configuration are still listed;
+		// the copy kept is the best bound, so the placement always describes a signature that bound.
+		var implementors = new DeclarationCopies<Solution>();
 		foreach (ProjectionSymbol projectionSymbol in resolved)
 		{
 			foreach (ISymbol implementation in await SymbolFinder.FindImplementationsAsync(projectionSymbol.Symbol, projectionSymbol.Projection.Solution))
 			{
-				if (seen.Add(implementation))
-					SymbolPlacement.Place(root, implementation, projectionSymbol.Projection.Solution, solutionDirectory);
+				implementors.Add(implementation, projectionSymbol.Projection.Solution);
 			}
 		}
+
+		var root = new SymbolNode();
+		foreach ((ISymbol implementation, Solution implementationSolution) in implementors.Items)
+			SymbolPlacement.Place(root, implementation, implementationSolution, solutionDirectory);
 
 		var builder = new OutlineBuilder();
 		builder.Header("resolvedSymbol", SymbolResolver.SignatureName(resolved[0].Symbol));

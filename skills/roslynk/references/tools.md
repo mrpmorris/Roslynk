@@ -39,7 +39,10 @@ types are accepted, so `M(System.Int32)` and `M(int value = 0)` both resolve `M(
 modifier is optional but honoured when written. Without a parameter list the name matches every overload
 → `error=Ambiguous`, one `candidate=` per match; every candidate is accepted verbatim by the tool that
 emitted it, and the `resolvedSymbol`/`resolvedType`/`resolvedMethod`/`#fullName` a tool echoes is in the
-same re-queryable form.
+same re-queryable form. When a declaration compiles in several target frameworks or `#if` projections and
+a type in its signature binds in only some of them, the echoed name, candidates and outline parameter
+types are taken from a copy where it binds (`M(int)`, not the unresolved `M(Int32)`); any spelling of the
+declaration's signature still reaches its copies in every framework.
 
 **Generic names.** A generic type may be written without its type parameters (`N.Box`, `N.Box.Get`)
 when only one arity exists; with several arities sharing the name the response is `error=Ambiguous`
@@ -94,7 +97,7 @@ A missing generator DLL (typically a generator project referenced as an analyzer
 ## Navigation
 
 ### find_definition
-`solutionId`, `filePath` (absolute or solution-relative), `line`, `column` (1-based). Position-based go-to-definition. Returns `#fullName`, `#kind`, plus `#project`/`#path`/`#loc` for source symbols or `#assembly=` for metadata-only. (Note the `#`-prefixed header style, unique to this tool family.)
+`solutionId`, `filePath` (absolute or solution-relative), `line`, `column` (1-based). Position-based go-to-definition. Returns `#fullName`, `#kind`, plus `#project`/`#path`/`#loc` for source symbols or `#assembly=` for metadata-only. (Note the `#`-prefixed header style, unique to this tool family.) A file compiled into several projects or `#if` projections is resolved in each, and the answer whose types bind is reported.
 
 ### get_expression_info
 `solutionId`, `filePath` (`.cs`, `.razor` or `.cshtml`; absolute or solution-relative), `line`, `column` (1-based, anywhere inside the expression; the position just after a token counts as that token). Returns compiler facts about the expression at the position. Batchable in `multi_query`.

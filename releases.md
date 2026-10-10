@@ -13,6 +13,7 @@
 - `get_callers` and `get_callees` accept operator names such as `N.Money.op_Addition(Money, Money)` (Fixes #62)
 - Declarations emitted by source generators resolve by name in every tool even when no hand-written code mentions them, and `rename_symbol`/`rename_parameter`/`change_signature` refuse a symbol only a generator declares (Fixes #81)
 - `search_symbols` finds declarations a source generator emits (types, members, nested types, namespaces and local functions inside generated members) even when no hand-written declaration matches the query (Fixes #82)
+- Names Roslynk echoes for a multi-targeted or `#if`-projected declaration (`resolvedSymbol`, `resolvedType`, `#fullName`, `candidate=` lines, outline parameter lists) come from a copy whose types bind, and positions resolve through every target framework that compiles their file (Fixes #83)
 - `find_references` handles unresolved analyzers without crashing (Fixes #66)
 - `get_solution_status` lists load diagnostic messages (Fixes #69)
 - Multi-targeted projects no longer list duplicate members or report `Ambiguous` (Fixes #67)

@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -99,9 +99,9 @@ public sealed class GetCallersTool
 		// explicit calls and the compiler-inserted calls Roslyn indexes (foreach GetEnumerator/MoveNext/Current,
 		// await GetAwaiter, using Dispose, deconstruction, collection-initializer Add, operator tokens incl.
 		// += and ++, implicit base()); ImplicitCallerScan adds the rest, gated on the target's shape so
-		// ordinary targets pay nothing.
-		var seen = new SymbolIdentityIndex();
-		var root = new SymbolNode();
+		// ordinary targets pay nothing. The copy kept is the best bound, so the placement always describes a
+		// signature that bound.
+		var callers = new DeclarationCopies<Solution>();
 		foreach (ProjectionSymbol projectionSymbol in resolved)
 		{
 			Solution solution = projectionSymbol.Projection.Solution;
@@ -111,7 +111,7 @@ public sealed class GetCallersTool
 				if (await IsOnlySpuriousDisposeAsync(caller, token))
 					continue;
 
-				Place(CallerSymbol.Normalize(caller.CallingSymbol), solution);
+				callers.Add(CallerSymbol.Normalize(caller.CallingSymbol), solution);
 			}
 
 			foreach (ISymbol caller in await ImplicitCallerScan.CallersAsync(
@@ -120,9 +120,13 @@ public sealed class GetCallersTool
 				isBaseProjection: ReferenceEquals(projectionSymbol.Projection, resolved[0].Projection),
 				token))
 			{
-				Place(caller, solution);
+				callers.Add(caller, solution);
 			}
 		}
+
+		var root = new SymbolNode();
+		foreach ((ISymbol caller, Solution callerSolution) in callers.Items)
+			SymbolPlacement.Place(root, caller, callerSolution, solutionDirectory);
 
 		var builder = new OutlineBuilder();
 		builder.Header("resolvedSymbol", SymbolResolver.SignatureName(resolved[0].Symbol));
@@ -131,11 +135,6 @@ public sealed class GetCallersTool
 		root.Render(builder);
 		return builder.ToString();
 
-		void Place(ISymbol caller, Solution solution)
-		{
-			if (seen.Add(caller))
-				SymbolPlacement.Place(root, caller, solution, solutionDirectory);
-		}
 	}
 
 	/// <summary>

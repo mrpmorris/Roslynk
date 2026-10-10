@@ -99,8 +99,9 @@ public sealed class FindDeadCodeTool
 
 		HashSet<ProjectId> testProjects = IdentifyTestProjects(solution);
 
-		var candidates = new List<ISymbol>();
-		var seen = new SymbolIdentityIndex();
+		// A declaration compiled into several projects is one finding, keyed like the other tools; the copy
+		// kept is the best bound, so the reported name comes from where the signature binds.
+		var found = new DeclarationCopies<Solution>();
 		foreach (Project project in solution.Projects)
 		{
 			Compilation? compilation = await project.GetCompilationAsync();
@@ -117,13 +118,12 @@ public sealed class FindDeadCodeTool
 				// dedupe key carries the signature so two unused overloads are two findings, not one.
 				if (scope is not null && !SymbolResolver.FullyQualifiedName(symbol).StartsWith(scope, StringComparison.OrdinalIgnoreCase))
 					continue;
-				if (!seen.Add(symbol))
-					continue;
 
-				candidates.Add(symbol);
+				found.Add(symbol, solution);
 			}
 		}
 
+		List<ISymbol> candidates = found.Items.Select(item => item.Symbol).ToList();
 		candidates.Sort((left, right) => string.Compare(
 			SymbolResolver.SignatureName(left), SymbolResolver.SignatureName(right), StringComparison.Ordinal));
 

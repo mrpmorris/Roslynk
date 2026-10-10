@@ -108,9 +108,9 @@ public sealed class GetCalleesTool
 		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
 
 		// Union callees across every projection, deduped by stable symbol identity, so a callee that only
-		// compiles in a branch inactive in the loaded configuration is still reported.
-		var seen = new SymbolIdentityIndex();
-		var root = new SymbolNode();
+		// compiles in a branch inactive in the loaded configuration is still reported; the copy kept is the
+		// best bound, so a parameter list rendered for an overloaded callee comes from where it binds.
+		var callees = new DeclarationCopies<Solution>();
 		foreach (ProjectionSymbol projectionSymbol in resolved)
 		{
 			foreach (ISymbol callee in await CalleeWalker.CalleesOfAsync(projectionSymbol.Symbol, projectionSymbol.Projection.Solution, token))
@@ -118,10 +118,13 @@ public sealed class GetCalleesTool
 				if (excludeExternal && CalleePlacement.IsExternal(callee))
 					continue;
 
-				if (seen.Add(callee))
-					CalleePlacement.Place(root, callee, projectionSymbol.Projection.Solution, solutionDirectory);
+				callees.Add(callee, projectionSymbol.Projection.Solution);
 			}
 		}
+
+		var root = new SymbolNode();
+		foreach ((ISymbol callee, Solution calleeSolution) in callees.Items)
+			CalleePlacement.Place(root, callee, calleeSolution, solutionDirectory);
 
 		var builder = new OutlineBuilder();
 		builder.Header("resolvedSymbol", SymbolResolver.SignatureName(resolved[0].Symbol));
