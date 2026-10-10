@@ -69,14 +69,31 @@ public sealed class ProjectionService
 
 	/// <summary>
 	/// Resolves <paramref name="name"/> in every projection and groups the results by <see cref="SymbolIdentityIndex"/>
-	/// identity, so the same logical symbol appearing in several projections (e.g. one per TFM, or base + a toggled
+	/// identity, so the same logical symbol appearing in several projections (e.g. one per TFM, or base plus a toggled
 	/// variant) collapses to a single group. Each group carries every per-projection instance, so a follow-up
 	/// query can run against the solution each instance belongs to.
+	/// </summary>
+	public Task<IReadOnlyList<IReadOnlyList<ProjectionSymbol>>> ResolveAsync(
+		SymbolResolver resolver,
+		IReadOnlyList<Projection> projections,
+		string name,
+		CancellationToken cancellationToken = default) =>
+		ResolveAsync(resolver, projections, name, includeMetadata: false, accept: null, cancellationToken);
+
+	/// <summary>
+	/// Resolves the name in every projection and groups the results by identity. The strictest matching level
+	/// reached by any projection decides for every projection, so a non-generic type declared only in an
+	/// inactive #if branch still wins over a generic sibling, as it would within one projection. When no
+	/// projection matched in source, <paramref name="includeMetadata"/> falls back to referenced-assembly
+	/// types; <paramref name="accept"/> keeps only symbols the calling tool can act on (applied before a
+	/// level is judged, so a type-only tool is not stopped by a namespace of the same name).
 	/// </summary>
 	public async Task<IReadOnlyList<IReadOnlyList<ProjectionSymbol>>> ResolveAsync(
 		SymbolResolver resolver,
 		IReadOnlyList<Projection> projections,
 		string name,
+		bool includeMetadata,
+		Func<ISymbol, bool>? accept,
 		CancellationToken cancellationToken = default)
 	{
 		if (resolver is null)
@@ -84,12 +101,39 @@ public sealed class ProjectionService
 		if (projections is null)
 			throw new ArgumentNullException(nameof(projections));
 
-		var identities = new SymbolIdentityIndex();
-		var groups = new List<List<ProjectionSymbol>>();
-
+		var resolved = new List<(Projection Projection, IReadOnlyList<ISymbol> Symbols, SymbolSignature.SymbolMatchKind Matching)>();
 		foreach (Projection projection in projections)
 		{
-			foreach (ISymbol symbol in await resolver.FindByFullyQualifiedNameAsync(projection.Solution, name, cancellationToken))
+			SymbolResolver.RankedSymbols ranked = await resolver.FindRankedAsync(projection.Solution, name, cancellationToken);
+			IReadOnlyList<ISymbol> symbols = accept is null
+				? ranked.Symbols
+				: ranked.Symbols.Where(accept).ToList();
+			if (symbols.Count > 0)
+				resolved.Add((projection, symbols, ranked.Matching));
+		}
+
+		if (resolved.Count > 0)
+		{
+			SymbolSignature.SymbolMatchKind best = resolved.Min(item => item.Matching);
+			resolved.RemoveAll(item => item.Matching != best);
+		}
+		else if (includeMetadata)
+		{
+			foreach (Projection projection in projections)
+			{
+				IReadOnlyList<ISymbol> metadata =
+					await resolver.FindByFullyQualifiedNameWithMetadataAsync(projection.Solution, name, cancellationToken);
+				List<ISymbol> accepted = metadata.Where(symbol => accept is null || accept(symbol)).ToList();
+				if (accepted.Count > 0)
+					resolved.Add((projection, accepted, SymbolSignature.SymbolMatchKind.Exact));
+			}
+		}
+
+		var identities = new SymbolIdentityIndex();
+		var groups = new List<List<ProjectionSymbol>>();
+		foreach ((Projection projection, IReadOnlyList<ISymbol> symbols, _) in resolved)
+		{
+			foreach (ISymbol symbol in symbols)
 			{
 				int index = identities.GroupOf(symbol, out bool isNew);
 				if (isNew)

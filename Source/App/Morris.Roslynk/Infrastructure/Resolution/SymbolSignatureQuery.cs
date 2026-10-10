@@ -21,6 +21,9 @@ public sealed class SymbolSignatureQuery
 	/// <summary>Whether <see cref="QualifiedName"/> carries a namespace or type prefix, i.e. a dot outside brackets.</summary>
 	public bool Qualified { get; }
 
+	/// <summary>Every segment of <see cref="QualifiedName"/> with the arity written on it.</summary>
+	public IReadOnlyList<SymbolNameSegment> Segments { get; }
+
 	public ParameterListKind ListKind { get; }
 
 	public IReadOnlyList<SymbolSignatureParameter> Parameters { get; }
@@ -30,6 +33,7 @@ public sealed class SymbolSignatureQuery
 		string simpleName,
 		int arity,
 		bool qualified,
+		IReadOnlyList<SymbolNameSegment> segments,
 		ParameterListKind listKind,
 		IReadOnlyList<SymbolSignatureParameter> parameters)
 	{
@@ -37,6 +41,7 @@ public sealed class SymbolSignatureQuery
 		SimpleName = simpleName ?? throw new ArgumentNullException(nameof(simpleName));
 		Arity = arity;
 		Qualified = qualified;
+		Segments = segments ?? throw new ArgumentNullException(nameof(segments));
 		ListKind = listKind;
 		Parameters = parameters ?? throw new ArgumentNullException(nameof(parameters));
 	}

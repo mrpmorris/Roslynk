@@ -173,6 +173,23 @@ public class GetSymbolBodyTests
 		Assert.DoesNotContain("Adds <paramref", result);
 	}
 
+	[Theory]
+	[InlineData("Repro.Box`1", "public class Box<T>")]
+	[InlineData("Repro.Box", "public class Box<T>")]
+	[InlineData("Repro.Box.Get", "public T? Get() => default;")]
+	[InlineData("Repro.Box.this[int]", "public T? this[int index] => default;")]
+	public async Task WhenABareOrMetadataGenericNameIsGiven_ThenTheSourceBodyIsReturned(string name, string expected)
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
+		var subject = new GetSymbolBodyTool(registry, new SymbolResolver(), new ProjectionService());
+
+		string result = await subject.GetSymbolBody(TestSolutions.MultiTarget, name);
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains(expected, result);
+	}
+
 	private static async Task<string> RunAsync(string symbolName, bool includeLeadingTrivia = false)
 	{
 		using var registry = new InstanceRegistry();

@@ -273,7 +273,10 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > - `find_dead_code`: Unreferenced members with a confidence and a reason — candidates, never verdicts; it deletes nothing. Parameters: `solutionId`, `scope` (FQN prefix; use it on large solutions), `includePublic`, `maxResults`.
 > - `find_dead_conditionals`: `#if` branches never compiled under any loaded configuration. Parameter: `solutionId`.
 >
-> **Conventions:** most tools take a fully-qualified `Namespace.Type.Member` name (no `global::`); a local
+> **Conventions:** most tools take a fully-qualified `Namespace.Type.Member` name (no `global::`); a generic
+> type may be written without its type parameters (`Namespace.Box`) when only one arity exists — several
+> arities are `error=Ambiguous` with one candidate per arity, and spellings like ``Namespace.Box`1`` or
+> `Namespace.Box<int>` resolve too; a local
 > function is named as a member of the method declaring it (`Namespace.Type.Method.local`, nesting further
 > for one inside another);
 > `find_definition`, `get_expression_info` and `get_code_actions` are position-based instead. Every tool that takes a

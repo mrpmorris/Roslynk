@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Name lookup resolves a bare generic type or member written without its type parameters (`Repro.Box`, `Repro.Box.Get`) when only one arity exists, reports `error=Ambiguous` with one candidate per arity when several do, and still lets a non-generic of that name win (Fixes #72)
+- Metadata-spelled names (``Repro.Box`1``, ``Repro.Outer`1+Inner``) and constructed spellings (`Repro.Box<int>`) are accepted wherever a name is accepted, including `get_symbol_body`, which returns the source body (Fixes #72)
 - `find_references` handles unresolved analyzers without crashing (Fixes #66)
 - `get_solution_status` lists load diagnostic messages (Fixes #69)
 - Multi-targeted projects no longer list duplicate members or report `Ambiguous` (Fixes #67)

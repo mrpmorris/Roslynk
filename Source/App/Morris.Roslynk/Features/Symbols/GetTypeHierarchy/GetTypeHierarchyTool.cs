@@ -55,7 +55,7 @@ public sealed class GetTypeHierarchyTool
 		""")]
 	public async Task<string> GetTypeHierarchy(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Fully-qualified name of the type, e.g. 'MyNamespace.MyType'.")] string typeName)
+		[Description($"Fully-qualified name of the type, e.g. 'MyNamespace.MyType'. {OutlineDescriptions.SymbolNameGrammar}")] string typeName)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
@@ -70,23 +70,23 @@ public sealed class GetTypeHierarchyTool
 			return Failure(Error.Indexing());
 
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
-		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, typeName);
-		List<IReadOnlyList<ProjectionSymbol>> typeGroups = groups.Where(group => group[0].Symbol is INamedTypeSymbol).ToList();
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(
+			SymbolResolver,
+			projections,
+			typeName,
+			includeMetadata: false,
+			accept: symbol => symbol is INamedTypeSymbol);
 
-		if (typeGroups.Count == 0)
+		if (groups.Count == 0)
 		{
-			IReadOnlyList<string> resolved = SymbolSignature.Distinguish(groups.Select(group => group[0].Symbol));
-			IReadOnlyList<string> candidates = resolved.Count > 0
-				? resolved
-				: await SymbolResolver.SuggestAsync(model.Solution, typeName);
-
+			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, typeName);
 			return Failure(Error.NotFound($"No type matched '{typeName}'.", candidates.Count > 0 ? candidates : null));
 		}
 
-		if (typeGroups.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(typeName, typeGroups.Select(group => group[0].Symbol)));
+		if (groups.Count > 1)
+			return Failure(SymbolAmbiguity.Ambiguous(typeName, groups.Select(group => group[0].Symbol)));
 
-		IReadOnlyList<ProjectionSymbol> resolvedType = typeGroups[0];
+		IReadOnlyList<ProjectionSymbol> resolvedType = groups[0];
 		var type = (INamedTypeSymbol)resolvedType[0].Symbol;
 
 		var baseTypes = new List<INamedTypeSymbol>();

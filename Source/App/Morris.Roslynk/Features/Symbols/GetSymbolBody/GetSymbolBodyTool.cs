@@ -61,8 +61,9 @@ public sealed class GetSymbolBodyTool
 		source generator (e.g. [GeneratedRegex], [LoggerMessage], [LibraryImport]).
 		{OutlineDescriptions.GeneratedLocations}
 		{OutlineDescriptions.Project}. A name matching several distinct symbols (overloads included) returns
-		error=Ambiguous with candidate names; a symbol with no source (a metadata/referenced-assembly symbol,
-		a namespace) returns error=NotSupported. {OutlineDescriptions.ErrorBlock}
+		error=Ambiguous with candidate names; a symbol with no source declaration (a namespace, or a
+		referenced-assembly symbol - a metadata spelling such as 'Ns.Box`1' of a type the solution declares
+		in source returns that source) returns error=NotSupported. {OutlineDescriptions.ErrorBlock}
 		""")]
 	public async Task<string> GetSymbolBody(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
@@ -93,9 +94,17 @@ public sealed class GetSymbolBodyTool
 		if (groups.Count == 0)
 		{
 			// Nothing in source. A name that still resolves against a referenced assembly is a real symbol we
-			// simply cannot show a body for, which is NotSupported rather than NotFound.
+			// simply cannot show a body for, which is NotSupported rather than NotFound — unless the name is a
+			// metadata spelling of something the solution declares in source, which does have a body.
 			IReadOnlyList<ISymbol> metadata =
 				await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(model.Solution, symbolName, cancellationToken);
+
+			List<ISymbol> declared = metadata.Where(symbol => DeclarationReferences(symbol).Any()).ToList();
+			if (declared.Count > 1)
+				return Failure(SymbolAmbiguity.Ambiguous(symbolName, declared));
+			if (declared.Count == 1)
+				return await RenderBodyAsync([declared[0]], symbolName, model.Solution, solutionDirectory, Failure, includeLeadingTrivia, cancellationToken);
+
 			if (metadata.Count > 0)
 			{
 				string assembly = metadata[0].ContainingAssembly is { } owner ? $" It comes from '{owner.Name}'." : "";
@@ -111,25 +120,43 @@ public sealed class GetSymbolBodyTool
 			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		ProjectionSymbol resolved = groups[0][0];
-		ISymbol symbol = resolved.Symbol;
+		return await RenderBodyAsync([resolved.Symbol], symbolName, resolved.Projection.Solution, solutionDirectory, Failure, includeLeadingTrivia, cancellationToken);
+	}
 
+	/// <summary>
+	/// Renders the verbatim source text of one logical symbol: ambiguous input is a failure, a symbol with
+	/// no source declaration is NotSupported, and otherwise every declaration part is built and framed.
+	/// </summary>
+	private static async Task<string> RenderBodyAsync(
+		IReadOnlyList<ISymbol> symbols,
+		string requestedName,
+		Solution solution,
+		string? solutionDirectory,
+		Func<Error, string> failure,
+		bool includeLeadingTrivia,
+		CancellationToken cancellationToken)
+	{
+		if (symbols.Count > 1)
+			return failure(SymbolAmbiguity.Ambiguous(requestedName, symbols));
+
+		ISymbol symbol = symbols[0];
 		if (!DeclarationReferences(symbol).Any())
 		{
 			string where = symbol.ContainingAssembly is { } assembly ? $" It comes from '{assembly.Name}'." : "";
-			return Failure(Error.NotSupported(
-				$"'{symbolName}' has no source declaration, so it has no body to return.{where} Use get_symbol for its signature."));
+			return failure(Error.NotSupported(
+				$"'{requestedName}' has no source declaration, so it has no body to return.{where} Use get_symbol for its signature."));
 		}
 
 		var parts = new List<Part>();
 		foreach (SyntaxReference reference in DeclarationReferences(symbol))
 		{
-			Part? part = await BuildPartAsync(reference, resolved.Projection.Solution, solutionDirectory, includeLeadingTrivia, cancellationToken);
+			Part? part = await BuildPartAsync(reference, solution, solutionDirectory, includeLeadingTrivia, cancellationToken);
 			if (part is not null)
 				parts.Add(part);
 		}
 
 		if (parts.Count == 0)
-			return Failure(Error.NotSupported($"'{symbolName}' has no readable source declaration."));
+			return failure(Error.NotSupported($"'{requestedName}' has no readable source declaration."));
 
 		return parts.Count == 1 ? Single(parts[0]) : Multiple(parts);
 	}

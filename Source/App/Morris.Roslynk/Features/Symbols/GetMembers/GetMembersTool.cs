@@ -63,7 +63,7 @@ public sealed class GetMembersTool
 		""")]
 	public async Task<string> GetMembers(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Fully-qualified name of the type, e.g. 'MyNamespace.MyType'.")] string typeName,
+		[Description($"Fully-qualified name of the type, e.g. 'MyNamespace.MyType'. {OutlineDescriptions.SymbolNameGrammar}")] string typeName,
 		[Description("Include members inherited from base types.")] bool includeInherited = false,
 		[Description("Optional case-insensitive filter on member name: a trailing '*' matches by prefix (e.g. 'Search*'), otherwise it is a substring match; null applies no name filtering.")] string? nameFilter = null,
 		[Description("Include method members.")] bool includeMethods = true,
@@ -98,28 +98,26 @@ public sealed class GetMembersTool
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		// Resolve the type in every projection so members declared in a branch inactive in the loaded
-		// configuration are included; group by fully-qualified name so the same type across projections is one.
+		// configuration are included; the strictest matching level any projection reached decides for all
+		// of them, and grouping by fully-qualified name keeps the same type across projections one.
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
-		var typeInstances = new List<(INamedTypeSymbol Type, Solution Solution)>();
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(
+			SymbolResolver,
+			projections,
+			typeName,
+			includeMetadata: true,
+			accept: symbol => symbol is INamedTypeSymbol);
+
+		if (groups.Count == 0)
+			return Failure(Error.NotFound($"No type matched '{typeName}'."));
+		if (groups.Count > 1)
+			return Failure(SymbolAmbiguity.Ambiguous(typeName, groups.Select(group => group[0].Symbol)));
+
 		// Holding the symbols, so an ambiguous match can emit candidates that are distinguishable from each
 		// other and accepted back verbatim.
-		var typeIdentities = new SymbolIdentityIndex();
-		var distinctTypes = new List<INamedTypeSymbol>();
-		foreach (Projection projection in projections)
-		{
-			foreach (INamedTypeSymbol candidate in (await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(projection.Solution, typeName)).OfType<INamedTypeSymbol>())
-			{
-				typeInstances.Add((candidate, projection.Solution));
-				if (typeIdentities.Add(candidate))
-					distinctTypes.Add(candidate);
-			}
-		}
-
-		if (distinctTypes.Count == 0)
-			return Failure(Error.NotFound($"No type matched '{typeName}'."));
-		if (distinctTypes.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(typeName, distinctTypes));
-
+		var typeInstances = groups[0]
+			.Select(projectionSymbol => (Type: (INamedTypeSymbol)projectionSymbol.Symbol, projectionSymbol.Projection.Solution))
+			.ToList();
 		INamedTypeSymbol type = typeInstances[0].Type;
 
 		bool NameMatches(string name)
