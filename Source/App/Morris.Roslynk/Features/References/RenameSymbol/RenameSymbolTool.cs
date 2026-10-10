@@ -56,6 +56,10 @@ public sealed class RenameSymbolTool
 		Returns a text result, not JSON: 'applied' (N for a checkOnly preview), 'resolvedSymbol' (the name
 		as resolved, before the rename), 'status' header, a blank line, then one solution-relative
 		changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness}
+		A symbol declared only by a source generator is refused (error=NotSupported naming the generator):
+		its declaration is never written to disk and would be regenerated unchanged, so change the generator
+		or the code that drives it instead; a partial member or type with a hand-written declaration is
+		renamable, since the generator follows the hand-written name.
 		Errors: an invalid identifier is refused; an ambiguous name returns one candidate= line per match,
 		and a name that matches nothing returns fuzzy suggestions — in either case copy a candidate back
 		verbatim to target a single symbol. Pass checkOnly to preview the files that would change without
@@ -95,6 +99,11 @@ public sealed class RenameSymbolTool
 
 		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
 		string resolvedName = SymbolResolver.SignatureName(resolved[0].Symbol);
+
+		// The rename would only reach references: a generated declaration is never written (and the
+		// generator re-emits the old name), so the result would break the build rather than rename anything.
+		if (resolved.Any(projectionSymbol => GeneratedSource.IsGeneratedOnly(projectionSymbol.Projection.Solution, projectionSymbol.Symbol)))
+			return Failure(Error.NotSupported(GeneratedSource.GeneratedOnlyMessage(resolved[0].Projection.Solution, resolved[0].Symbol, resolvedName, "renamed")));
 
 		Solution updated;
 		try

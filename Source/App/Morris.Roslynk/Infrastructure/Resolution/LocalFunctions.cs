@@ -76,7 +76,13 @@ public static class LocalFunctions
 		var found = new List<IMethodSymbol>();
 		foreach (Project project in solution.Projects)
 		{
-			foreach (Document document in project.Documents)
+			// A generator's local functions live in source-generated documents, which Project.Documents
+			// (regular documents only) does not list.
+			IEnumerable<Document> documents = project.Documents;
+			if (GeneratedDeclarations.MayHaveGeneratedDocuments(project))
+				documents = documents.Concat(await project.GetSourceGeneratedDocumentsAsync(cancellationToken));
+
+			foreach (Document document in documents)
 			{
 				if (await document.GetSyntaxRootAsync(cancellationToken) is not SyntaxNode root)
 					continue;

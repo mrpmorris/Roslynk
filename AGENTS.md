@@ -140,6 +140,8 @@ Regression tests: `Morris.Roslynk.Tests/Features/LocalFunctions` against `TestFi
 
 `RenameSymbolTool` is a useful example of multi-projection editing: run semantic rename per projection, collect/deduplicate physical-file text changes by span, then apply the union to every matching document in the base solution. Preserve inactive-branch and multi-target consistency when adding similar operations.
 
+Source-generated declarations resolve by name whether or not hand-written code mentions them: when the declaration search finds nothing (or the query is a bare name), `SymbolResolver` asks generator-bearing projects' compilations (`GeneratedDeclarations`: `GetSymbolsWithName` over source-generated trees) and runs the results through the normal `Expand`/`Matches` pipeline, so every name-based tool — and local functions and nested generated types — sees generator output; `SuggestAsync` proposes generated names too. `GetSymbolBodyTool` renders a source-declared symbol found by the metadata fallback from its `DeclaringSyntaxReferences` instead of reporting `NotSupported`. Write tools (`rename_symbol`, `rename_parameter`, `change_signature`) refuse symbols whose defining part is generated-only (`GeneratedSource.IsGeneratedOnly`) — `.g.cs` documents are never persisted, so the edit would silently no-op and break the build.
+
 Razor has two representations: real `.razor`/`.cshtml` additional documents and generated C# made available as editable model documents by `RazorDocumentGenerator`.
 
 - Workspace loading remaps analyzer references to a shadow-copy loader **before** requesting compilations/Razor augmentation. Otherwise generator DLLs in another project's `bin/obj` can be locked and prevent rebuilding them.

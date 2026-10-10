@@ -97,6 +97,28 @@ public sealed class SymbolResolver
 				}
 			}
 
+			// Roslyn's declaration search pre-filters each project with a syntactic index built from the
+			// project's regular documents only, so a declaration emitted by a source generator is invisible to
+			// it unless a hand-written document of the same project mentions the name. When nothing matched at
+			// all, or the query is a bare name that other projects may bind differently, ask the compilation
+			// directly — the merged declaration tree includes generated trees — and keep only generated
+			// declarations. A qualified name that already matched is complete: any project declaring the name
+			// hand-written would have passed the pre-filter, and another project's generated copy of the same
+			// qualified name groups with the match by signature anyway.
+			if ((exact.Count == 0 && relaxed.Count == 0) || !query.Qualified)
+			{
+				activity?.SetTag("roslynk.resolve.generated", true);
+				foreach (Project project in solution.Projects)
+				{
+					foreach (ISymbol generated in await GeneratedDeclarations.FindAsync(project, searchName, cancellationToken))
+					{
+						SymbolSignature.SymbolMatchKind kind = SymbolSignature.Classify(generated, query);
+						if (kind != SymbolSignature.SymbolMatchKind.None && seen.Add(generated))
+							(kind == SymbolSignature.SymbolMatchKind.Exact ? exact : relaxed).Add(generated);
+					}
+				}
+			}
+
 			// Local functions are not in the declaration index. C# forbids a nested type and a member of the same
 			// name in one type, so a name that found no member can only mean a local function. The re-check
 			// classifies like the sweep: a container that only resolved relaxedly must not be rejected by a
@@ -273,6 +295,7 @@ public sealed class SymbolResolver
 		if (simpleName.Length == 0)
 			return [];
 
+<<<<<<< HEAD
 		string? containerSegment = null;
 		if (parsed is not null
 			&& SymbolSignature.TryGetContainer(parsed, out string container))
@@ -291,14 +314,39 @@ public sealed class SymbolResolver
 				if (!best.TryGetValue(fullyQualified, out (int, bool) existing) || Rank(rank) < Rank(existing))
 					best[fullyQualified] = rank;
 			}
+=======
+		var best = new Dictionary<string, int>(StringComparer.Ordinal);
+
+		void Offer(ISymbol symbol)
+		{
+			string fullyQualified = FullyQualifiedName(symbol);
+			int score = Score(symbol.Name, simpleName);
+			if (!best.TryGetValue(fullyQualified, out int existing) || score < existing)
+				best[fullyQualified] = score;
+		}
+
+		foreach (Project project in solution.Projects)
+		{
+			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(project, candidate => IsCandidate(candidate, simpleName), cancellationToken))
+				Offer(symbol);
+
+			// The same Documents-only pre-filter hides generated declarations from suggestions; ask the
+			// compilation of generator-bearing projects, which suggestions only reach on a miss.
+			foreach (ISymbol symbol in await GeneratedDeclarations.FindAsync(project, candidate => IsCandidate(candidate, simpleName), SymbolFilter.All, cancellationToken))
+				Offer(symbol);
+>>>>>>> a21894d (Resolve generator-declared symbols by name in every tool and refuse editing them (Fixes #81))
 		}
 
 		foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(solution, candidate => IsCandidate(candidate, simpleName), cancellationToken))
 		{
+<<<<<<< HEAD
 			string fullyQualified = FullyQualifiedName(local);
 			(int Score, bool InContainer) rank = (Score(local.Name, simpleName), InQueriedContainer(LocalFunctions.NamedContainer(local), containerSegment));
 			if (!best.TryGetValue(fullyQualified, out (int, bool) existing) || Rank(rank) < Rank(existing))
 				best[fullyQualified] = rank;
+=======
+			Offer(local);
+>>>>>>> a21894d (Resolve generator-declared symbols by name in every tool and refuse editing them (Fixes #81))
 		}
 
 		return best

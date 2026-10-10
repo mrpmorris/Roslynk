@@ -50,7 +50,8 @@ public sealed class RenameParameterTool
 		The rename cascades across the member's override/interface group — overridden and overriding members,
 		interface members and their implementations, and both parts of a partial method — wherever the related
 		declaration is in source and its parameter at the same position has the same old name. Related
-		declarations that use a different name, or that live in metadata, are left as they are and reported in
+		declarations that use a different name, that live in metadata, or that are declared only by a source
+		generator are left as they are and reported in
 		'unchangedRelated'. {OutlineDescriptions.ProjectionCoverage}
 		Returns a text result, not JSON: 'applied' (N for a checkOnly preview), 'resolvedMethod' (the member
 		as resolved, before the rename), 'parameter' (the old name), 'renamedMembers' (how many declarations
@@ -62,8 +63,9 @@ public sealed class RenameParameterTool
 		suggestions (copy a candidate back verbatim); a parameterName the member does not declare is
 		error=NotFound listing its parameters; a newName already used by another parameter, local, local
 		function, lambda/query variable or type parameter inside a renamed declaration is error=Conflict naming
-		the member; a symbol that is not a method, local function, constructor or indexer, a positional record parameter, or a
-		member declared only in metadata is error=NotSupported; a file edited on disk since it was loaded is
+		a symbol that is not a method, local function, constructor or indexer, a positional record parameter, a
+		member declared only in metadata, or a member declared only by a source generator is error=NotSupported
+		(naming the generator in the last case); a file edited on disk since it was loaded is
 		error=Stale. Nothing is written in any failure case. Pass checkOnly to preview the files that would
 		change without writing.
 		""")]
@@ -109,6 +111,8 @@ public sealed class RenameParameterTool
 			return Failure(Error.NotSupported($"'{resolvedName}' is not a method, local function, constructor or indexer."));
 		if (!member.Locations.Any(location => location.IsInSource))
 			return Failure(Error.NotSupported($"'{resolvedName}' is declared only in metadata, so its parameters cannot be renamed."));
+		if (GeneratedSource.IsGeneratedOnly(resolved[0].Projection.Solution, member))
+			return Failure(Error.NotSupported(GeneratedSource.GeneratedOnlyMessage(resolved[0].Projection.Solution, member, resolvedName, "renamed")));
 		if (member is IMethodSymbol { MethodKind: MethodKind.Constructor, ContainingType.IsRecord: true } constructor
 			&& constructor.DeclaringSyntaxReferences.Any(reference => reference.GetSyntax(cancellationToken) is RecordDeclarationSyntax))
 		{
@@ -136,7 +140,10 @@ public sealed class RenameParameterTool
 			foreach (ISymbol related in await RelatedMembersAsync(projectionSymbol.Symbol, projectionSolution, cancellationToken))
 			{
 				ImmutableArray<IParameterSymbol> relatedParameters = ParametersOf(related) ?? [];
-				bool inSource = related.Locations.Any(location => location.IsInSource);
+				// A generated-only related member would take the edit into a document that is never written
+				// (and the generator would re-emit the old name), so it is reported rather than half-renamed.
+				bool inSource = related.Locations.Any(location => location.IsInSource)
+					&& !GeneratedSource.IsGeneratedOnly(projectionSolution, related);
 				if (!inSource || ordinal >= relatedParameters.Length || !string.Equals(relatedParameters[ordinal].Name, parameterName, StringComparison.Ordinal))
 				{
 					unchangedRelated.Add(SymbolResolver.SignatureName(related));

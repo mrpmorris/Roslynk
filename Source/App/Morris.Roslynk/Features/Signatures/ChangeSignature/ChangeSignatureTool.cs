@@ -47,7 +47,9 @@ public sealed class ChangeSignatureTool
 		'updatedCallSites', 'status' header, a blank line, then one solution-relative changed-file
 		path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} The parameter must have a default so the change stays backward-compatible. v1 targets a
 		single ordinary method or local function only: it refuses virtual/override/abstract methods, interface members and their
-		implementations, partial methods, params methods, and constructors (returns error=NotSupported). Only
+		implementations, partial methods, params methods, constructors, and a method declared only by a source
+		generator (error=NotSupported naming the generator: the declaration is never written to disk and would be
+		regenerated unchanged). Only
 		true invocation call sites are updated — method groups, nameof and cref references are left alone
 		(the parameter is optional, so they remain valid). An invalid parameter name, type or default value is
 		error=Invalid; a bare name that matches several overloads is error=Ambiguous with one candidate per
@@ -95,6 +97,11 @@ public sealed class ChangeSignatureTool
 			return Failure(Error.NotSupported($"'{methodId}' is not a method."));
 
 		string resolved = SymbolResolver.SignatureName(method);
+
+		// The declaration would not be written (generated documents are never persisted) and the generator
+		// would re-emit the old signature, so the change would break the build rather than change anything.
+		if (GeneratedSource.IsGeneratedOnly(solution, method))
+			return Failure(Error.NotSupported(GeneratedSource.GeneratedOnlyMessage(solution, method, resolved, "changed")));
 
 		string? rejection = Reject(method, parameterName);
 		if (rejection is not null)
