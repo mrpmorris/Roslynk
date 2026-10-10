@@ -134,6 +134,8 @@ Local functions are named as members of their declaring member: `N.Outer.Type.Me
 - Local functions are not in `SymbolFinder`'s declaration index. `FindByFullyQualifiedNameAsync` searches for them only when no ordinary symbol matched: it resolves the container name recursively, then scans that container's syntax (`FindInAsync`). A bare name scans the whole solution (`FindAllAsync`). This fallback is sound because C# forbids a nested type and a member of the same name in one type (CS0102), so a dotted name cannot mean both. Keep the fallback lazy: it walks syntax.
 - `SymbolKindText` reports `localfunction`. `SymbolPlacement`, `EnclosingDeclaration` and `get_members` nest local functions under their containers.
 
+`FindAllAsync` (the bare-name search) walks `project.Documents` and the project's source-generated documents, so local functions inside generated members are searchable.
+
 Regression tests: `Morris.Roslynk.Tests/Features/LocalFunctions` against `TestFixtures/LocalFunctionSolution` (nested class, local-in-local, overloaded container).
 
 `ProjectionService.BuildAsync` creates the base solution plus variants toggling each condition symbol that is uniformly defined or uniformly undefined across C# projects. Symbols with mixed definitions across loaded projects are skipped. **This is not exhaustive enumeration of combinations**; a branch needing multiple simultaneous toggles may remain uncovered. Resolve/query within each projection's own solution, then deduplicate using `ProjectionService.KeyOf` (the shared fully qualified signature with ref kinds). This key intentionally collapses identical qualified signatures across projects; it is not assembly-qualified identity.

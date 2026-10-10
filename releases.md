@@ -2,9 +2,17 @@
 
 ## Unreleased
 
+- Name lookup resolves a bare generic type or member written without its type parameters (`Repro.Box`, `Repro.Box.Get`) when only one arity exists, reports `error=Ambiguous` with one candidate per arity when several do, and still lets a non-generic of that name win (Fixes #72)
+- Metadata-spelled names (``Repro.Box`1``, ``Repro.Outer`1+Inner``) and constructed spellings (`Repro.Box<int>`) are accepted wherever a name is accepted, including `get_symbol_body`, which returns the source body (Fixes #72)
+- `get_diagnostics` accepts `projectName`, `filePath`, `ids` and `maxResults` to narrow and cap the listed diagnostics; filtered per-severity counts stay in the header with a `filter=` line, and capped bodies report `count=`/`truncated=Y` (Fixes #73)
+- `get_diagnostics` accepts `summaryOnly` to return per-id counts with one example location and message instead of every diagnostic (Fixes #73)
+- `multi_query` enforces its response budget within a slot: an over-budget slot is cut at a line boundary and marked `truncated=Y`, remaining slots are whole `error=Truncated` blocks, and the default budget is 80,000 characters (configurable via `Roslynk:MaxResponseChars`) (Fixes #71)
+- `get_symbol_body` pages long declarations with `startLine`/`maxLines` (default 400 lines) and lists a partial type's oversized parts with line counts for `part=<n>` selection (Fixes #71)
+- Every tool's result is capped by the response budget: an oversized result is cut after its last whole line and starts with `outputTruncated=Y`/`fullOutputChars=<n>` (Fixes #71)
 - `get_callers` reports the compiler-inserted calls `FindCallersAsync` misses (enumerator/awaiter plumbing of `foreach`/`await foreach`/`await using`, implicit conversions, `true`/`false` operators in conditions, C# 14 instance compound operators, positional-pattern `Deconstruct`, query methods, interpolated-string handler members, `Length`/`Count` behind `^`/`..`), no longer lists a method as calling `Dispose` for merely declaring a disposable local, and names an auto-property initializer's caller as the property (Fixes #62)
 - `get_callers` and `get_callees` accept operator names such as `N.Money.op_Addition(Money, Money)` (Fixes #62)
 - Declarations emitted by source generators resolve by name in every tool even when no hand-written code mentions them, and `rename_symbol`/`rename_parameter`/`change_signature` refuse a symbol only a generator declares (Fixes #81)
+- `search_symbols` finds declarations a source generator emits (types, members, nested types, namespaces and local functions inside generated members) even when no hand-written declaration matches the query (Fixes #82)
 - `find_references` handles unresolved analyzers without crashing (Fixes #66)
 - `get_solution_status` lists load diagnostic messages (Fixes #69)
 - Multi-targeted projects no longer list duplicate members or report `Ambiguous` (Fixes #67)
