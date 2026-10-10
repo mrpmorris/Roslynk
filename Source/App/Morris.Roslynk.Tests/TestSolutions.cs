@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace Morris.Roslynk.Tests;
 
@@ -27,6 +28,16 @@ internal static class TestSolutions
 		// The consumer references the generator project as an analyzer only; the workspace's design-time
 		// build never compiles it, so the generator DLL must be built before the solution loads.
 		Build(Path.Combine(Path.GetDirectoryName(path)!, "GeneratorLib", "GeneratorLib.csproj"));
+		return path;
+	});
+	private static readonly Lazy<string> LargeTypeSolutionPath = new(() =>
+	{
+		string path = Prepare("LargeTypeSolution", "LargeTypeSolution.slnx");
+
+		// Big.cs and LongLine.cs are deterministic and huge, so they are generated into the prepared
+		// fixture (gitignored) rather than committed. Written before the first load, temp-then-move, so
+		// two test assemblies preparing concurrently never expose a partial file.
+		WriteLargeTypeGeneratedSources(Path.Combine(Path.GetDirectoryName(path)!, "LargeTypeLib"));
 		return path;
 	});
 
@@ -66,6 +77,63 @@ internal static class TestSolutions
 
 	/// <summary>A consumer using a type emitted by a project-referenced source generator (built on first use).</summary>
 	public static string Generator => GeneratorSolutionPath.Value;
+
+	/// <summary>
+	/// A single-project solution for the output-budget work: <see cref="BigDeclaration"/> (3,000 one-line
+	/// methods, ~164KB) in a gitignored Big.cs generated at prepare time, a 20,000-character single line in
+	/// LongLine.cs, and a System.Text.Json partial context whose generated part is a real source-generated
+	/// declaration beside a tiny hand-written one.
+	/// </summary>
+	public static string LargeType => LargeTypeSolutionPath.Value;
+
+	/// <summary>
+	/// The exact text get_symbol_body returns for the fixture's Repro.Big declaration: the whole class,
+	/// 163,912 characters over 3,003 lines (the file adds the namespace line, a blank line and the closing
+	/// newline). Tests reassemble it byte-exactly when walking pages.
+	/// </summary>
+	/// <summary>
+	/// The exact text get_symbol_body returns for the fixture's Repro.Big declaration: the whole class,
+	/// 163,912 characters over 3,003 lines (the file adds the namespace line, a blank line and the closing
+	/// newline). Tests reassemble it byte-exactly when walking pages.
+	/// </summary>
+	public static string BigDeclaration
+	{
+		get
+		{
+			var builder = new StringBuilder("public class Big\r\n{\r\n");
+			for (int index = 0; index < MethodCount; index++)
+				builder.Append(BigMethodLine(index));
+			builder.Append('}');
+			return builder.ToString();
+		}
+	}
+
+	private const int MethodCount = 3_000;
+
+	private static string BigMethodLine(int index) =>
+		$"    public int Method{index:D4}(int value) => value + {index};\r\n";
+
+	private static void WriteLargeTypeGeneratedSources(string projectDirectory)
+	{
+		var big = new StringBuilder("namespace Repro;\r\n\r\npublic class Big\r\n{\r\n");
+		for (int index = 0; index < MethodCount; index++)
+			big.Append(BigMethodLine(index));
+		big.Append("}\r\n");
+		WriteGeneratedSource(Path.Combine(projectDirectory, "Big.cs"), big.ToString());
+
+		var longLine = new StringBuilder("namespace Repro;\r\n\r\npublic class LongLine\r\n{\r\n    public const string Value = \"");
+		longLine.Append('a', 20_000);
+		longLine.Append("\";\r\n}\r\n");
+		WriteGeneratedSource(Path.Combine(projectDirectory, "LongLine.cs"), longLine.ToString());
+	}
+
+	/// <summary>Temp-then-move so two test assemblies preparing the fixture concurrently never expose a partial file.</summary>
+	private static void WriteGeneratedSource(string path, string content)
+	{
+		string temp = path + ".roslynk.tmp";
+		File.WriteAllText(temp, content, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+		File.Move(temp, path, overwrite: true);
+	}
 
 	private static string Prepare(params string[] relativeParts)
 	{

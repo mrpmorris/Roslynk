@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Tools;
 
 namespace Morris.Roslynk;
@@ -26,7 +27,7 @@ public static class McpToolsRegistration
 
 			services[index] = ServiceDescriptor.Describe(
 				typeof(McpServerTool),
-				provider => new RoslynkTool(Resolve(provider, descriptor)),
+				provider => new RoslynkTool(Resolve(provider, descriptor), provider.GetService<ResponseBudget>()),
 				descriptor.Lifetime);
 		}
 

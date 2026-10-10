@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Features.Symbols.GetSymbol;
 using Morris.Roslynk.Features.Symbols.GetSymbolBody;
@@ -31,10 +32,10 @@ namespace Morris.Roslynk.Features.MultiQuery;
 /// <remarks>
 /// The invoke path is one shared reflective binder (see <see cref="MultiQueryCatalog.InvokeCoreAsync"/>):
 /// it resolves the entry's core method once, supplies the pinned <see cref="SolutionModel"/>,
-/// <see cref="RoslynInstance"/> and <see cref="CancellationToken"/> parameters itself, binds the caller's
-/// arguments by parameter name, honours each parameter's declared C# default when the caller omits it, and
-/// rejects unknown argument keys instead of ignoring them. With every user-facing core parameter being
-/// string/string?/bool/int, no per-tool binding code exists to drift.
+/// <see cref="RoslynInstance"/>, the slot's <see cref="ResponseBudget"/> and the <see cref="CancellationToken"/>
+/// parameters itself, binds the caller's arguments by parameter name, honours each parameter's declared C#
+/// default when the caller omits it, and rejects unknown argument keys instead of ignoring them. With every
+/// user-facing core parameter being string/string?/bool/int, no per-tool binding code exists to drift.
 /// </remarks>
 internal static class MultiQueryCatalog
 {
@@ -79,8 +80,9 @@ internal static class MultiQueryCatalog
 
 	/// <summary>
 	/// Binds <paramref name="arguments"/> against the entry's core and invokes it on the tool instance built
-	/// from <paramref name="provider"/>. The pinned model/instance and the batch's token are supplied here —
-	/// never taken from the caller's arguments, which is the line that makes the snapshot guarantee real.
+	/// from <paramref name="provider"/>. The pinned model/instance, the slot's budget allowance and the
+	/// batch's token are supplied here — never taken from the caller's arguments, which is the line that
+	/// makes the snapshot guarantee real. <paramref name="allowance"/> is null when the core runs stand-alone.
 	/// </summary>
 	/// <exception cref="ArgumentException">A required argument is missing, an unknown argument key is
 	/// present, or a value cannot be coerced to the parameter's type. Mapped to slot error=Invalid.</exception>
@@ -89,6 +91,7 @@ internal static class MultiQueryCatalog
 		OpEntry entry,
 		SolutionModel model,
 		RoslynInstance instance,
+		ResponseBudget? allowance,
 		IReadOnlyDictionary<string, JsonElement> arguments,
 		CancellationToken token)
 	{
@@ -101,9 +104,7 @@ internal static class MultiQueryCatalog
 		var bindable = new HashSet<string>(StringComparer.Ordinal);
 		foreach (ParameterInfo parameter in parameters)
 		{
-			if (parameter.ParameterType == typeof(SolutionModel)
-				|| parameter.ParameterType == typeof(RoslynInstance)
-				|| parameter.ParameterType == typeof(CancellationToken))
+			if (IsSupplied(parameter.ParameterType))
 				continue;
 			bindable.Add(parameter.Name!);
 		}
@@ -125,6 +126,11 @@ internal static class MultiQueryCatalog
 			if (parameter.ParameterType == typeof(RoslynInstance))
 			{
 				args[index] = instance;
+				continue;
+			}
+			if (parameter.ParameterType == typeof(ResponseBudget))
+			{
+				args[index] = allowance;
 				continue;
 			}
 			if (parameter.ParameterType == typeof(CancellationToken))
@@ -159,6 +165,17 @@ internal static class MultiQueryCatalog
 		}
 		return await ((Task<string>)result!).ConfigureAwait(false);
 	}
+
+	/// <summary>
+	/// The parameter types the binder itself supplies, never read from the caller's arguments. A core
+	/// declaring a <see cref="ResponseBudget"/> receives its slot's remaining character budget (null when it
+	/// runs stand-alone), so it can degrade an oversized result to a well-formed page itself.
+	/// </summary>
+	internal static bool IsSupplied(Type type) =>
+		type == typeof(SolutionModel)
+		|| type == typeof(RoslynInstance)
+		|| type == typeof(ResponseBudget)
+		|| type == typeof(CancellationToken);
 
 	/// <summary>
 	/// Converts a JSON argument value to the core parameter's type. MCP clients vary in how they serialize

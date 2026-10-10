@@ -42,3 +42,7 @@ nugets/
 ## OS
 Thumbs.db
 .DS_Store
+
+## Issue #71 fixture: generated at fixture-prepare time, never committed
+Source/TestFixtures/LargeTypeSolution/LargeTypeLib/Big.cs
+Source/TestFixtures/LargeTypeSolution/LargeTypeLib/LongLine.cs
