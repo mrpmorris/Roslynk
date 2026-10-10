@@ -69,8 +69,8 @@ public sealed class GetSymbolBodyTool
 		{OutlineDescriptions.GeneratedLocations}
 		{OutlineDescriptions.Project}. A name matching several distinct symbols (overloads included) returns
 		error=Ambiguous with candidate names; a symbol with no source declaration (a namespace, or a
-		referenced-assembly symbol - a metadata spelling such as 'Ns.Box`1' of a type the solution declares
-		in source returns that source) returns error=NotSupported. {OutlineDescriptions.ErrorBlock}
+		referenced-assembly symbol - a metadata spelling such as 'Ns.Box`1' or 'N.Outer+Inner' of a type the
+		solution declares in source returns that source) returns error=NotSupported. {OutlineDescriptions.ErrorBlock}
 		""")]
 	public async Task<string> GetSymbolBody(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
