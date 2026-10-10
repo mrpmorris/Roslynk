@@ -129,6 +129,41 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 			StringComparison.Ordinal);
 	}
 
+	[Fact]
+	public void WhenGetDiagnosticsIsPublished_ThenItsFiltersAreOptional()
+	{
+		JsonElement schema = Tools.Single(tool => tool.ProtocolTool.Name == "get_diagnostics").ProtocolTool.InputSchema;
+
+		IReadOnlyDictionary<string, JsonElement> properties = Properties(schema);
+		IReadOnlyCollection<string> required = Required(schema);
+
+		foreach (string parameter in (string[])["projectName", "filePath", "ids", "maxResults", "summaryOnly"])
+		{
+			Assert.True(properties.ContainsKey(parameter), $"get_diagnostics does not publish '{parameter}'.");
+			Assert.DoesNotContain(parameter, required);
+		}
+	}
+
+	[Fact]
+	public void WhenGetDiagnosticsIdsIsPublished_ThenItIsAnArrayOfStrings()
+	{
+		// ids is the first array-typed parameter on the MCP surface; pin its shape so callers can rely on it.
+		// The SDK publishes nullable parameters as a <type>,null union, so read the primary type accordingly.
+		JsonElement schema = Tools.Single(tool => tool.ProtocolTool.Name == "get_diagnostics").ProtocolTool.InputSchema;
+
+		JsonElement ids = Properties(schema)["ids"];
+		Assert.Equal("array", PrimaryType(ids));
+		Assert.Equal("string", PrimaryType(ids.GetProperty("items")));
+	}
+
+	private static string PrimaryType(JsonElement property)
+	{
+		JsonElement type = property.GetProperty("type");
+		return type.ValueKind == JsonValueKind.Array
+			? type.EnumerateArray().Select(value => value.GetString()!).Single(value => value != "null")
+			: type.GetString()!;
+	}
+
 	private static IEnumerable<(string ToolName, MethodInfo Method)> ToolMethods()
 	{
 		foreach (Type type in typeof(ServicesRegistration).Assembly.GetTypes())

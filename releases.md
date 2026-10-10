@@ -4,6 +4,8 @@
 
 - Name lookup resolves a bare generic type or member written without its type parameters (`Repro.Box`, `Repro.Box.Get`) when only one arity exists, reports `error=Ambiguous` with one candidate per arity when several do, and still lets a non-generic of that name win (Fixes #72)
 - Metadata-spelled names (``Repro.Box`1``, ``Repro.Outer`1+Inner``) and constructed spellings (`Repro.Box<int>`) are accepted wherever a name is accepted, including `get_symbol_body`, which returns the source body (Fixes #72)
+- `get_diagnostics` accepts `projectName`, `filePath`, `ids` and `maxResults` to narrow and cap the listed diagnostics; filtered per-severity counts stay in the header with a `filter=` line, and capped bodies report `count=`/`truncated=Y` (Fixes #73)
+- `get_diagnostics` accepts `summaryOnly` to return per-id counts with one example location and message instead of every diagnostic (Fixes #73)
 - `find_references` handles unresolved analyzers without crashing (Fixes #66)
 - `get_solution_status` lists load diagnostic messages (Fixes #69)
 - Multi-targeted projects no longer list duplicate members or report `Ambiguous` (Fixes #67)
