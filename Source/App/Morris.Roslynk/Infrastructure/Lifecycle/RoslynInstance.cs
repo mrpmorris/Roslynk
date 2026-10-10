@@ -99,6 +99,17 @@ public sealed class RoslynInstance : IDisposable
 	}
 
 	/// <summary>
+	/// Disposes and forgets the watcher, so no further filesystem events reach the instance. Write tests
+	/// detach it: their staged changes would otherwise race the watcher's own debounced fold, which reads
+	/// disk text before queueing and can enqueue a redundant write against a stale snapshot.
+	/// </summary>
+	internal void DetachWatcher()
+	{
+		Watcher?.Dispose();
+		Watcher = null;
+	}
+
+	/// <summary>
 	/// Attaches a fresh reference for every tracked analyzer DLL (see <see cref="TrackedAnalyzers"/>) built or
 	/// rebuilt since it was last attached, as a write ordered with every other, and completes once that write
 	/// is published, so the caller's next read compiles with the new generator. Free when nothing changed.

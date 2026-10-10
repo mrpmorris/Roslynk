@@ -674,6 +674,7 @@ public class SolutionFileSyncTests
 		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
 		using var registry = new InstanceRegistry();
 		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		instance.DetachWatcher();
 		var subject = new SolutionFileSync(instance);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
