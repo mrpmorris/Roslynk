@@ -92,4 +92,26 @@ public class RenameSymbolTests
 		Assert.Contains("candidate=SimpleLibrary.Ledger.Add(int, int)\n", result);
 	}
 
+	[Fact]
+	public async Task WhenAGenericTypeIsNamedByItsBareName_ThenTheGenericTypeIsTargeted()
+	{
+		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
+		string projectDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "Multi");
+
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+
+		string result = await subject.RenameSymbol(solutionPath, "Repro.Box", "Crate", checkOnly: true);
+
+		Assert.Contains("applied=N", result);
+		Assert.Contains("resolvedSymbol=Repro.Box<T>", result);
+		Assert.Contains(result.Split('\n'), line => line.TrimStart('	') == "Generics.cs");
+
+		// checkOnly writes nothing.
+		string generics = await File.ReadAllTextAsync(Path.Combine(projectDir, "Generics.cs"));
+		Assert.Contains("class Box<T>", generics);
+		Assert.DoesNotContain("Crate", generics);
+	}
+
 }

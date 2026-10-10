@@ -194,6 +194,7 @@ public static class SymbolSignature
 			simpleName: simpleName,
 			arity: arity,
 			qualified: lastDot >= 0,
+			segments: SplitSegments(head),
 			listKind: listKind,
 			parameters: ParseParameters(inner));
 		return true;
@@ -228,7 +229,55 @@ public static class SymbolSignature
 				NameMatches(indexer, query, allowStrippedArity: false)
 				&& (query.ListKind == ParameterListKind.None
 					|| (query.ListKind == ParameterListKind.Brackets && ParametersMatch(indexer.Parameters, query.Parameters))),
-			_ => query.ListKind == ParameterListKind.None && NameMatches(symbol, query, allowStrippedArity: false)
+			_ => query.ListKind == ParameterListKind.None
+				&& NameMatches(symbol, query, allowStrippedArity: false)
+				&& WrittenArityMatches(symbol, query)
+		};
+	}
+
+	/// <summary>How a symbol relates to a query: strictly, only through the relaxed arity comparison, or not at all.</summary>
+	internal enum SymbolMatchKind
+	{
+		None,
+		Exact,
+		Relaxed
+	}
+
+	/// <summary>
+	/// How the symbol relates to the query: Exact when it satisfies the strict fully-qualified comparison,
+	/// Relaxed when it only matches once declared type-parameter names are compared as arities, else None.
+	/// </summary>
+	internal static SymbolMatchKind Classify(ISymbol symbol, SymbolSignatureQuery query)
+	{
+		ArgumentNullException.ThrowIfNull(symbol);
+		ArgumentNullException.ThrowIfNull(query);
+
+		if (Matches(symbol, query))
+			return SymbolMatchKind.Exact;
+
+		return RelaxedMatches(symbol, query) ? SymbolMatchKind.Relaxed : SymbolMatchKind.None;
+	}
+
+	private static bool RelaxedMatches(ISymbol symbol, SymbolSignatureQuery query)
+	{
+		return symbol switch
+		{
+			IMethodSymbol method =>
+				NameMatches(method, query, allowStrippedArity: true, relaxed: true)
+				&& (query.Arity < 0 || method.Arity == query.Arity)
+				&& query.ListKind switch
+				{
+					ParameterListKind.None => true,
+					ParameterListKind.Parentheses => ParametersMatch(method.Parameters, query.Parameters),
+					_ => false
+				},
+			IPropertySymbol { IsIndexer: true } indexer =>
+				NameMatches(indexer, query, allowStrippedArity: false, relaxed: true)
+				&& (query.ListKind == ParameterListKind.None
+					|| (query.ListKind == ParameterListKind.Brackets && ParametersMatch(indexer.Parameters, query.Parameters))),
+			_ => query.ListKind == ParameterListKind.None
+				&& NameMatches(symbol, query, allowStrippedArity: false, relaxed: true)
+				&& WrittenArityMatches(symbol, query)
 		};
 	}
 
@@ -253,7 +302,7 @@ public static class SymbolSignature
 	/// bare name has always had. A generic method may also be written without its type-parameter list —
 	/// <c>N.T.Get</c> for <c>N.T.Get&lt;T&gt;</c> — because a caller has no way to know the declared name.
 	/// </summary>
-	private static bool NameMatches(ISymbol symbol, SymbolSignatureQuery query, bool allowStrippedArity)
+	private static bool NameMatches(ISymbol symbol, SymbolSignatureQuery query, bool allowStrippedArity, bool relaxed = false)
 	{
 		if (!query.Qualified)
 			return string.Equals(symbol.Name, query.SimpleName, StringComparison.Ordinal);
@@ -265,16 +314,85 @@ public static class SymbolSignature
 			return string.Equals(local.Name, query.SimpleName, StringComparison.Ordinal)
 				&& TryGetContainer(query, out string container)
 				&& TryParse(container, out SymbolSignatureQuery containerQuery)
-				&& Matches(LocalFunctions.NamedContainer(local), containerQuery);
+				&& (relaxed
+					? Classify(LocalFunctions.NamedContainer(local), containerQuery) != SymbolMatchKind.None
+					: Matches(LocalFunctions.NamedContainer(local), containerQuery));
 		}
 
 		string head = SymbolResolver.FullyQualifiedName(symbol);
 		if (string.Equals(head, query.QualifiedName, StringComparison.Ordinal))
 			return true;
 
+		if (relaxed)
+			return SegmentsMatch(SplitSegments(head), query.Segments);
+
 		return allowStrippedArity
 			&& query.Arity < 0
 			&& string.Equals(StripTrailingArity(head), query.QualifiedName, StringComparison.Ordinal);
+	}
+
+	/// <summary>
+	/// A bare name matches on its simple name alone, so an arity written on it ('Pair&lt;T&gt;', 'Pair`1') is the
+	/// only thing that tells arities apart; a qualified name's arity is compared segment by segment.
+	/// </summary>
+	private static bool WrittenArityMatches(ISymbol symbol, SymbolSignatureQuery query) =>
+		query.Qualified
+		|| query.Arity < 0
+		|| (symbol is INamedTypeSymbol type && type.Arity == query.Arity);
+
+	/// <summary>
+	/// Compares the declaration's rendered segments with the query's. Names must be equal; a written arity
+	/// must equal the declared one whatever its type-argument text; an unwritten one matches any arity.
+	/// </summary>
+	private static bool SegmentsMatch(IReadOnlyList<SymbolNameSegment> declared, IReadOnlyList<SymbolNameSegment> requested)
+	{
+		if (declared.Count != requested.Count)
+			return false;
+
+		for (int index = 0; index < declared.Count; index++)
+		{
+			if (!string.Equals(declared[index].Name, requested[index].Name, StringComparison.Ordinal))
+				return false;
+
+			// A render never writes an empty argument list, so a requested arity of 0 means the non-generic
+			// form: it matches a segment written without one ('Repro.Pair`0' against 'Repro.Pair') and
+			// rejects anything declared generic. A positive arity must equal the declared one.
+			if (requested[index].Arity > 0 && declared[index].Arity != requested[index].Arity)
+				return false;
+
+			if (requested[index].Arity == 0 && declared[index].Arity > 0)
+				return false;
+		}
+
+		return true;
+	}
+
+	/// <summary>Every top-level segment of a head with the arity written on it.</summary>
+	internal static IReadOnlyList<SymbolNameSegment> SplitSegments(string head)
+	{
+		var segments = new List<SymbolNameSegment>();
+		int depth = 0;
+		int start = 0;
+		for (int index = 0; index <= head.Length; index++)
+		{
+			if (index < head.Length)
+			{
+				char character = head[index];
+				if (character is '(' or '[' or '<')
+					depth++;
+				else if (character is ')' or ']' or '>')
+					depth--;
+
+				if (character != '.' || depth != 0)
+					continue;
+			}
+
+			(string name, int arity) = SplitArity(head[start..index].Trim());
+			segments.Add(new SymbolNameSegment(name, arity));
+			start = index + 1;
+		}
+
+		return segments;
 	}
 
 	private static bool ParametersMatch(
@@ -446,16 +564,34 @@ public static class SymbolSignature
 
 	private static (string Name, int Arity) SplitArity(string segment)
 	{
-		if (segment.Length == 0 || segment[^1] != '>')
+		if (segment.Length == 0)
 			return (segment, -1);
 
-		int open = IndexOfMatchingOpen(segment, segment.Length - 1);
-		if (open <= 0)
-			return (segment, -1);
+		if (segment[^1] == '>')
+		{
+			int open = IndexOfMatchingOpen(segment, segment.Length - 1);
+			if (open <= 0)
+				return (segment, -1);
 
-		string arguments = segment[(open + 1)..^1];
-		int arity = arguments.Trim().Length == 0 ? 0 : SplitTopLevel(arguments).Count;
-		return (segment[..open], arity);
+			// Arity is the number of top-level arguments, so the unbound forms Box<> and Pair<,> count too.
+			return (segment[..open], SplitTopLevel(segment[(open + 1)..^1]).Count);
+		}
+
+		// Reflection metadata arity: a trailing `N (Type.GetGenericArguments().Length). C# identifiers cannot
+		// contain a backtick, so a trailing all-digit suffix has exactly one meaning. int.TryParse keeps an
+		// absurd suffix a graceful miss instead of a throw inside a read tool, and both backticks of a doc-id
+		// style `M``1` are stripped so the parsed name is the plain identifier.
+		int tick = segment.LastIndexOf('`');
+		if (tick > 0
+			&& tick < segment.Length - 1
+			&& int.TryParse(segment[(tick + 1)..], out int metadataArity))
+		{
+			string name = segment[..tick].TrimEnd('`');
+			if (name.Length > 0)
+				return (name, metadataArity);
+		}
+
+		return (segment, -1);
 	}
 
 	private static string StripTrailingArity(string head)
@@ -464,6 +600,24 @@ public static class SymbolSignature
 		string segment = lastDot >= 0 ? head[(lastDot + 1)..] : head;
 		(string name, int arity) = SplitArity(segment);
 		return arity < 0 ? head : (lastDot >= 0 ? head[..(lastDot + 1)] + name : name);
+	}
+
+	/// <summary>
+	/// The name as a CLR metadata name: a last segment written with a generic list or a backtick arity is
+	/// re-spelled with the canonical '`n' suffix; anything else is returned unchanged, so nested types
+	/// spelled with '+' pass through as they do today.
+	/// </summary>
+	internal static string MetadataNameOf(string qualifiedName)
+	{
+		int lastDot = LastTopLevelDot(qualifiedName);
+		string segment = lastDot >= 0 ? qualifiedName[(lastDot + 1)..] : qualifiedName;
+		(string name, int arity) = SplitArity(segment);
+		if (arity < 0)
+			return qualifiedName;
+
+		return lastDot >= 0
+			? $"{qualifiedName[..(lastDot + 1)]}{name}`{arity}"
+			: $"{name}`{arity}";
 	}
 
 	/// <summary>Removes whitespace so spelling a signature with or without spaces resolves alike.</summary>

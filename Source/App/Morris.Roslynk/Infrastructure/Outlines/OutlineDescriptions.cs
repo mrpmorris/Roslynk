@@ -100,10 +100,15 @@ internal static class OutlineDescriptions
 		+ "'MyNamespace.MyType.MyMethod(int, string)' or 'MyNamespace.MyType.this[int]'; parameter names, "
 		+ "default values and nullable annotations are ignored, and fully-qualified parameter types are "
 		+ "accepted too. Written without a list the name matches every overload, which is reported as "
-		+ "error=Ambiguous with one candidate per overload. A local function is named as a member of the method "
-		+ "(or property, constructor, or outer local function) that declares it, e.g. 'MyNamespace.MyType.MyMethod.local' "
-		+ "or 'MyNamespace.MyType.MyMethod.outer.inner'; any segment may carry its own parameter list to pick an "
-		+ "overload, e.g. 'MyNamespace.MyType.MyMethod(int).local(string)'.";
+		+ "error=Ambiguous with one candidate per overload. A generic type may also be written without its "
+		+ "type parameters ('MyNamespace.Box', 'MyNamespace.Box.Get') when only one arity exists; when several "
+		+ "arities share the name the response is error=Ambiguous with one candidate per arity, and a "
+		+ "non-generic of the same name wins over a generic one. Arity spellings are interchangeable — "
+		+ "'Box<T>', 'Box<int>', 'Box`1', 'Box<>' and a metadata 'MyNamespace.Box`1' (nested: "
+		+ "'MyNamespace.Outer`1+Inner') all resolve, while a wrong arity is NotFound. A local function is named "
+		+ "as a member of the method (or property, constructor, or outer local function) that declares it, e.g. "
+		+ "'MyNamespace.MyType.MyMethod.local' or 'MyNamespace.MyType.MyMethod.outer.inner'; any segment may "
+		+ "carry its own parameter list to pick an overload, e.g. 'MyNamespace.MyType.MyMethod(int).local(string)'.";
 
 	/// <summary>How find_reads/find_writes name their target, including the 'Member:parameter' form.</summary>
 	public const string AccessSymbolName =

@@ -1,5 +1,6 @@
 ﻿using Morris.Roslynk.Features.Callers.GetCallers;
 using Morris.Roslynk.Features.References.FindReferences;
+using Morris.Roslynk.Features.Symbols.GetMembers;
 using Morris.Roslynk.Features.Symbols.GetSymbol;
 using Morris.Roslynk.Features.Symbols.GetSymbolBody;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -20,7 +21,7 @@ public class CandidateRoundTripTests
 	[Fact]
 	public async Task WhenGetSymbolBodyReportsAmbiguity_ThenEveryCandidateResolvesOnRetry()
 	{
-		await AssertRoundTripAsync(AmbiguousMethod, async (registry, name) =>
+		await AssertRoundTripAsync(AmbiguousMethod, TestSolutions.Simple, async (registry, name) =>
 			await new GetSymbolBodyTool(registry, new SymbolResolver(), new ProjectionService())
 				.GetSymbolBody(TestSolutions.Simple, name));
 	}
@@ -28,7 +29,7 @@ public class CandidateRoundTripTests
 	[Fact]
 	public async Task WhenGetSymbolReportsAmbiguity_ThenEveryCandidateResolvesOnRetry()
 	{
-		await AssertRoundTripAsync(AmbiguousMethod, async (registry, name) =>
+		await AssertRoundTripAsync(AmbiguousMethod, TestSolutions.Simple, async (registry, name) =>
 			await new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService())
 				.GetSymbol(TestSolutions.Simple, name));
 	}
@@ -36,7 +37,7 @@ public class CandidateRoundTripTests
 	[Fact]
 	public async Task WhenGetCallersReportsAmbiguity_ThenEveryCandidateResolvesOnRetry()
 	{
-		await AssertRoundTripAsync(AmbiguousMethod, async (registry, name) =>
+		await AssertRoundTripAsync(AmbiguousMethod, TestSolutions.Simple, async (registry, name) =>
 			await new GetCallersTool(registry, new SymbolResolver(), new ProjectionService())
 				.GetCallers(TestSolutions.Simple, name));
 	}
@@ -44,19 +45,51 @@ public class CandidateRoundTripTests
 	[Fact]
 	public async Task WhenFindReferencesReportsAmbiguity_ThenEveryCandidateResolvesOnRetry()
 	{
-		await AssertRoundTripAsync(AmbiguousMethod, async (registry, name) =>
+		await AssertRoundTripAsync(AmbiguousMethod, TestSolutions.Simple, async (registry, name) =>
 			await new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService())
 				.FindReferences(TestSolutions.Simple, name));
+	}
+
+	[Fact]
+	public async Task WhenGetSymbolReportsABareGenericAmbiguity_ThenEveryCandidateResolvesOnRetry()
+	{
+		await AssertRoundTripAsync("Repro.Multi", TestSolutions.MultiTarget, async (registry, name) =>
+			await new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService())
+				.GetSymbol(TestSolutions.MultiTarget, name));
+	}
+
+	[Fact]
+	public async Task WhenGetSymbolBodyReportsABareGenericAmbiguity_ThenEveryCandidateResolvesOnRetry()
+	{
+		await AssertRoundTripAsync("Repro.Multi", TestSolutions.MultiTarget, async (registry, name) =>
+			await new GetSymbolBodyTool(registry, new SymbolResolver(), new ProjectionService())
+				.GetSymbolBody(TestSolutions.MultiTarget, name));
+	}
+
+	[Fact]
+	public async Task WhenFindReferencesReportsABareGenericAmbiguity_ThenEveryCandidateResolvesOnRetry()
+	{
+		await AssertRoundTripAsync("Repro.Multi", TestSolutions.MultiTarget, async (registry, name) =>
+			await new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService())
+				.FindReferences(TestSolutions.MultiTarget, name));
+	}
+
+	[Fact]
+	public async Task WhenGetMembersReportsABareGenericAmbiguity_ThenEveryCandidateResolvesOnRetry()
+	{
+		await AssertRoundTripAsync("Repro.Multi", TestSolutions.MultiTarget, async (registry, name) =>
+			await new GetMembersTool(registry, new SymbolResolver(), new ProjectionService())
+				.GetMembers(TestSolutions.MultiTarget, name));
 	}
 
 	/// <summary>
 	/// Drives <paramref name="run"/> with an ambiguous name, asserts the failure carries distinguishable
 	/// candidates, then re-runs it with each of them and asserts each one resolved.
 	/// </summary>
-	private static async Task AssertRoundTripAsync(string ambiguousName, Func<InstanceRegistry, string, Task<string>> run)
+	private static async Task AssertRoundTripAsync(string ambiguousName, string solution, Func<InstanceRegistry, string, Task<string>> run)
 	{
 		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		await registry.GetOrAddAsync(solution);
 
 		string ambiguous = await run(registry, ambiguousName);
 		Assert.Contains("error=Ambiguous", ambiguous);

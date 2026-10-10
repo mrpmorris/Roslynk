@@ -73,30 +73,23 @@ public sealed class GetSymbolTool
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		// Resolve across every projection (with metadata fallback) so a symbol declared only in a branch
-		// inactive in the loaded configuration is still found; group by stable identity.
+		// inactive in the loaded configuration is still found; the strictest matching level any projection
+		// reached decides for all of them, and grouping is by stable identity.
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
-		var identities = new SymbolIdentityIndex();
-		var matches = new List<(ISymbol Symbol, Solution Solution)>();
-		foreach (Projection projection in projections)
-		{
-			foreach (ISymbol candidate in await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(projection.Solution, symbolName, cancellationToken))
-			{
-				if (identities.Add(candidate))
-					matches.Add((candidate, projection.Solution));
-			}
-		}
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups =
+			await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName, includeMetadata: true, accept: null, cancellationToken);
 
-		if (matches.Count == 0)
+		if (groups.Count == 0)
 		{
 			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
 			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", suggestions.Count > 0 ? suggestions : null));
 		}
 
-		if (matches.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(symbolName, matches.Select(item => item.Symbol)));
+		if (groups.Count > 1)
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
-		(ISymbol Symbol, Solution Solution) match = matches[0];
-		return await DetailLeanAsync(match.Symbol, match.Solution, solutionDirectory, cancellationToken);
+		ProjectionSymbol match = groups[0][0];
+		return await DetailLeanAsync(match.Symbol, match.Projection.Solution, solutionDirectory, cancellationToken);
 	}
 
 	private async Task<string> DetailLeanAsync(ISymbol symbol, Solution solution, string? solutionDirectory, CancellationToken cancellationToken)

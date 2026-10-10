@@ -42,18 +42,24 @@ public sealed class SymbolResolver
 	/// (<c>N.T.M(int, string)</c>); written without one it matches every overload, so an ambiguous result
 	/// is still reported for the bare name a caller is most likely to try first.
 	/// </summary>
-	public async Task<IReadOnlyList<ISymbol>> FindByFullyQualifiedNameAsync(Solution solution, string name, CancellationToken cancellationToken = default)
+	public async Task<IReadOnlyList<ISymbol>> FindByFullyQualifiedNameAsync(Solution solution, string name, CancellationToken cancellationToken = default) =>
+		(await FindRankedAsync(solution, name, cancellationToken)).Symbols;
+
+	/// <summary>The symbols a name resolved to and the strictest matching level that produced them.</summary>
+	internal sealed record RankedSymbols(IReadOnlyList<ISymbol> Symbols, SymbolSignature.SymbolMatchKind Matching)
+	{
+		public static RankedSymbols None { get; } = new([], SymbolSignature.SymbolMatchKind.Exact);
+	}
+
+	internal async Task<RankedSymbols> FindRankedAsync(Solution solution, string name, CancellationToken cancellationToken = default)
 	{
 		if (!SymbolSignature.TryParse(name, out SymbolSignatureQuery query))
-			return [];
+			return RankedSymbols.None;
 
 		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("resolve_symbol"))
 		{
 			activity?.SetTag("roslynk.symbol.name", ActivityTags.Truncate(name));
 			activity?.SetTag("roslynk.symbol.signature", query.ListKind != ParameterListKind.None);
-
-			var seen = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
-			var matches = new List<ISymbol>();
 
 			// A declaration search is keyed on a member's own name, which an indexer does not have — it is
 			// declared as 'this[]' and renders as 'this'. A bracketed query therefore searches for the
@@ -62,32 +68,61 @@ public sealed class SymbolResolver
 				? ContainingTypeName(query)
 				: query.SimpleName;
 
+			// One indexed sweep (the index is keyed on the bare Name, so 'Box' finds Box<T> and every arity of
+			// Multi), filtered twice: exactly first — so every candidate a tool emits still resolves verbatim —
+			// then, only when nothing matched exactly, with declared type-parameter names compared as arities.
+			var seen = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
+			var exact = new List<ISymbol>();
+			var relaxed = new List<ISymbol>();
 			foreach (Project project in solution.Projects)
 			{
 				foreach (ISymbol symbol in await SymbolFinder.FindDeclarationsAsync(project, searchName, ignoreCase: false, cancellationToken))
 				{
 					foreach (ISymbol candidate in Expand(symbol, query))
 					{
-						if (SymbolSignature.Matches(candidate, query) && seen.Add(candidate))
-							matches.Add(candidate);
+						switch (SymbolSignature.Classify(candidate, query))
+						{
+							case SymbolSignature.SymbolMatchKind.Exact when seen.Add(candidate):
+								exact.Add(candidate);
+								break;
+							case SymbolSignature.SymbolMatchKind.Relaxed when seen.Add(candidate):
+								relaxed.Add(candidate);
+								break;
+						}
 					}
 				}
 			}
 
 			// Local functions are not in the declaration index. C# forbids a nested type and a member of the same
-			// name in one type, so a name that found no member can only mean a local function.
-			if (matches.Count == 0)
+			// name in one type, so a name that found no member can only mean a local function. The re-check
+			// classifies like the sweep: a container that only resolved relaxedly must not be rejected by a
+			// leftover exact-only comparison.
+			if (exact.Count == 0 && relaxed.Count == 0)
 			{
 				foreach (IMethodSymbol local in await FindLocalFunctionsAsync(solution, query, cancellationToken))
 				{
-					if (SymbolSignature.Matches(local, query) && seen.Add(local))
-						matches.Add(local);
+					SymbolSignature.SymbolMatchKind kind = SymbolSignature.Classify(local, query);
+					if (kind != SymbolSignature.SymbolMatchKind.None && seen.Add(local))
+						(kind == SymbolSignature.SymbolMatchKind.Exact ? exact : relaxed).Add(local);
 				}
 			}
 
-			IReadOnlyList<ISymbol> narrowed = SymbolSignature.Narrow(matches, query);
-			activity?.SetTag("roslynk.match.count", narrowed.Count);
-			return narrowed;
+			if (exact.Count > 0)
+			{
+				IReadOnlyList<ISymbol> narrowed = SymbolSignature.Narrow(exact, query);
+				activity?.SetTag("roslynk.match.count", narrowed.Count);
+				return new RankedSymbols(narrowed, SymbolSignature.SymbolMatchKind.Exact);
+			}
+
+			if (relaxed.Count > 0)
+			{
+				IReadOnlyList<ISymbol> narrowed = SymbolSignature.Narrow(relaxed, query);
+				activity?.SetTag("roslynk.match.count", narrowed.Count);
+				activity?.SetTag("roslynk.match.level", nameof(SymbolSignature.SymbolMatchKind.Relaxed));
+				return new RankedSymbols(narrowed, SymbolSignature.SymbolMatchKind.Relaxed);
+			}
+
+			return RankedSymbols.None;
 		}
 	}
 
@@ -115,17 +150,13 @@ public sealed class SymbolResolver
 	}
 
 	/// <summary>
-	/// The simple name of the type a bracketed query's indexer belongs to, generic argument list included so
-	/// the declaration search still finds a generic type.
+	/// The simple name of the type a bracketed query's indexer belongs to, with any generic argument list or
+	/// metadata arity suffix removed, so the declaration search is keyed on the identifier the index is keyed
+	/// by. The dots are split at top level only, so a container written with type arguments
+	/// ('Repro.Dictionary&lt;string, int&gt;.this[int]') does not split inside the angle brackets.
 	/// </summary>
-	private static string ContainingTypeName(SymbolSignatureQuery query)
-	{
-		string head = query.QualifiedName;
-		int memberDot = head.LastIndexOf('.');
-		string container = memberDot >= 0 ? head[..memberDot] : head;
-		int containerDot = container.LastIndexOf('.');
-		return containerDot >= 0 ? container[(containerDot + 1)..] : container;
-	}
+	private static string ContainingTypeName(SymbolSignatureQuery query) =>
+		query.Segments.Count > 1 ? query.Segments[^2].Name : query.SimpleName;
 
 	/// <summary>
 	/// The symbols a declaration hit stands for: itself, plus — for a bracketed query, whose search was for
@@ -150,8 +181,9 @@ public sealed class SymbolResolver
 	/// <summary>
 	/// Like <see cref="FindByFullyQualifiedNameAsync"/>, but if nothing matches in source it falls back to
 	/// referenced-assembly metadata (BCL / NuGet) via <c>GetTypeByMetadataName</c>; so read tools can
-	/// resolve, e.g., <c>System.String</c> or <c>System.String.Substring</c>. Generic arity is not
-	/// inferred, so closed generic metadata types are out of scope for v1.
+	/// resolve, e.g., <c>System.String</c> or <c>System.String.Substring</c>. A generic type is looked up
+	/// under its canonical <c>`n</c> metadata name however it was written ('System.Collections.Generic.List`1',
+	/// 'List&lt;T&gt;'), and its members match exact-then-relaxed like source symbols do.
 	/// </summary>
 	public async Task<IReadOnlyList<ISymbol>> FindByFullyQualifiedNameWithMetadataAsync(Solution solution, string name, CancellationToken cancellationToken = default)
 	{
@@ -172,8 +204,7 @@ public sealed class SymbolResolver
 				matches.Add(symbol);
 		}
 
-		int lastDot = query.QualifiedName.LastIndexOf('.');
-		string? containerName = lastDot > 0 ? query.QualifiedName[..lastDot] : null;
+		bool containerFound = SymbolSignature.TryGetContainer(query, out string containerName);
 
 		foreach (Project project in solution.Projects)
 		{
@@ -182,16 +213,16 @@ public sealed class SymbolResolver
 				continue;
 
 			if (query.ListKind == ParameterListKind.None
-				&& compilation.GetTypeByMetadataName(query.QualifiedName) is INamedTypeSymbol type)
+				&& compilation.GetTypeByMetadataName(SymbolSignature.MetadataNameOf(query.QualifiedName)) is INamedTypeSymbol type)
 			{
 				Add(type);
 			}
 
-			if (containerName is not null && compilation.GetTypeByMetadataName(containerName) is INamedTypeSymbol container)
+			if (containerFound && compilation.GetTypeByMetadataName(SymbolSignature.MetadataNameOf(containerName)) is INamedTypeSymbol container)
 			{
 				foreach (ISymbol member in container.GetMembers(query.SimpleName))
 				{
-					if (SymbolSignature.Matches(member, query))
+					if (SymbolSignature.Matches(member, query) || SymbolSignature.Classify(member, query) == SymbolSignature.SymbolMatchKind.Relaxed)
 						Add(member);
 				}
 			}
@@ -202,45 +233,74 @@ public sealed class SymbolResolver
 
 	/// <summary>
 	/// Ranked fully-qualified-name suggestions for a name that did not resolve exactly; source symbols
-	/// whose simple name matches case-insensitively or by substring, best first. Used to turn a near-miss
-	/// into actionable candidates rather than an empty result.
+	/// whose simple name matches case-insensitively or by substring, best first — with candidates whose
+	/// containing type or namespace is the query's own container segment ranked ahead of everything else.
+	/// Used to turn a near-miss into actionable candidates rather than an empty result.
 	/// </summary>
 	public async Task<IReadOnlyList<string>> SuggestAsync(Solution solution, string name, int maxResults = 10, CancellationToken cancellationToken = default)
 	{
 		if (string.IsNullOrWhiteSpace(name))
 			return [];
 
-		int lastDot = name.LastIndexOf('.');
-		string simpleName = lastDot >= 0 ? name[(lastDot + 1)..] : name;
+		string simpleName = SymbolSignature.TryParse(name, out SymbolSignatureQuery parsed)
+			? parsed.SimpleName
+			: name[(name.LastIndexOf('.') + 1)..];
 		if (simpleName.Length == 0)
 			return [];
 
-		var best = new Dictionary<string, int>(StringComparer.Ordinal);
+		string? containerSegment = null;
+		if (parsed is not null
+			&& SymbolSignature.TryGetContainer(parsed, out string container))
+		{
+			IReadOnlyList<SymbolNameSegment> segments = SymbolSignature.SplitSegments(container);
+			containerSegment = segments[^1].Name;
+		}
+
+		var best = new Dictionary<string, (int Score, bool InContainer)>(StringComparer.Ordinal);
 		foreach (Project project in solution.Projects)
 		{
 			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(project, candidate => IsCandidate(candidate, simpleName), cancellationToken))
 			{
 				string fullyQualified = FullyQualifiedName(symbol);
-				int score = Score(symbol.Name, simpleName);
-				if (!best.TryGetValue(fullyQualified, out int existing) || score < existing)
-					best[fullyQualified] = score;
+				(int Score, bool InContainer) rank = (Score(symbol.Name, simpleName), InQueriedContainer(symbol, containerSegment));
+				if (!best.TryGetValue(fullyQualified, out (int, bool) existing) || Rank(rank) < Rank(existing))
+					best[fullyQualified] = rank;
 			}
 		}
 
 		foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(solution, candidate => IsCandidate(candidate, simpleName), cancellationToken))
 		{
 			string fullyQualified = FullyQualifiedName(local);
-			int score = Score(local.Name, simpleName);
-			if (!best.TryGetValue(fullyQualified, out int existing) || score < existing)
-				best[fullyQualified] = score;
+			(int Score, bool InContainer) rank = (Score(local.Name, simpleName), InQueriedContainer(LocalFunctions.NamedContainer(local), containerSegment));
+			if (!best.TryGetValue(fullyQualified, out (int, bool) existing) || Rank(rank) < Rank(existing))
+				best[fullyQualified] = rank;
 		}
 
 		return best
-			.OrderBy(entry => entry.Value)
+			.OrderBy(entry => Rank(entry.Value))
 			.ThenBy(entry => entry.Key, StringComparer.Ordinal)
 			.Take(maxResults)
 			.Select(entry => entry.Key)
 			.ToArray();
+
+		static int Rank((int Score, bool InContainer) rank) => (rank.InContainer ? 0 : 4) + rank.Score;
+	}
+
+	/// <summary>
+	/// Whether the symbol is declared in the container the query named, so its candidate is ranked ahead of
+	/// same-shaped members of unrelated types. The containing namespace counts too, so a query naming a
+	/// namespace lifts a type declared in it.
+	/// </summary>
+	private static bool InQueriedContainer(ISymbol symbol, string? containerSegment)
+	{
+		if (containerSegment is null)
+			return false;
+
+		if (symbol.ContainingType is { } containingType)
+			return string.Equals(containingType.Name, containerSegment, StringComparison.OrdinalIgnoreCase);
+
+		return symbol.ContainingNamespace is { IsGlobalNamespace: false } containingNamespace
+			&& string.Equals(containingNamespace.Name, containerSegment, StringComparison.OrdinalIgnoreCase);
 	}
 
 	private static bool IsCandidate(string candidate, string simpleName) =>

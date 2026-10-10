@@ -119,6 +119,62 @@ public class GetSymbolTests
 		Assert.Contains("public int Add(int amount, int times)", result);
 	}
 
+	[Theory]
+	[InlineData("Repro.Box", "public class Box<T>")]
+	[InlineData("Repro.Box`1", "public class Box<T>")]
+	[InlineData("Repro.Pair", "public class Pair")]
+	public async Task WhenATypeNameOmitsOrUsesMetadataArity_ThenGetSymbolResolvesIt(string name, string expected)
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
+		var subject = new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService());
+
+		string result = await subject.GetSymbol(TestSolutions.MultiTarget, name);
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains(expected, result);
+	}
+
+	[Fact]
+	public async Task WhenAContainingTypeOmitsItsArity_ThenTheMemberResolves()
+	{
+		string result = await RunOnMultiTargetAsync("Repro.Box.Get");
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("public T? Get()", result);
+	}
+
+	[Fact]
+	public async Task WhenSeveralGenericAritiesShareAName_ThenTheBareNameIsAmbiguous()
+	{
+		string result = await RunOnMultiTargetAsync("Repro.Multi");
+
+		Assert.Contains("error=Ambiguous", result);
+		Assert.Contains("candidate=Repro.Multi<T>", result);
+		Assert.Contains("candidate=Repro.Multi<T1, T2>", result);
+	}
+
+	[Fact]
+	public async Task WhenAMemberIsMissing_ThenTheFirstCandidateIsFromTheWrittenContainer()
+	{
+		string result = await RunOnMultiTargetAsync("Repro.Scanner.read");
+
+		Assert.Contains("error=NotFound", result);
+		Assert.True(
+			result.IndexOf("candidate=Repro.Scanner.Read", StringComparison.Ordinal)
+			< result.IndexOf("candidate=Repro.Converter<T>.Read", StringComparison.Ordinal),
+			$"The container's own member should be suggested first: {result}");
+	}
+
+	private static async Task<string> RunOnMultiTargetAsync(string symbolName)
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
+		var subject = new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService());
+
+		return await subject.GetSymbol(TestSolutions.MultiTarget, symbolName);
+	}
+
 	private static async Task<string> RunAsync(string symbolName)
 	{
 		using var registry = new InstanceRegistry();
