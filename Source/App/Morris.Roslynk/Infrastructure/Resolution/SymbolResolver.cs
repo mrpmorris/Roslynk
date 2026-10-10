@@ -295,7 +295,6 @@ public sealed class SymbolResolver
 		if (simpleName.Length == 0)
 			return [];
 
-<<<<<<< HEAD
 		string? containerSegment = null;
 		if (parsed is not null
 			&& SymbolSignature.TryGetContainer(parsed, out string container))
@@ -314,39 +313,24 @@ public sealed class SymbolResolver
 				if (!best.TryGetValue(fullyQualified, out (int, bool) existing) || Rank(rank) < Rank(existing))
 					best[fullyQualified] = rank;
 			}
-=======
-		var best = new Dictionary<string, int>(StringComparer.Ordinal);
-
-		void Offer(ISymbol symbol)
-		{
-			string fullyQualified = FullyQualifiedName(symbol);
-			int score = Score(symbol.Name, simpleName);
-			if (!best.TryGetValue(fullyQualified, out int existing) || score < existing)
-				best[fullyQualified] = score;
-		}
-
-		foreach (Project project in solution.Projects)
-		{
-			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(project, candidate => IsCandidate(candidate, simpleName), cancellationToken))
-				Offer(symbol);
 
 			// The same Documents-only pre-filter hides generated declarations from suggestions; ask the
 			// compilation of generator-bearing projects, which suggestions only reach on a miss.
 			foreach (ISymbol symbol in await GeneratedDeclarations.FindAsync(project, candidate => IsCandidate(candidate, simpleName), SymbolFilter.All, cancellationToken))
-				Offer(symbol);
->>>>>>> a21894d (Resolve generator-declared symbols by name in every tool and refuse editing them (Fixes #81))
+			{
+				string fullyQualified = FullyQualifiedName(symbol);
+				(int Score, bool InContainer) rank = (Score(symbol.Name, simpleName), InQueriedContainer(symbol, containerSegment));
+				if (!best.TryGetValue(fullyQualified, out (int, bool) existing) || Rank(rank) < Rank(existing))
+					best[fullyQualified] = rank;
+			}
 		}
 
 		foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(solution, candidate => IsCandidate(candidate, simpleName), cancellationToken))
 		{
-<<<<<<< HEAD
 			string fullyQualified = FullyQualifiedName(local);
 			(int Score, bool InContainer) rank = (Score(local.Name, simpleName), InQueriedContainer(LocalFunctions.NamedContainer(local), containerSegment));
 			if (!best.TryGetValue(fullyQualified, out (int, bool) existing) || Rank(rank) < Rank(existing))
 				best[fullyQualified] = rank;
-=======
-			Offer(local);
->>>>>>> a21894d (Resolve generator-declared symbols by name in every tool and refuse editing them (Fixes #81))
 		}
 
 		return best

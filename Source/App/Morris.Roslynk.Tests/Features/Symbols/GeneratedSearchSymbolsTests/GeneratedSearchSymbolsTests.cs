@@ -10,10 +10,10 @@ public class GeneratedSearchSymbolsTests
 	[Theory]
 	[InlineData("GreetingCsv", "class,GreetingCsv,1:52", "Greeting.csv.g.cs,generated=Y")]
 	[InlineData("Hello", "class,Hello,1:52", "Hello.g.cs,generated=Y")]
-	[InlineData("OnlyGenerated", "class,OnlyGenerated,23:22", "Shape.g.cs,generated=Y")]
+	[InlineData("Unlisted", "class,Unlisted,23:22", "Shape.g.cs,generated=Y")]
 	[InlineData("GeneratedOnly", "namespace,GeneratedOnly,21:11", "Shape.g.cs,generated=Y")]
 	[InlineData("ReadArea", "method,ReadArea,5:14", "Shape.g.cs,generated=Y")]
-	[InlineData("TryResolve", "method,TryResolve,16:16", "Shape.g.cs,generated=Y")]
+	[InlineData("Exists", "method,Exists,16:16", "Shape.g.cs,generated=Y")]
 	public async Task WhenOnlyAGeneratedDeclarationMatchesTheQuery_ThenSearchSymbolsReturnsItMarkedGenerated(string query, string leaf, string file)
 	{
 		string result = await SearchAsync(query);
@@ -37,11 +37,11 @@ public class GeneratedSearchSymbolsTests
 	[Fact]
 	public async Task WhenAGeneratedMemberOfANestedTypeMatches_ThenItNestsUnderItsGeneratedContainers()
 	{
-		string result = await SearchAsync("TryResolve");
+		string result = await SearchAsync("Exists");
 
 		Assert.Contains("class,Shape\n", result);
-		Assert.Contains("class,Cache\n", result);
-		Assert.Contains("method,TryResolve,16:16", result);
+		Assert.Contains("class,Metadata\n", result);
+		Assert.Contains("method,Exists,16:16", result);
 	}
 
 	[Fact]
@@ -96,7 +96,7 @@ public class GeneratedSearchSymbolsTests
 		await registry.GetOrAddAsync(TestSolutions.Generator);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
-		// Shape matches the partial type and the ShapeGenerator class, so the cap bites.
+		// Shape matches the partial type and the ShapeSourceGenerator class, so the cap bites.
 		string result = await subject.SearchSymbols(TestSolutions.Generator, "Shape", maxResults: 1);
 
 		Assert.StartsWith("count=", result);

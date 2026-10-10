@@ -13,10 +13,10 @@ public class SourceGeneratedDeclarationsTests
 		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.Generator);
 		Project consumer = instance.CurrentSolution.Projects.Single(project => project.Name == "ConsumerLib");
 
-		IReadOnlyList<ISymbol> found = await SourceGeneratedDeclarations.FindAsync(consumer, name => name == "OnlyGenerated");
+		IReadOnlyList<ISymbol> found = await SourceGeneratedDeclarations.FindAsync(consumer, name => name == "Unlisted");
 
 		ISymbol symbol = Assert.Single(found);
-		Assert.Equal("OnlyGenerated", symbol.Name);
+		Assert.Equal("Unlisted", symbol.Name);
 		Assert.All(symbol.DeclaringSyntaxReferences, reference => Assert.Contains("Shape.g.cs", reference.SyntaxTree.FilePath, StringComparison.OrdinalIgnoreCase));
 	}
 

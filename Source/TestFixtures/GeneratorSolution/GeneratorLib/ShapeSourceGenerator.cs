@@ -24,16 +24,16 @@ public sealed class ShapeSourceGenerator : IIncrementalGenerator
 							static string Format(int area) => area.ToString();
 						}
 
-						public sealed class Cache
+						public sealed class Metadata
 						{
-							public bool TryResolve(string key) => key.Length > 0;
+							public bool Exists(string key) => key.Length > 0;
 						}
 					}
 				}
 
 				namespace GeneratedOnly
 				{
-					public static class OnlyGenerated
+					public static class Unlisted
 					{
 						public const int Answer = 42;
 					}
