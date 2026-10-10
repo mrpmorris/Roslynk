@@ -9,6 +9,8 @@
 - `multi_query` enforces its response budget within a slot: an over-budget slot is cut at a line boundary and marked `truncated=Y`, remaining slots are whole `error=Truncated` blocks, and the default budget is 80,000 characters (configurable via `Roslynk:MaxResponseChars`) (Fixes #71)
 - `get_symbol_body` pages long declarations with `startLine`/`maxLines` (default 400 lines) and lists a partial type's oversized parts with line counts for `part=<n>` selection (Fixes #71)
 - Every tool's result is capped by the response budget: an oversized result is cut after its last whole line and starts with `outputTruncated=Y`/`fullOutputChars=<n>` (Fixes #71)
+- `get_callers` reports the compiler-inserted calls `FindCallersAsync` misses (enumerator/awaiter plumbing of `foreach`/`await foreach`/`await using`, implicit conversions, `true`/`false` operators in conditions, C# 14 instance compound operators, positional-pattern `Deconstruct`, query methods, interpolated-string handler members, `Length`/`Count` behind `^`/`..`), no longer lists a method as calling `Dispose` for merely declaring a disposable local, and names an auto-property initializer's caller as the property (Fixes #62)
+- `get_callers` and `get_callees` accept operator names such as `N.Money.op_Addition(Money, Money)` (Fixes #62)
 - `find_references` handles unresolved analyzers without crashing (Fixes #66)
 - `get_solution_status` lists load diagnostic messages (Fixes #69)
 - Multi-targeted projects no longer list duplicate members or report `Ambiguous` (Fixes #67)
