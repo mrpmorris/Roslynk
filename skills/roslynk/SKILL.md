@@ -63,8 +63,7 @@ analyzed.
 
 ## Failures
 
-Failures are header-only: error=<code>, errorMessage=..., zero or more candidate= lines; nothing
-was written. Stale means a target file changed on disk since it was read: recompute from current
+Failures are header-only: error=<code>, errorMessage=..., zero or more candidate= lines. Stale means a target file changed on disk since it was read: recompute from current
 state and retry.
 
 ## Freshness
@@ -95,7 +94,8 @@ call: its operations run against one snapshot and cannot disagree; its continuat
 ## Editing and diagnostics
 
 Preview broad edits: every write tool takes checkOnly=true and returns the changed files without
-writing. Writes are atomic and stale-guarded; nothing is written on any failure. Make all the
+writing. Validation failures write nothing. Files are replaced atomically; if a batch fails during saving,
+rollback is attempted but may fail. Writes are stale-guarded. Make all the
 edits a task needs, then call get_diagnostics once at the end (it compiles and analyzes affected
 projects, so it is costly; a repeat with nothing changed is near-instant). Fix a diagnostic with
 apply_code_fix (its id, line and column); on error=Conflict pass the chosen candidate actionId to
