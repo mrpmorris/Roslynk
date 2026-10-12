@@ -1,5 +1,7 @@
 # `find_writes`
 
+SupportsPaging=Y
+
 Finds the writes (assign, compound, increment, ref, out and init) of a field, property or
 parameter across the solution, resolved semantically, so same-named symbols in other scopes are
 never reported.

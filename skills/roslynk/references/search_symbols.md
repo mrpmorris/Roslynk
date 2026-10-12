@@ -1,5 +1,7 @@
 # `search_symbols`
 
+SupportsPaging=Y
+
 Searches source-declared symbols whose name contains the query (case-insensitive), across the
 solution, declarations a source generator emits included. Local functions are included, nesting
 under the member (and any outer local functions) that declares them. Matches are grouped file ->

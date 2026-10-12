@@ -20,8 +20,8 @@ a slot is complete or absent, never cut. Operations whose result did not fit are
 header as retry=<index>:<size>, in request order, where size is that result's cost as a ratio of the
 budget rounded up to 0.1 (0.1 is the smallest value reported, never 0.0). Plan the continuation from
 those ratios: a size of 1.0 or more can never fit beside anything, so re-send that operation on its
-own (it will page with nextStartItem=); sizes summing to at most 1.0 fit one continuation batch
-together; ceil(size) is roughly the number of pages a solo call needs. Sizes smaller than 0.1 of the
+own; sizes summing to at most 1.0 fit one continuation batch
+together. Sizes smaller than 0.1 of the
 budget are indistinguishable, so about ten such operations per continuation batch is the safe number.
 Re-send exactly the operations listed, with their original arguments, from your own copy of the
 request - slot frames carry the index and tool name only, never the arguments. Pass the response's
@@ -29,5 +29,6 @@ snapshot=<id> as expectSnapshot when you continue: a continuation that would str
 generations of the solution (a write, or the user saving a file) is refused with error=Stale instead
 of silently mixing them - on Stale, re-run the whole batch. Ratios describe one snapshot only; a
 re-run against a moved solution re-measures and re-decides.
-Trust rule: a delivered slot is always a complete result, so only a slot body's own headers may drive
-tool-level paging (nextStartItem=); nothing in a multi_query response is ever cut mid-body.
+
+Delivered slots are complete; only each slot body's own nextStartItem drives tool-level paging.
+A retry size's ceil(size) estimates the number of pages a solo call needs.

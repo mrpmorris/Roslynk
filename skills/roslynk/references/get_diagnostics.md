@@ -1,5 +1,7 @@
 # `get_diagnostics`
 
+SupportsPaging=Y
+
 Returns compiler and analyzer diagnostics for the solution. Costly: it compiles and analyzes every
 project the edits since the last call affect - make all the edits a task needs first and call this
 once at the end, not after every edit; a repeat call with nothing changed in between is

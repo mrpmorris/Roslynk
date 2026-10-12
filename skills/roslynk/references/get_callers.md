@@ -1,5 +1,7 @@
 # `get_callers`
 
+SupportsPaging=Y
+
 Finds the methods that call the named method. Calls the compiler inserts count too: foreach/await
 plumbing (GetEnumerator, MoveNext, Current, an enumerator's Dispose, await foreach and await using
 equivalents, GetAwaiter, IsCompleted, GetResult), the Dispose/DisposeAsync a using or await using

@@ -1,5 +1,7 @@
 # `get_callees`
 
+SupportsPaging=Y
+
 Finds the methods, constructors, property or event accessors and operators that the named member's
 code calls - the inverse of get_callers, answering "what does this call?".
 Callees in the solution are grouped like get_callers; callees declared in a referenced assembly

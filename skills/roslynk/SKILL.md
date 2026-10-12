@@ -5,19 +5,11 @@ description: Use Roslynk for C#/.NET code review, investigation, compiler diagno
 
 # Roslynk
 
-Roslynk gives semantic intelligence over the C# compiled in a loaded .NET solution: compiler and
-analyzer diagnostics, symbol navigation, references, call graphs, semantic rename and refactoring,
-dead-code analysis. For questions about .cs, .razor or .cshtml code in the loaded solution - does it
-compile, where is this used, what does this bind to, rename it safely - use Roslynk rather than
-reading files, grepping or running a build: it answers from the compiler's symbol model, so partial
-classes, overloads, generated code and #if branches are handled correctly. Use dotnet test when
-runtime behavior needs validation.
+Use Roslynk for semantic inspection and editing of *.cs, *.razor and *.cshtml files.
 
-**How to use this skill.** The sections below are the shared guidance every tool relies on: load
-them once per session, not per tool. Before using a tool for the first time, read its reference
-file — the index links one per tool (`references/<tool>.md`). Do not load all references, and do
-not print tool definitions; the MCP `tools/list` response already carries each tool's schema and
-parameter descriptions.
+Read this guide once per session, then read each tool's linked reference before first use.
+Read only references needed for the task. Inspect MCP schemas only when needed to investigate
+tool metadata or parameters.
 
 ## Scope
 
@@ -82,15 +74,13 @@ file) re-query before relying on an earlier result.
 
 ## Paging
 
-An oversized result is paged, never cut - count=<set size>, truncated=Y, nextStartItem=<k>; re-call
+A tool supports paging only if its reference states SupportsPaging=Y.
+For those tools, an oversized result is paged - count=<set size>, truncated=Y, nextStartItem=<k>; re-call
 with startItem=<k> and the same other arguments. Each page repeats the container lines open above
 its first item and reads standalone. maxSize (characters; 0 = the response budget, 80,000 by
 default) bounds a page but not count=; maxResults caps the result set, and paging walks that capped
 set (count= names its size); an item longer than a whole page is delivered as far as it fits,
-partialItem=<n>, the rest unretrievable. get_symbol_body's startItem instead counts lines of the
-returned text, and find_dead_code's maxResults caps the scan itself. The tools that cannot page
-(get_symbol, find_definition, get_expression_info, get_solution_status) cut an oversized
-result after its last whole line: outputTruncated=Y with fullOutputChars=<n>; narrow the request
+partialItem=<n>, the rest unretrievable. Tools without paging cut oversized results after the last whole line: outputTruncated=Y with fullOutputChars=<n>; narrow the request
 and re-call.
 
 ## Batching reads with multi_query
@@ -119,67 +109,6 @@ code: compiler diagnostics are supported, plus CS8019/IDE0005 (which remove the 
 on that line); the Razor compiler's own RZxxxx diagnostics are reported against the file;
 _Imports.razor/_ViewImports.cshtml usings are never removed.
 
-## Tool index
+## Tool references
 
-Every tool's complete contract — parameters, result shape, errors, limitations and examples — is
-in its reference file under `references/`. Read the relevant reference before first use of that
-tool. Write tools change the solution; all others are read-only.
-
-Loading and status:
-
-| Tool | Purpose |
-| --- | --- |
-| [open_solution](references/open_solution.md) | Load a .sln or .slnx; returns the solutionId every other tool needs. |
-| [get_solution_status](references/get_solution_status.md) | Loaded solutions, per-solution status and load diagnostics. |
-| [reload_solution](references/reload_solution.md) | Force a fresh from-disk reload; the manual backstop, not routine use. |
-
-Symbols and navigation (read-only):
-
-| Tool | Purpose |
-| --- | --- |
-| [get_symbol](references/get_symbol.md) | A symbol's declaration without its body, by fully-qualified name. |
-| [get_symbol_body](references/get_symbol_body.md) | The verbatim source text of a declaration; pages by lines, lists partial-type parts. |
-| [get_members](references/get_members.md) | A type's members grouped by declaring file, local functions nested. |
-| [get_type_hierarchy](references/get_type_hierarchy.md) | Base-type chain, interfaces and derived types. |
-| [find_definition](references/find_definition.md) | Go-to-definition from a source position. |
-| [get_expression_info](references/get_expression_info.md) | What the compiler says about the expression at a position. |
-| [search_symbols](references/search_symbols.md) | Search source-declared symbols by name substring. |
-
-References and call graphs (read-only):
-
-| Tool | Purpose |
-| --- | --- |
-| [find_references](references/find_references.md) | Every reference to a symbol, resolved semantically, not by text. |
-| [find_reads](references/find_reads.md) | Reads of a field, property or parameter, with access kinds. |
-| [find_writes](references/find_writes.md) | Writes of a field, property or parameter, with access kinds. |
-| [get_callers](references/get_callers.md) | Methods that call a method, compiler-inserted calls included. |
-| [get_callees](references/get_callees.md) | What a member's code calls, including external assemblies. |
-| [find_implementations](references/find_implementations.md) | Implementations or overrides of an interface or abstract member. |
-
-Diagnostics and dead code (read-only):
-
-| Tool | Purpose |
-| --- | --- |
-| [get_diagnostics](references/get_diagnostics.md) | Compiler and analyzer diagnostics, with filters and summaryOnly. |
-| [find_dead_code](references/find_dead_code.md) | Symbols with no references, conservatively filtered. |
-| [find_dead_conditionals](references/find_dead_conditionals.md) | #if/#elif/#else branches never compiled in any configuration. |
-
-Code actions and refactorings (write):
-
-| Tool | Purpose |
-| --- | --- |
-| [get_code_actions](references/get_code_actions.md) | List fixes and refactorings at a position; returns actionIds. |
-| [apply_code_action](references/apply_code_action.md) | Apply an actionId from get_code_actions. |
-| [apply_code_fix](references/apply_code_fix.md) | Apply a diagnostic's fix by id and position. |
-| [rename_symbol](references/rename_symbol.md) | Rename a symbol and all its references, Razor-aware and #if-safe. |
-| [rename_parameter](references/rename_parameter.md) | Rename one parameter across its override/interface group. |
-| [change_signature](references/change_signature.md) | Add an optional parameter and thread it through call sites. |
-| [extract_method](references/extract_method.md) | Extract a selection into a new method or local function. |
-| [remove_unused_usings](references/remove_unused_usings.md) | Remove unnecessary using and @using directives. |
-
-Patching and batching:
-
-| Tool | Purpose |
-| --- | --- |
-| [apply_patch](references/apply_patch.md) | Apply a git unified diff to text files, anchored by content. |
-| [multi_query](references/multi_query.md) | Batch several read-only queries against one snapshot. |
+Before first use of a tool, read `references/<tool_name>.md`.

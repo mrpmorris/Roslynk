@@ -1,5 +1,7 @@
 # `find_references`
 
+SupportsPaging=Y
+
 Finds every reference to the named symbol across the solution, resolved by symbol, not text:
 comments, strings and unrelated same-named members are skipped, and usages in partial classes and
 code-behind are found.

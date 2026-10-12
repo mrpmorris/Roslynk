@@ -1,5 +1,7 @@
 # `find_dead_conditionals`
 
+SupportsPaging=Y
+
 Flags #if / #elif / #else branches whose region is never compiled in any known configuration - a
 likely typo'd or stale symbol, or intentionally-disabled code. Each condition is evaluated against
 the configurations the solution actually builds (each project's symbols, and the same set minus

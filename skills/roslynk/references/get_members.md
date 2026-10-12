@@ -1,5 +1,7 @@
 # `get_members`
 
+SupportsPaging=Y
+
 Lists a type's members (methods, properties, fields, events, nested types), grouped by the file
 that declares them (or '<metadata>' for a referenced assembly):
 ```

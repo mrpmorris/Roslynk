@@ -1,5 +1,7 @@
 # `find_reads`
 
+SupportsPaging=Y
+
 Finds the reads of a field, property or parameter - including the read half of compound, increment
 and ref - across the solution, resolved semantically, so same-named symbols in other scopes are
 never reported.

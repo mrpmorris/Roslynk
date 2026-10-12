@@ -1,5 +1,7 @@
 # `find_implementations`
 
+SupportsPaging=Y
+
 Finds the implementations or overrides of an interface, interface member or abstract member.
 Implementors are grouped file -> namespace, each leaf as '<typeKind>,<typeName>,<loc>':
 ```
