@@ -21,5 +21,3 @@ inside C# (an @code block or expression), otherwise error=NotSupported; the extr
 on the generated C# and mapped back to the Razor source, and an edit that cannot be mapped (such
 as a method inserted outside the @code block) is error=NotSupported, mismatched Razor text
 error=Conflict; an out-of-range or empty selection, or an invalid methodName, is error=Invalid.
-
-Annotations: read-only no, idempotent no, destructive yes, open-world no (published MCP title: "Extract a selection into a method").

@@ -15,5 +15,3 @@ error=NotFound; a path matching several distinct files is error=Ambiguous with
 baseVersions (the documentVersion each file was read at) to be told if a file moved since
 (error=Stale with 'stale=<path>' lines). An unmatched or ambiguous hunk is error=Conflict naming
 the file and reason; a patch with no file sections is error=Invalid.
-
-Annotations: read-only no, idempotent no, destructive yes, open-world no (published MCP title: "Apply a patch").

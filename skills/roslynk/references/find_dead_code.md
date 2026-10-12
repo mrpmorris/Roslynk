@@ -22,5 +22,3 @@ The scan is per-symbol, so narrow large solutions with scope. maxResults caps th
 (count=<candidates found> and truncated=Y appear when the cap cut the scan short, and
 nextStartItem=<k> appears only when a page of the result does not show all of them); omit it to
 scan everything (the result then pages).
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Find unused code").

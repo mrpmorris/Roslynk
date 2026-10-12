@@ -19,5 +19,3 @@ caller's declaration location:
   \t\t\t\t<typeKind>,<typeName>
   \t\t\t\t\t<memberKind>,<memberName>,<loc>
 ```
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get callers of a method").

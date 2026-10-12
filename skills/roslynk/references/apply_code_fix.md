@@ -19,5 +19,3 @@ Razor-generated code, so Razor supports compiler diagnostics, plus CS8019/IDE000
 the unnecessary @using on that line. A file edited on disk since it was loaded is error=Stale.
 Returns 'applied', 'action', 'status' header, a blank line, then one solution-relative
 changed-file path per line.
-
-Annotations: read-only no, idempotent no, destructive yes, open-world no (published MCP title: "Apply a diagnostic's fix").

@@ -15,5 +15,3 @@ where directive is if|elif|else and condition is the raw #if expression ('(else)
 A branch defined only in a configuration not loaded here (for example a target framework whose
 workload is missing, or a CI-injected define) may be a false positive, so treat the result as
 'possible' dead code.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Find never-compiled #if branches").

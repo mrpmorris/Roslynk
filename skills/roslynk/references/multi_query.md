@@ -31,5 +31,3 @@ of silently mixing them - on Stale, re-run the whole batch. Ratios describe one 
 re-run against a moved solution re-measures and re-decides.
 Trust rule: a delivered slot is always a complete result, so only a slot body's own headers may drive
 tool-level paging (nextStartItem=); nothing in a multi_query response is ever cut mid-body.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Run several read-only queries in one call").

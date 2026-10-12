@@ -5,5 +5,3 @@ is declared - the 'go to definition' jump, by position. Returns '#fullName' (par
 included for a method or indexer, so it can be passed straight to the name-based tools) and
 '#kind', plus '#project', '#path' and '#loc' for a source symbol, or '#assembly=<name>' for a
 metadata symbol. A position that binds to no symbol in any projection is error=NotFound.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Find a symbol's definition").

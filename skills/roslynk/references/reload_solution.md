@@ -9,5 +9,3 @@ retry a Faulted load. Returns header-only 'solutionId', 'status', 'projects'. Re
 the previous snapshot keeps serving reads (status Building) until the fresh one is ready. No
 effect on files. A failed reload is returned as a Faulted error. Never call this on your own
 initiative; suggest it to the user when the model may be stale.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Reload a solution").

@@ -22,5 +22,3 @@ a target that is not a method, local function, constructor or indexer, a positio
 parameter, a member declared only in metadata, or a member declared only by a source generator is
 error=NotSupported (naming the generator in the last case); a file edited on disk since it was
 loaded is error=Stale. Nothing is written in any failure case.
-
-Annotations: read-only no, idempotent no, destructive yes, open-world no (published MCP title: "Rename a method parameter").

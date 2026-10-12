@@ -11,5 +11,3 @@ In a .razor/.cshtml file the position must be inside C# (an @code block, express
 otherwise error=NotSupported; an action whose edits cannot be mapped back to the Razor source is
 refused by apply_code_action. Analyzers do not run on Razor-generated code, so a Razor file offers
 compiler-diagnostic fixes and refactorings only.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "List code actions").

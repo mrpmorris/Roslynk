@@ -33,5 +33,3 @@ Multi-targeted projects report diagnostics across their loaded target frameworks
 compiler's own diagnostics (RZxxxx, e.g. an unclosed @code block) are reported against the
 .razor/.cshtml file. Diagnostic ids that exist only to trigger a code fix (they carry no message
 and accompany a public rule, as IDE0005's does) are not listed - fix the public id instead.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get compiler diagnostics").

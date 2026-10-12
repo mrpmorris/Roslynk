@@ -33,5 +33,3 @@ reports the calls in the field and property initializers it runs. A property is 
 field its initializer. Lambdas and local functions declared inside the member belong to it. A
 member with no code in the solution (an abstract or interface declaration, an auto-property)
 calls nothing.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get the members a member calls").

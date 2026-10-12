@@ -10,5 +10,3 @@ errors) is, once it is Ready (never while Building, Updating or Faulted), follow
 20 messages are listed per solution, then an indented
 'loadDiagnosticsTruncated=<n>' line counts the rest; pass allLoadDiagnostics=true to list every
 message.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get loaded-solution status").

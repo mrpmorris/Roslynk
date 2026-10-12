@@ -22,5 +22,3 @@ A name matching several distinct symbols (overloads included) returns error=Ambi
 candidate names; a symbol with no source declaration (a namespace, or a referenced-assembly symbol
 - a metadata spelling such as 'Ns.Box`1' or 'N.Outer+Inner' of a type the solution declares in
 source returns that source) returns error=NotSupported.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get symbol source text").

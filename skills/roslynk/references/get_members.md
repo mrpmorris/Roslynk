@@ -18,5 +18,3 @@ accessibilities including private are listed; inherited members are excluded unl
 includeInherited. Use get_symbol_body to read a member's body. Narrow a large type with
 nameFilter (a trailing '*' matches by prefix, otherwise a case-insensitive substring) and the
 include* kind toggles.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get a type's members").

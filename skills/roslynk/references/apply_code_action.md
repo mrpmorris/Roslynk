@@ -10,5 +10,3 @@ error=NotSupported, mismatched Razor text error=Conflict, and nothing is written
 disk since it was loaded is error=Stale.
 Returns 'applied', 'action', 'status' header, a blank line, then one solution-relative
 changed-file path per line.
-
-Annotations: read-only no, idempotent no, destructive yes, open-world no (published MCP title: "Apply a code action").

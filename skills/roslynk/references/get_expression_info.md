@@ -27,5 +27,3 @@ declared type (a method's return type), and 'nullability' the declared annotatio
 initializer's flow state (None without one). A position on neither (whitespace, a comment, a
 keyword, punctuation), or a file not in the solution, is error=NotFound. Works in .razor/.cshtml
 files, with positions in the Razor source.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get compiler facts about an expression").

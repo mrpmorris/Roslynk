@@ -19,5 +19,3 @@ line per match, and a name that matches nothing returns fuzzy suggestions - in e
 candidate back verbatim to target a single symbol. If a file the rename changes was edited (on disk
 or in the loaded model) after the rename was computed, nothing is written and error=Stale names the
 file; edits to other files made in the meantime are kept.
-
-Annotations: read-only no, idempotent no, destructive yes, open-world no (published MCP title: "Rename a symbol").

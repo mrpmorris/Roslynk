@@ -9,5 +9,3 @@ since it was loaded is error=Stale. With nothing to remove the call still succee
 and removedCount=0 (not an error, and safe to re-run).
 Returns 'applied', 'removedCount', 'status' header, a blank line, then one solution-relative
 changed-file path per line.
-
-Annotations: read-only no, idempotent yes, destructive yes, open-world no (published MCP title: "Remove unused usings").

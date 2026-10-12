@@ -14,5 +14,3 @@ to three sections (base, interfaces, derived); an empty section is omitted, and 
   \t<typeKind>,<fully-qualified name>
 ```
 The chain comes from the compiler, including base types defined in referenced assemblies.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get a type's hierarchy").

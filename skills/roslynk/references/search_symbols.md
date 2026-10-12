@@ -13,5 +13,3 @@ namespace -> type -> member, a matched member nesting under its (parent-only) ty
   \t\t\t\t\t<memberKind>,<memberName>,<loc>
 ```
 A type's location is present only when the type itself matched.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Search symbols by name").

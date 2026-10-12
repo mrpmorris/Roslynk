@@ -11,5 +11,3 @@ Implementors are grouped file -> namespace, each leaf as '<typeKind>,<typeName>,
   \t\t\t<namespace>
   \t\t\t\t<typeKind>,<typeName>,<loc>
 ```
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Find implementations").

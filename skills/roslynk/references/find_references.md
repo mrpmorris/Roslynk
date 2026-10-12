@@ -18,5 +18,3 @@ is printed once:
 The type line carries locations only when the type declaration itself references the symbol.
 Combine with get_callers/get_callees/find_implementations/get_type_hierarchy via multi_query for
 usage/impact analysis.
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Find references to a symbol").

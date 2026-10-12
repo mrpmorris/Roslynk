@@ -18,5 +18,3 @@ accessKind is one of read, assign (simple '='), compound ('+=', '??=' and friend
 error=NotSupported is returned for a symbol that cannot be read or written (a method, type, event
 or local variable).
 Coverage: every loaded target framework, plus derived compilations each toggling ONE preprocessor symbol
-
-Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Find reads of a field, property or parameter").

@@ -17,5 +17,3 @@ changed-file path per line.
 Errors: an invalid parameter name, type or default value is error=Invalid; a bare name that
 matches several overloads is error=Ambiguous with one candidate per match; a file edited on disk
 since it was loaded is error=Stale.
-
-Annotations: read-only no, idempotent no, destructive yes, open-world no (published MCP title: "Add a parameter to a method").
