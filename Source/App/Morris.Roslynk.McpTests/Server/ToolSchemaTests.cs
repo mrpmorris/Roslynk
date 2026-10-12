@@ -124,7 +124,7 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 			Normalize(descriptions["multi_query"]),
 			StringComparison.Ordinal);
 		Assert.Contains(
-			"Prefer this over text search for usages in *.cs, *.cshtml and *.razor; combine with get_callers/find_implementations via multi_query for impact analysis.",
+			"Combine with get_callers/get_callees/find_implementations/get_type_hierarchy via multi_query for usage/impact analysis.",
 			Normalize(descriptions["find_references"]),
 			StringComparison.Ordinal);
 	}
@@ -171,8 +171,8 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 		IReadOnlyDictionary<string, JsonElement> properties = Properties(schema);
 		IReadOnlyCollection<string> required = Required(schema);
 
-		// The paging parameters are plain omittable integers - their defaults live in the descriptions, the
-		// MoveDefaultKeywordToDescription transform having stripped the schema's default keyword.
+		// The paging parameters are plain omittable integers - the MoveDefaultKeywordToDescription
+		// transform stripped the schema's default keyword and moved each default into the description.
 		foreach (string name in new[] { "startItem", "maxSize", "part" })
 		{
 			Assert.True(properties.ContainsKey(name), $"{name} is missing from the get_symbol_body schema.");
@@ -180,9 +180,9 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 			Assert.DoesNotContain(name, required);
 		}
 
-		Assert.Contains("Default: the response budget", properties["maxSize"].GetProperty("description").GetString(), StringComparison.Ordinal);
-		Assert.Contains("Default 1", properties["startItem"].GetProperty("description").GetString(), StringComparison.Ordinal);
-		Assert.Contains("Default 0", properties["part"].GetProperty("description").GetString(), StringComparison.Ordinal);
+		Assert.Contains("(Default value: 0)", properties["maxSize"].GetProperty("description").GetString(), StringComparison.Ordinal);
+		Assert.Contains("(Default value: 1)", properties["startItem"].GetProperty("description").GetString(), StringComparison.Ordinal);
+		Assert.Contains("(Default value: 0)", properties["part"].GetProperty("description").GetString(), StringComparison.Ordinal);
 	}
 
 	[Fact]

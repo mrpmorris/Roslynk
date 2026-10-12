@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.CodeActions;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Razor;
@@ -35,23 +36,22 @@ public sealed class ApplyCodeActionTool
 		Destructive = true,
 		OpenWorld = false)]
 	[Description(
-		$"""
-		Applies a code action discovered by get_code_actions, identified by its actionId. Returns a text
-		result, not JSON: 'applied', 'action', 'status' header, a blank line, then one
-		solution-relative changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness} The action is re-resolved at the same position (nothing is
-		held between calls), then written atomically through the same safe write path as the other tools. If
-		the code changed since discovery, the re-resolution no longer finds the action and the result is
-		error=Conflict — re-run get_code_actions and pick again; a malformed actionId is error=Invalid. Pass
-		checkOnly to preview the changed files without writing. For an action discovered in a .razor/.cshtml file,
-		the edits are mapped back to the Razor source; an edit that cannot be mapped (for example a using or
-		member added to generated scaffolding) is error=NotSupported, mismatched Razor text error=Conflict, and
-		nothing is written. A file edited on disk since it was loaded is error=Stale. Prefer applying Roslyn's action over
-		re-implementing the change by hand so the in-memory model stays in sync.
+		"""
+		Applies a code action discovered by get_code_actions, identified by its actionId. The action is
+		re-resolved at the same position (nothing is held between calls): if the code changed since
+		discovery, the re-resolution no longer finds the action and the result is error=Conflict - re-run
+		get_code_actions and pick again; a malformed actionId is error=Invalid.
+		For an action discovered in a .razor/.cshtml file the edits are mapped back to the Razor source;
+		an edit that cannot be mapped (for example a using or member added to generated scaffolding) is
+		error=NotSupported, mismatched Razor text error=Conflict, and nothing is written. A file edited on
+		disk since it was loaded is error=Stale.
+		Returns 'applied', 'action', 'status' header, a blank line, then one solution-relative
+		changed-file path per line.
 		""")]
 	public async Task<string> ApplyCodeAction(
-		[Description("Solution handle returned by open_solution.")] string solutionId,
+		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("The actionId from get_code_actions.")] string actionId,
-		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
+		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);

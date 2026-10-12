@@ -5,6 +5,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Callers;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
@@ -40,16 +41,14 @@ public sealed class GetCallersTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		$"""
-		Finds the methods that call the resolved method (by fully-qualified name).
-		{OutlineDescriptions.ProjectionCoverage}
-		{OutlineDescriptions.CommonMethodInstructions}
-		Calls the compiler inserts count too: foreach/await plumbing (GetEnumerator, MoveNext, Current, an
-		enumerator's Dispose, await foreach and await using equivalents, GetAwaiter, IsCompleted, GetResult),
-		the Dispose/DisposeAsync a using or await using runs, deconstruction and positional patterns,
-		collection-initializer Add, user-defined operators and conversions (including +=, ++, implicit
-		conversions and true/false in a condition), query-expression methods, interpolated-string handler
-		members, implicit base() calls, and the Length/Count behind ^ and ...
+		"""
+		Finds the methods that call the named method. Calls the compiler inserts count too: foreach/await
+		plumbing (GetEnumerator, MoveNext, Current, an enumerator's Dispose, await foreach and await using
+		equivalents, GetAwaiter, IsCompleted, GetResult), the Dispose/DisposeAsync a using or await using
+		runs, deconstruction and positional patterns, collection-initializer Add, user-defined operators
+		and conversions (including +=, ++, implicit conversions and true/false in a condition),
+		query-expression methods, interpolated-string handler members, implicit base() calls, and the
+		Length/Count behind ^ and ...
 		Callers are grouped file -> namespace -> containing type -> calling member, each leaf showing the
 		caller's declaration location:
 		  resolvedSymbol=<name, parameter types included for a method or indexer>
@@ -60,15 +59,12 @@ public sealed class GetCallersTool
 		  \t\t\t<namespace>
 		  \t\t\t\t<typeKind>,<typeName>
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc>
-		where kind is one of {OutlineDescriptions.KindList} and {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}.
-		{OutlineDescriptions.Paging} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over grepping for call sites; it resolves the actual
-		method through the compiler, so overloads and same-named methods are not confused.
 		""")]
 	public async Task<string> GetCallers(
-		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description($"Fully-qualified name of the method, e.g. 'MyNamespace.MyType.MyMethod'. {OutlineDescriptions.SymbolNameGrammar}")] string methodName,
-		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
-		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
+		[Description(ParameterDescriptions.SolutionId)] string solutionId,
+		[Description("Fully-qualified method name; reuse names returned by discovery. Include parameter types to select one overload.")] string methodName,
+		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
+		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();

@@ -28,15 +28,13 @@ public sealed class OpenSolutionTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		$"""
-		Loads a C# solution (.sln or .slnx) into Roslynk so its projects and code can be queried. Returns a
-		compact text result, not JSON: a 'solutionId', 'status', 'projects', 'loadDiagnostics'
-		header, a blank line, then one '<projectPath>,<documentCount>' line per project. Returns immediately:
-		the solution loads in the background, so status is Building (and the body empty) until it is Ready; poll
-		get_solution_status every 1 second and report project-loading progress, or call open_solution again.
-		While the load is in progress, other tools report error=Indexing — retry them rather than falling back
-		to raw file reads. Idempotent: opening the same solution again returns the same instance. If the solution file does not
-		exist, returns immediately as a NotFound error. A load failure is returned as a Faulted error. {OutlineDescriptions.Freshness}
+		"""
+		Loads a C# solution (.sln or .slnx) into Roslynk so its projects and code can be queried. Returns
+		'solutionId', 'status', 'projects', 'loadDiagnostics' headers, a blank line, then one
+		'<projectPath>,<documentCount>' line per project. Returns immediately: the solution loads in the
+		background, so status is Building (and the body empty) until it is Ready. Idempotent: opening the
+		same solution again returns the same instance. A solution file that does not exist returns
+		immediately as a NotFound error; a failed load is returned as a Faulted error.
 		""")]
 	public string OpenSolution(
 		[Description("Absolute path to the .sln or .slnx file to open.")] string solutionPath)

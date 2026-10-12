@@ -5,6 +5,7 @@ using ModelContextProtocol.Server;
 using System.Collections.Immutable;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Diagnostics;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Razor;
@@ -47,35 +48,34 @@ public sealed class ApplyCodeFixTool
 		Destructive = true,
 		OpenWorld = false)]
 	[Description(
-		$"""
-		Applies the code fix for the diagnostic with this id (a compiler id such as CS0219, or an analyzer id
-		such as IDE0005) at line:column in a .cs, .razor or .cshtml file; the quick path when get_diagnostics
-		has already told you the id and position, without first listing actions. Pass the 1-based line and
-		column get_diagnostics printed for that entry; the diagnostic whose span contains that position is
-		fixed. When the diagnostic has more than one distinct fix (for example several namespaces to import,
-		or make-nullable versus add-required), nothing is written and the result is error=Conflict with one
-		'candidate=<actionId>,Fix,<diagnosticId> <title>' header per fix: choose the fix whose title matches
-		your intent and pass its actionId to apply_code_action; do not call apply_code_fix again for it.
+		"""
+		Applies the code fix for the diagnostic with this id (a compiler id such as CS0219, or an analyzer
+		id such as IDE0005) at line:column in a .cs, .razor or .cshtml file - the quick path when
+		get_diagnostics has already given the id and position, without first listing actions. Pass the
+		1-based line and column get_diagnostics printed for that entry; the diagnostic whose span contains
+		that position is fixed. When the diagnostic has more than one distinct fix (for example several
+		namespaces to import, or make-nullable versus add-required), nothing is written and the result is
+		error=Conflict with one 'candidate=<actionId>,Fix,<diagnosticId> <title>' header per fix: choose
+		the fix whose title matches your intent and pass its actionId to apply_code_action; do not call
+		apply_code_fix again for it.
 		Errors: a documentPath that is not a solution-compiled .cs, .razor or .cshtml document, or no such
-		diagnostic at that position, is error=NotFound; a line or column below 1 is error=Invalid; a diagnostic
-		with no registered fix is error=NotSupported; a fix that produced no changes is error=Conflict (without
-		candidates). In a .razor/.cshtml file the position is in the Razor file, the fix is computed on the
-		generated C# and mapped back to the Razor source: an unmappable edit is error=NotSupported, mismatched
-		Razor text error=Conflict, nothing written. Analyzers do not run on Razor-generated code, so Razor
-		supports compiler diagnostics, plus CS8019/IDE0005, which remove the unnecessary @using on that line.
-		A file edited on disk since it was loaded is error=Stale. Returns a text result, not JSON: 'applied',
-		'action', 'status' header, a blank line, then one solution-relative changed-file path per line.
-		{OutlineDescriptions.Project} {OutlineDescriptions.Freshness} Written atomically through the same safe
-		write path. Pass checkOnly to preview without writing. Prefer this over hand-editing the file to clear
-		a diagnostic so the in-memory model stays in sync.
+		diagnostic at that position, is error=NotFound; a line or column below 1 is error=Invalid; a
+		diagnostic with no registered fix is error=NotSupported; a fix that produced no changes is
+		error=Conflict (without candidates). In a .razor/.cshtml file the position is in the Razor file,
+		the fix is computed on the generated C# and mapped back to the Razor source: an unmappable edit is
+		error=NotSupported, mismatched Razor text error=Conflict, nothing written. Analyzers do not run on
+		Razor-generated code, so Razor supports compiler diagnostics, plus CS8019/IDE0005, which remove
+		the unnecessary @using on that line. A file edited on disk since it was loaded is error=Stale.
+		Returns 'applied', 'action', 'status' header, a blank line, then one solution-relative
+		changed-file path per line.
 		""")]
 	public async Task<string> ApplyCodeFix(
-		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Path of the .cs, .razor or .cshtml file; absolute, or relative to the solution folder.")] string documentPath,
+		[Description(ParameterDescriptions.SolutionId)] string solutionId,
+		[Description(ParameterDescriptions.DocumentPath)] string documentPath,
 		[Description("The diagnostic id to fix, e.g. CS0219 or IDE0005.")] string diagnosticId,
 		[Description("1-based line of the diagnostic, as get_diagnostics reports it.")] int line,
 		[Description("1-based column of the diagnostic, as get_diagnostics reports it.")] int column,
-		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
+		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);

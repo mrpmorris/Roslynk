@@ -76,10 +76,9 @@ public sealed class MultiQueryTool
 		re-run against a moved solution re-measures and re-decides.
 		Trust rule: a delivered slot is always a complete result, so only a slot body's own headers may drive
 		tool-level paging (nextStartItem=); nothing in a multi_query response is ever cut mid-body.
-		{OutlineDescriptions.Freshness}
 		""")]
-	public async Task<string> MultiQuery(
-		[Description("Solution handle returned by open_solution; every operation runs against this one solution's snapshot.")] string solutionId,
+		public async Task<string> MultiQuery(
+			[Description("Solution handle returned by open_solution; every operation runs against this one solution's snapshot.")] string solutionId,
 		[Description("The operations to run, in order. Each names a read-only tool and carries that tool's arguments.")] IReadOnlyList<MultiQueryOperation> operations,
 		[Description("Optional: the snapshot=<id> from a previous multi_query response, checked before anything runs; a mismatch is error=Stale naming both ids - re-run the whole batch. Omit for a one-shot batch.")] string? expectSnapshot = null)
 	{

@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
@@ -43,41 +44,35 @@ public sealed class GetSymbolBodyTool
 	[Description(
 		$"""
 		Returns the verbatim source text of a symbol's declaration - a method, constructor, property,
-		indexer, event, field, local function or type - resolved by fully-qualified name. Use this instead of
-		reading the file (or grepping it) when you need to see what a member actually does; get_symbol gives
-		only the signature, this gives the whole declaration including its body.
-		{OutlineDescriptions.ProjectionCoverage}
-		{OutlineDescriptions.CommonMethodInstructions}
-		A symbol with one declaration returns 'project=<project>', 'path=<relative/path.cs>' and
-		'loc=<startLine:startCol-endLine:endCol>' headers, a blank line, then the source text exactly as it
-		appears in the file - original indentation, line endings and spacing, never reformatted.
-		Long text is paged, never cut silently: a call returns at most maxSize characters (default: the
-		response budget, about 80,000). Items are the text's lines, counted from 1 at the first line of the
-		returned text (its first comment line with includeLeadingTrivia), not in the file; for a Razor member
-		that text is the generated C#. A page that is not the whole text adds truncated=Y, count=<total
-		lines> and nextStartItem=<k>: call again with startItem=<k>, keeping includeLeadingTrivia and part
-		unchanged. A single line longer than the page is delivered as far as it fits and named
-		partialItem=<n>; the rest of that line is not retrievable. A startItem past the end is error=Invalid
-		naming count. A partial type or partial method declared in several places returns a 'parts=<n>'
-		header and one block per part: a 'part=<n>,project=...,path=...,loc=...,lines=<count>' line and the
-		verbatim text, including an implementation supplied by a source generator (e.g. [GeneratedRegex],
-		[LoggerMessage], [LibraryImport]). When the parts do not all fit within maxSize and the budget they
-		are listed without their text, their line ending ',omitted=Y', and the headers add truncated=Y and
-		omittedParts=<k>: fetch it with part=<n>, which returns that part alone, paged as above. startItem
-		pages one part; combining it with several parts and no part= is error=Invalid.
-		{OutlineDescriptions.GeneratedLocations}
-		{OutlineDescriptions.Project}. A name matching several distinct symbols (overloads included) returns
-		error=Ambiguous with candidate names; a symbol with no source declaration (a namespace, or a
-		referenced-assembly symbol - a metadata spelling such as 'Ns.Box`1' or 'N.Outer+Inner' of a type the
-		solution declares in source returns that source) returns error=NotSupported. {OutlineDescriptions.ErrorBlock}
+		indexer, event, field, local function or type. Use this to see what a member actually does;
+		get_symbol gives only the signature, this the whole declaration including its body.
+		A symbol with one declaration returns 'project=', 'path=' and 'loc=' headers, a blank line, then
+		the source text exactly as it appears in the file - original indentation, line endings and
+		spacing, never reformatted; for a Razor member that text is the generated C#. Paging is by lines
+		of the returned text (its first comment line with includeLeadingTrivia), not by result items: a
+		page that is not the whole text adds truncated=Y, count=<total lines> and nextStartItem=<k>: call
+		again with startItem=<k>, keeping includeLeadingTrivia and part unchanged. A single line longer
+		than the page is delivered as far as it fits and named partialItem=<n>; the rest of that line is
+		not retrievable. A startItem past the end is error=Invalid naming count. A partial type or partial
+		method declared in several places returns a 'parts=<n>' header and one block per part: a
+		'part=<n>,project=...,path=...,loc=...,lines=<count>' line and the verbatim text, including an
+		implementation supplied by a source generator (e.g. [GeneratedRegex], [LoggerMessage],
+		[LibraryImport]). When the parts do not all fit within maxSize and the budget they are listed
+		without their text, their line ending ',omitted=Y', and the headers add truncated=Y and
+		omittedParts=<k>: fetch it with part=<n>, which returns that part alone, paged as above.
+		startItem pages one part; combining it with several parts and no part= is error=Invalid.
+		A name matching several distinct symbols (overloads included) returns error=Ambiguous with
+		candidate names; a symbol with no source declaration (a namespace, or a referenced-assembly symbol
+		- a metadata spelling such as 'Ns.Box`1' or 'N.Outer+Inner' of a type the solution declares in
+		source returns that source) returns error=NotSupported.
 		""")]
 	public async Task<string> GetSymbolBody(
-		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description($"Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType.MyMethod'. {OutlineDescriptions.SymbolNameGrammar}")] string symbolName,
-		[Description("Include the declaration's leading comments, XML documentation and preceding directives. Default false.")] bool includeLeadingTrivia = false,
-		[Description("1-based first line of the page, counted in the returned text (its first comment line with includeLeadingTrivia), not in the file. Only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
-		[Description("Page size in characters; a declaration longer than this is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0,
-		[Description("1-based part to return when the symbol has several declarations; 0 returns every part (omitting the oversized ones). Default 0.")] int part = 0,
+		[Description(ParameterDescriptions.SolutionId)] string solutionId,
+		[Description("Fully-qualified symbol name; reuse names returned by discovery. Include parameter types to select one overload.")] string symbolName,
+		[Description("Include the declaration's leading comments, XML documentation and preceding directives.")] bool includeLeadingTrivia = false,
+		[Description("1-based first line of the page, counted in the returned text (its first comment line with includeLeadingTrivia), not in the file. Only pass it to continue from nextStartItem=.")] int startItem = 1,
+		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		[Description("1-based part to return when the symbol has several declarations; 0 returns every part (omitting the oversized ones).")] int part = 0,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);

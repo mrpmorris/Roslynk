@@ -2,6 +2,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
@@ -40,37 +41,32 @@ public sealed class RenameSymbolTool
 		Destructive = true,
 		OpenWorld = false)]
 	[Description(
-		$"""
-		Renames a symbol and all its references across the solution using Roslyn, resolved by the
-		fully-qualified symbolName (an overload is targeted by its parameter-type list). The rename is correct
-		across partial classes, code-behind, every #if/#else branch and every target framework; string
-		literals and comments are left untouched.
-		{OutlineDescriptions.ProjectionCoverage}
+		"""
+		Renames a symbol and all its references across the solution; correct across partial classes,
+		code-behind, every #if/#else branch and every target framework; string literals and comments are
+		left untouched.
 		Symbols declared or referenced in .razor/.cshtml files are renamed by rewriting those files directly
-		— edits computed against the Razor-generated code are mapped back through the compiler's #line
+		- edits computed against the Razor-generated code are mapped back through the compiler's #line
 		directives, covering @code blocks, markup expressions, and component-attribute usages in other
 		components' markup. If a Razor edit cannot be mapped and verified, the rename aborts before anything
-		is written (error=Conflict or error=NotSupported). If a file the rename changes was edited (on disk or
-		in the loaded model) after the rename was computed, nothing is written and error=Stale names the file;
-		edits to other files made in the meantime are kept.
-		Returns a text result, not JSON: 'applied' (N for a checkOnly preview), 'resolvedSymbol' (the name
-		as resolved, before the rename), 'status' header, a blank line, then one solution-relative
-		changed-file path per line. {OutlineDescriptions.Project} {OutlineDescriptions.Freshness}
+		is written (error=Conflict or error=NotSupported).
 		A symbol declared only by a source generator is refused (error=NotSupported naming the generator):
 		its declaration is never written to disk and would be regenerated unchanged, so change the generator
 		or the code that drives it instead; a partial member or type with a hand-written declaration is
 		renamable, since the generator follows the hand-written name.
-		Errors: an invalid identifier is refused; an ambiguous name returns one candidate= line per match,
-		and a name that matches nothing returns fuzzy suggestions — in either case copy a candidate back
-		verbatim to target a single symbol. Pass checkOnly to preview the files that would change without
-		writing. Prefer this over a textual find/replace rename; it renames the symbol itself, so it never
-		touches unrelated same-named text.
+		Returns 'applied' (N for a checkOnly preview), 'resolvedSymbol' (the name as resolved, before the
+		rename), 'status' header, a blank line, then one solution-relative changed-file path per line.
+		Errors: an invalid identifier is refused (error=Invalid); an ambiguous name returns one candidate=
+		line per match, and a name that matches nothing returns fuzzy suggestions - in either case copy a
+		candidate back verbatim to target a single symbol. If a file the rename changes was edited (on disk
+		or in the loaded model) after the rename was computed, nothing is written and error=Stale names the
+		file; edits to other files made in the meantime are kept.
 		""")]
 	public async Task<string> RenameSymbol(
-		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description($"Fully-qualified name of the symbol to rename. {OutlineDescriptions.SymbolNameGrammar}")] string symbolName,
+		[Description(ParameterDescriptions.SolutionId)] string solutionId,
+		[Description("Fully-qualified symbol name; reuse names returned by discovery. Include parameter types to select one overload.")] string symbolName,
 		[Description("The new name (must be a valid C# identifier).")] string newName,
-		[Description("If true, returns the files that would change without writing anything.")] bool checkOnly = false,
+		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);

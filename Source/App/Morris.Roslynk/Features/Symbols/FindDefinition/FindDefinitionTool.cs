@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
@@ -35,20 +36,15 @@ public sealed class FindDefinitionTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		$"""
-		Resolves the symbol used at a source position (file, 1-based line and column) and returns where it is
-		declared; the 'go to definition' jump, by position.
-		{OutlineDescriptions.ProjectionCoverage}
-		{OutlineDescriptions.CommonMethodInstructions}
-		The result is a '#fullName' (parameter types included for a method or indexer, so it can be passed
-		straight to the name-based tools), '#kind' header plus '#project=<project>', '#path=<relative/path.cs>' and '#loc=<line:col>' for a source symbol,
-		or '#assembly=<name>' for a metadata symbol. {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} A position that binds to no
-		symbol in any projection is error=NotFound. {OutlineDescriptions.ErrorBlock} Prefer this over grepping
-		to chase a definition; it follows the compiler's binding, so it lands on the right symbol even when
-		names are overloaded or shadowed.
+		"""
+		Resolves the symbol used at a source position (file, 1-based line and column) and returns where it
+		is declared - the 'go to definition' jump, by position. Returns '#fullName' (parameter types
+		included for a method or indexer, so it can be passed straight to the name-based tools) and
+		'#kind', plus '#project', '#path' and '#loc' for a source symbol, or '#assembly=<name>' for a
+		metadata symbol. A position that binds to no symbol in any projection is error=NotFound.
 		""")]
 	public async Task<string> FindDefinition(
-		[Description("Solution handle returned by open_solution.")] string solutionId,
+		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("Path to the .cs file containing the usage; absolute, or relative to the solution folder.")] string filePath,
 		[Description("1-based line of the usage.")] int line,
 		[Description("1-based column of the usage.")] int column)

@@ -1,7 +1,8 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
@@ -59,35 +60,35 @@ public sealed class FindDeadCodeTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		$"""
-		Finds symbols (types, methods, properties, fields, events) with no references, conservatively filtered
-		to avoid false positives: it excludes interface implementations, virtual/override chains, test members,
-		generated code, and DI/reflection-activated members, and (unless includePublic is true) the public API
-		surface.
-		Also use {Morris.Roslynk.Features.Conditionals.FindDeadConditionals.FindDeadConditionalsTool.FindDeadConditionalsName}.
-		{OutlineDescriptions.CommonMethodInstructions}
-		Candidates nest file -> namespace -> type -> member:
+		"""
+		Finds symbols (types, methods, properties, fields, events) with no references, conservatively
+		filtered to avoid false positives: it excludes interface implementations, virtual/override chains,
+		test members, generated code, and DI/reflection-activated members, and (unless includePublic is
+		true) the public API surface. Also use find_dead_conditionals.
+		Candidates nest file -> namespace -> type -> member; a dead type is itself a leaf carrying its own
+		loc; confidence is High or Medium; the free-text reason is the next field:
 		  <project>
 		  \t<relative/forward-slash/folder>
 		  \t\t<file.cs|file.razor>
 		  \t\t\t<namespace>
 		  \t\t\t\t<typeKind>,<typeName>
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc>,<confidence>,<reason>
-		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; confidence is High or
-		Medium; the free-text reason is the next field; a dead type is itself a leaf carrying its own loc. The loc is
-		the full declaration span, ready to pass to apply_patch to remove the member. Each unused overload of a
-		member is reported as its own leaf, distinguished by its loc; the leaf name carries no parameter
-		list, so pass the member name to get_symbol_body and pick from the candidates it offers. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
-		solutions with scope. maxResults bounds an expensive scan; omit it to scan everything (the result
-		then pages). {OutlineDescriptions.TruncationFlag} {OutlineDescriptions.Paging} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock}
+		The loc is the full declaration span, ready to pass to apply_patch to remove the member. Each
+		unused overload of a member is reported as its own leaf, distinguished by its loc; the leaf name
+		carries no parameter list, so pass the member name to get_symbol_body and pick from the
+		candidates it offers. The host decides whether to remove a candidate.
+		The scan is per-symbol, so narrow large solutions with scope. maxResults caps the scan itself
+		(count=<candidates found> and truncated=Y appear when the cap cut the scan short, and
+		nextStartItem=<k> appears only when a page of the result does not show all of them); omit it to
+		scan everything (the result then pages).
 		""")]
 	public async Task<string> FindDeadCode(
-		[Description("Solution handle returned by open_solution.")] string solutionId,
+		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("Optional fully-qualified-name prefix to limit the scan, e.g. MyApp.Services. Omit for the whole solution.")] string? scope = null,
 		[Description("Include unreferenced public/protected members (the API surface).")] bool includePublic = false,
-		[Description("Maximum candidates to return. Omit for every candidate (paging walks the result with startItem); maxResults bounds an expensive scan.")] int? maxResults = null,
-		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
-		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
+		[Description("Maximum candidates to scan for; omit to scan everything (the result then pages).")] int? maxResults = null,
+		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
+		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();

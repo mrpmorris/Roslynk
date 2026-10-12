@@ -1,7 +1,8 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
@@ -35,31 +36,25 @@ public sealed class SearchSymbolsTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		$"""
+		"""
 		Searches source-declared symbols whose name contains the query (case-insensitive), across the
-		solution, declarations a source generator emits included.
-		{OutlineDescriptions.ProjectionCoverage}
-		{OutlineDescriptions.CommonMethodInstructions}
-		Local functions are included, nesting under the member (and any outer local functions) that declares
-		them. Matches are grouped file -> namespace -> type -> member, a
-		matched member nesting under its (parent-only) type:
-
+		solution, declarations a source generator emits included. Local functions are included, nesting
+		under the member (and any outer local functions) that declares them. Matches are grouped file ->
+		namespace -> type -> member, a matched member nesting under its (parent-only) type:
 		  <project>
 		  \t<relative/forward-slash/folder>
 		  \t\t<file.cs|file.razor>
 		  \t\t\t<namespace>
 		  \t\t\t\t<typeKind>,<typeName>,<loc>
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc>
-		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}, and a type's location
-		is present only when the type itself matched; {OutlineDescriptions.ListFieldQuoting}. {OutlineDescriptions.Paging} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over grepping
-		to locate where something is declared; it searches the compiler's declared symbols.
+		A type's location is present only when the type itself matched.
 		""")]
 	public async Task<string> SearchSymbols(
-		[Description("Solution handle returned by open_solution.")] string solutionId,
+		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("Substring to match against symbol names (case-insensitive).")] string query,
-		[Description("Maximum results to return. Omit for every result (paging walks the result with startItem).")] int? maxResults = null,
-		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
-		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
+		[Description("Maximum results to return; omit for every result.")] int? maxResults = null,
+		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
+		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();

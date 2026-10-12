@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Shared tool guidance (output protocol, name grammar, paging, freshness, edit/diagnostic workflow, Razor handling) lives in the server instructions; tool and parameter attributes keep only each tool's own contract, and identical parameter contracts share constants (Fixes #100)
+- The roslynk skill is reduced to routing guidance; the duplicated tool-reference file is removed (Fixes #99)
 - `multi_query` runs every operation, then delivers whole results smallest-first until the response budget is filled, naming the rest in a `retry=<index>:<size>` header (each size is that result's cost as a ratio of the budget, rounded up to 0.1); batch order no longer matters, slots are complete or absent, and nothing is ever cut mid-body (Fixes #96)
 - `multi_query` runs its operations in parallel and derives its operation limit from the framing itself (a batch whose retry line cannot fit is refused with `error=Invalid` before anything runs) instead of a fixed 25 (Fixes #96)
 - Oversized results from find_references, find_reads, find_writes, get_callers, get_callees, get_members, search_symbols, find_implementations, get_type_hierarchy, find_dead_code, find_dead_conditionals, get_diagnostics and get_symbol_body page by item with `startItem`/`maxSize` (`count=`/`truncated=Y`/`nextStartItem=`), and every page repeats its container lines so it reads standalone; a result that fits whole carries no paging headers (Fixes #96)

@@ -3,6 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.CodeActions;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Razor;
@@ -32,23 +33,22 @@ public sealed class GetCodeActionsTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		$"""
-		Lists Roslyn's code fixes and refactorings available at a position (or selection) in a .cs, .razor or .cshtml file.
-		{OutlineDescriptions.CommonMethodInstructions}
-		The body is one '<actionId>,<kind>,<diagnosticId> <title>' line per action (diagnosticId is '-' for a refactoring; the
-		title is free text and trails last). The actionId is opaque and must be passed back verbatim to
-		apply_code_action. Fixes are driven by the compiler and analyzer diagnostics at that span (so analyzer
-		ids such as IDE0005 are offered here too); refactorings by the span
-		itself. Line and column are 1-based; the list is capped at 50 actions. A documentPath that is not a
-		solution-compiled .cs, .razor or .cshtml document is error=NotFound. In a .razor/.cshtml file the position
-		must be inside C# (an @code block, expression or directive), otherwise error=NotSupported; an action
-		whose edits cannot be mapped back to the Razor source is refused by apply_code_action. Analyzers do not
-		run on Razor-generated code, so a Razor file offers compiler-diagnostic fixes and refactorings only.
-		{OutlineDescriptions.ErrorBlock} Prefer discovering a fix here over editing by hand.
+		"""
+		Lists Roslyn's code fixes and refactorings available at a position (or selection) in a .cs, .razor
+		or .cshtml file. The body is one '<actionId>,<kind>,<diagnosticId> <title>' line per action
+		(diagnosticId is '-' for a refactoring; the free-text title trails last), capped at 50 actions.
+		The actionId is opaque and must be passed back verbatim to apply_code_action. Fixes are driven by
+		the compiler and analyzer diagnostics at that span (so analyzer ids such as IDE0005 are offered
+		here too); refactorings by the span itself.
+		A documentPath that is not a solution-compiled .cs, .razor or .cshtml document is error=NotFound.
+		In a .razor/.cshtml file the position must be inside C# (an @code block, expression or directive),
+		otherwise error=NotSupported; an action whose edits cannot be mapped back to the Razor source is
+		refused by apply_code_action. Analyzers do not run on Razor-generated code, so a Razor file offers
+		compiler-diagnostic fixes and refactorings only.
 		""")]
 	public async Task<string> GetCodeActions(
-		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description("Path of the .cs, .razor or .cshtml file; absolute, or relative to the solution folder.")] string documentPath,
+		[Description(ParameterDescriptions.SolutionId)] string solutionId,
+		[Description(ParameterDescriptions.DocumentPath)] string documentPath,
 		[Description("1-based line of the position.")] int line,
 		[Description("1-based column of the position.")] int column,
 		[Description("Optional 1-based end line for a selection.")] int? endLine = null,

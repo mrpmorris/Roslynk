@@ -1,7 +1,8 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
@@ -37,12 +38,9 @@ public sealed class FindImplementationsTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		$"""
-		Finds the implementations or overrides of an interface, interface member, or abstract member, resolved
-		by fully-qualified name.
-		{OutlineDescriptions.ProjectionCoverage}
-		{OutlineDescriptions.CommonMethodInstructions}
-		Implementors are grouped file -> namespace, each as '<typeKind>,<typeName>,<loc>' where {OutlineDescriptions.Loc}:
+		"""
+		Finds the implementations or overrides of an interface, interface member or abstract member.
+		Implementors are grouped file -> namespace, each leaf as '<typeKind>,<typeName>,<loc>':
 		  resolvedSymbol=<name, parameter types included for a method or indexer>
 
 		  <project>
@@ -50,14 +48,12 @@ public sealed class FindImplementationsTool
 		  \t\t<file.cs|file.razor>
 		  \t\t\t<namespace>
 		  \t\t\t\t<typeKind>,<typeName>,<loc>
-		{OutlineDescriptions.Paging} {OutlineDescriptions.ListFieldQuoting} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to find implementors; it walks the
-		compiler's type graph, not text.
 		""")]
 	public async Task<string> FindImplementations(
-		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description($"Fully-qualified name of the interface/abstract symbol, e.g. 'MyNamespace.IMyType'. {OutlineDescriptions.SymbolNameGrammar}")] string symbolName,
-		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
-		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
+		[Description(ParameterDescriptions.SolutionId)] string solutionId,
+		[Description("Fully-qualified name of the interface/abstract symbol; reuse names returned by discovery. Include parameter types to select one overload.")] string symbolName,
+		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
+		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();

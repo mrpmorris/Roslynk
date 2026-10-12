@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Accesses;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
@@ -35,9 +36,9 @@ public sealed class FindWritesTool
 		OpenWorld = false)]
 	[Description(
 		$"""
-		Finds the writes (assign, compound, increment, ref, out and init) of a field, property or parameter across the solution, resolved semantically, so
-		same-named symbols in other scopes are never reported.
-		{OutlineDescriptions.CommonMethodInstructions}
+		Finds the writes (assign, compound, increment, ref, out and init) of a field, property or
+		parameter across the solution, resolved semantically, so same-named symbols in other scopes are
+		never reported.
 		The body has the find_references shape with one location per leaf and the access kind appended:
 		  resolvedSymbol=<name; a parameter is written Member:parameter>
 
@@ -47,18 +48,17 @@ public sealed class FindWritesTool
 		  \t\t\t<namespace, or "<global>">
 		  \t\t\t\t<typeKind>,<typeName>
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc>,<accessKind>
-		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}.
 		{OutlineDescriptions.AccessKinds}
-		{OutlineDescriptions.Paging} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock}
-		error=NotSupported is returned for a symbol that cannot be read or written (a method, type, event or local variable).
+		error=NotSupported is returned for a symbol that cannot be read or written (a method, type, event
+		or local variable).
 		{OutlineDescriptions.AccessCoverage}
 		""")]
 	public async Task<string> FindWrites(
-		[Description("Solution handle returned by open_solution.")] string solutionId,
+		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description(OutlineDescriptions.AccessSymbolName)] string symbolName,
-		[Description("Maximum locations to return. Omit for every location (paging walks the result with startItem).")] int? maxResults = null,
-		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
-		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0,
+		[Description("Maximum locations to return; omit for every location.")] int? maxResults = null,
+		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
+		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);

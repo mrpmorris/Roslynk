@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
@@ -39,12 +40,9 @@ public sealed class GetMembersTool
 		Destructive = false,
 		OpenWorld = false)]
 	[Description(
-		$"""
-		Lists a type's members (methods, properties, fields, events, nested types), resolved by
-		fully-qualified name.
-		{OutlineDescriptions.ProjectionCoverage}
-		{OutlineDescriptions.CommonMethodInstructions}
-		Members are grouped by the file that declares them (or '<metadata>' for a referenced assembly), each as:
+		"""
+		Lists a type's members (methods, properties, fields, events, nested types), grouped by the file
+		that declares them (or '<metadata>' for a referenced assembly):
 		  resolvedType=<fully-qualified type>
 
 		  <project>
@@ -52,20 +50,17 @@ public sealed class GetMembersTool
 		  \t\t<file.cs|file.razor>
 		  \t\t\t<memberKind>,<name>,<loc>,<paramType|paramType|...>
 		  \t\t\t\tlocalfunction,<name>,<loc>,<paramType|...>
-		A member's local functions are listed beneath it in declaration order, each one level deeper, with a local
-		function declared inside another nested one level further; name a local function as a member of the
-		member declaring it, e.g. 'MyNamespace.MyType.MyMethod.local'.
-		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}; the loc is empty for a metadata member; the trailing signature is a pipe-delimited list of minimally-qualified parameter types, present only for methods that take parameters. To read a member's
-		body, resolve its path against the solution folder and read startLine through endLine. All
-		accessibilities including private are listed; inherited members are excluded unless requested; narrow
-		a large type with nameFilter (a trailing '*' matches by prefix, otherwise a case-insensitive
-		substring) and the include* kind toggles.
-		{OutlineDescriptions.Paging} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading the .cs or .razor file; it is the compiler's view,
-		correct across partial classes and (with includeInherited) base types.
+		A member's local functions are listed beneath it in declaration order, one level deeper per
+		nesting. The loc is empty for a metadata member; the trailing signature is a pipe-delimited list
+		of minimally-qualified parameter types, present only for methods that take parameters. All
+		accessibilities including private are listed; inherited members are excluded unless
+		includeInherited. Use get_symbol_body to read a member's body. Narrow a large type with
+		nameFilter (a trailing '*' matches by prefix, otherwise a case-insensitive substring) and the
+		include* kind toggles.
 		""")]
 	public async Task<string> GetMembers(
-		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description($"Fully-qualified name of the type, e.g. 'MyNamespace.MyType'. {OutlineDescriptions.SymbolNameGrammar}")] string typeName,
+		[Description(ParameterDescriptions.SolutionId)] string solutionId,
+		[Description("Fully-qualified type name; reuse names returned by discovery. Include parameter types to select one overload.")] string typeName,
 		[Description("Include members inherited from base types.")] bool includeInherited = false,
 		[Description("Optional case-insensitive filter on member name: a trailing '*' matches by prefix (e.g. 'Search*'), otherwise it is a substring match; null applies no name filtering.")] string? nameFilter = null,
 		[Description("Include method members.")] bool includeMethods = true,
@@ -73,8 +68,8 @@ public sealed class GetMembersTool
 		[Description("Include property members.")] bool includeProperties = true,
 		[Description("Include event members.")] bool includeEvents = true,
 		[Description("Include nested type members.")] bool includeNestedTypes = true,
-		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
-		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
+		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
+		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();

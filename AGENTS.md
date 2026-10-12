@@ -6,7 +6,7 @@ This is a source-based implementation guide for future changes. Paths below are 
 
 - The solution is `Source/Morris.Roslynk.slnx` (not under `Source/App`).
 - Read `git status` before editing and preserve unrelated work.
-- When Roslynk is connected, use its semantic tools for compiled C#, Razor and CSHTML: open the solution, use `get_members`/`get_symbol_body` to inspect implementations, and use reference/caller queries for impact analysis. Follow `skills/roslynk/SKILL.md` and `skills/roslynk/references/tools.md` for tool usage. Retry `Indexing` while loading; do not manually reload for ordinary source edits.
+- When Roslynk is connected, use its semantic tools for compiled C#, Razor and CSHTML: open the solution, use `get_members`/`get_symbol_body` to inspect implementations, and use reference/caller queries for impact analysis. Follow `skills/roslynk/SKILL.md` for routing; tool contracts live in the MCP server instructions and tool descriptions. Retry `Indexing` while loading; do not manually reload for ordinary source edits.
 - Batch related read-only questions with `multi_query`. Re-query after writes. A running Roslynk daemon can inspect edited source, but editing this repository does **not** replace the daemon's executing implementation; run tests against the checkout to validate new behavior.
 - Use normal file tooling for non-source configuration, documentation, and new-file creation. Roslynk's patch tool only edits existing files, and its plain-text fallback is rooted at the solution directory (`Source`), not the repository root.
 - The most important seams are `RoslynInstance`, `SolutionModel`, `ApplyPipeline`, `AtomicFileWriter`, `SolutionFileSync`, and the internal cores used by `MultiQueryCatalog`.
@@ -15,7 +15,7 @@ This is a source-based implementation guide for future changes. Paths below are 
 
 - When creating a new read-only tool, assess whether it is a candidate for `multi_query` and **ask the user whether to include it**, unless the user's request already explicitly says to add the tool to `multi_query` (then include it without asking). Otherwise do not silently include or exclude it. Continue independent implementation work while that choice is pending; if included, implement the pinned-model core, catalog/enum integration and relevant tests described below.
 - Add every new feature and feature change to the `# Unreleased` section at the top of `releases.md`. Create that section at the top if it is missing, preserving existing release history. Each addition is a terse one-line bullet ending with `(Fixes #xx)`, where `xx` is the GitHub issue number, e.g. ``- New `get_callees` tool: the inverse of `get_callers` (Fixes #58)``. Detail belongs in the skill/tool docs, not in `releases.md`. If the issue number is unknown, ask the user.
-- Always keep consumer-facing skill and tool documentation synchronized with tool definitions and their descriptions, including parameters, defaults, output, errors, supported scope and batch availability. In this repository the files are `skills/roslynk/SKILL.md` (singular `SKILL.md`, the consumer skill file) and `skills/roslynk/references/tools.md`. Update both as applicable to the changed contract; checking their consistency is part of completing every tool change. Keep any additional consumer `SKILLS.md`/`tools.md` copies synchronized if introduced later.
+- Documentation ownership: shared guidance lives in the server instructions (`McpServerRegistration.cs`); tool-specific contracts live in concise tool/parameter attributes; identical parameter contracts reuse `ParameterDescriptions`; the skill (`skills/roslynk/SKILL.md`) changes only when activation or routing changes; reference files are added only for supplementary material the MCP does not supply. When a contract changes, update its authoritative description and affected tests, and check for contradictory or obsolete copies of the guidance.
 
 ## Repository map and build conventions
 
@@ -27,7 +27,7 @@ This is a source-based implementation guide for future changes. Paths below are 
 | `Source/App/Morris.Roslynk.Tests` | Engine, feature, concurrency, file synchronization and writing tests. |
 | `Source/App/Morris.Roslynk.McpTests` | Host composition, published MCP schemas, tool invocation and transport-facing tests. |
 | `Source/TestFixtures` | Small independent solutions: Simple, Broken, References, Conditional, Razor, Cshtml, LocalFunction, CodeStyle and Generator. |
-| `skills/roslynk` | User-facing agent skill and detailed tool contracts. Update when tool behavior changes. |
+| `skills/roslynk` | User-facing routing skill (`SKILL.md`); tool contracts live in the MCP server instructions and tool descriptions. Update the skill only when activation or routing changes. |
 | `README.md`, `releases.md` | Setup/tool guidance and release history. |
 
 `Source/Directory.Build.props` sets .NET 10, latest C#, nullable and implicit usings, and warnings as errors. Package versions are central in `Source/Directory.Packages.props`; do not add local versions to individual project references. `Source/.editorconfig` specifies tabs (width 4), Allman braces, file-scoped namespaces, CRLF for C#/VB, and usings outside namespaces. Existing classes commonly use PascalCase private fields and explicit constructor injection; follow nearby code without unrelated formatting churn.
