@@ -74,6 +74,9 @@ file) re-query before relying on an earlier result.
 
 ## Paging
 
+Narrow queries to the task. Fetch further pages only as needed; retrieve all relevant pages
+before claiming complete coverage.
+
 A tool supports paging only if its reference states SupportsPaging=Y.
 For those tools, an oversized result is paged - count=<set size>, truncated=Y, nextStartItem=<k>; re-call
 with startItem=<k> and the same other arguments. Each page repeats the container lines open above
