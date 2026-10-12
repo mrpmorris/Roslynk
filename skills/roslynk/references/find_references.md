@@ -2,9 +2,7 @@
 
 SupportsPaging=Y
 
-Finds every reference to the named symbol across the solution, resolved by symbol, not text:
-comments, strings and unrelated same-named members are skipped, and usages in partial classes and
-code-behind are found.
+Finds semantic references across the solution, including partial classes and code-behind.
 The body groups every reference under file -> namespace -> type -> member, so a shared declaration
 is printed once:
 ```

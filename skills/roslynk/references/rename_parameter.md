@@ -33,4 +33,4 @@ Headers, then a blank line and one solution-relative changed-file path per line:
   record parameter, or is declared only in metadata or generated source (names the generator).
 - Stale: a file changed on disk since loading.
 
-Nothing is written in any failure case.
+Validation failures occur before saving.

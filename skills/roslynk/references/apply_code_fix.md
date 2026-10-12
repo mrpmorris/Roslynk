@@ -1,21 +1,23 @@
 # `apply_code_fix`
 
-Applies the code fix for the diagnostic with this id (a compiler id such as CS0219, or an analyzer
-id such as IDE0005) at line:column in a .cs, .razor or .cshtml file - the quick path when
-get_diagnostics has already given the id and position, without first listing actions. Pass the
-1-based line and column get_diagnostics printed for that entry; the diagnostic whose span contains
-that position is fixed. When the diagnostic has more than one distinct fix (for example several
-namespaces to import, or make-nullable versus add-required), nothing is written and the result is
-error=Conflict with one 'candidate=<actionId>,Fix,<diagnosticId> <title>' header per fix: choose
-the fix whose title matches your intent and pass its actionId to apply_code_action; do not call
-apply_code_fix again for it.
-Errors: a documentPath that is not a solution-compiled .cs, .razor or .cshtml document, or no such
-diagnostic at that position, is error=NotFound; a line or column below 1 is error=Invalid; a
-diagnostic with no registered fix is error=NotSupported; a fix that produced no changes is
-error=Conflict (without candidates). In a .razor/.cshtml file the position is in the Razor file,
-the fix is computed on the generated C# and mapped back to the Razor source: an unmappable edit is
-error=NotSupported, mismatched Razor text error=Conflict, nothing written. Analyzers do not run on
-Razor-generated code, so Razor supports compiler diagnostics, plus CS8019/IDE0005, which remove
-the unnecessary @using on that line. A file edited on disk since it was loaded is error=Stale.
-Returns 'applied', 'action', 'status' header, a blank line, then one solution-relative
-changed-file path per line.
+Fixes a diagnostic by id (e.g. CS0219, IDE0005) and its 1-based line/column from get_diagnostics.
+Selects the diagnostic whose span contains the position, without first listing actions.
+
+## Multiple fixes
+
+Distinct fixes return Conflict with candidate=<actionId>,Fix,<diagnosticId> <title> per fix.
+Choose by title and pass actionId to apply_code_action; do not repeat apply_code_fix.
+
+## Errors
+
+- NotFound: documentPath is not a solution-compiled .cs/.razor/.cshtml file, or no diagnostic
+  matches the position.
+- Invalid: line or column below 1.
+- NotSupported: no registered fix, or an unmappable Razor edit.
+- Conflict: fix produced no changes (no candidates), or Razor text mismatches.
+- Stale: a target file changed on disk since loading.
+
+Razor positions/mapping follow the shared rules. Compiler fixes and CS8019/IDE0005 are supported;
+the latter remove the @using on that line. Ambiguity and mapping failures occur before saving.
+
+Returns applied, action and status headers, then a blank line and solution-relative changed paths.

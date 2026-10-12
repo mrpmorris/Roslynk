@@ -1,12 +1,13 @@
 # `apply_code_action`
 
-Applies a code action discovered by get_code_actions, identified by its actionId. The action is
-re-resolved at the same position (nothing is held between calls): if the code changed since
-discovery, the re-resolution no longer finds the action and the result is error=Conflict - re-run
-get_code_actions and pick again; a malformed actionId is error=Invalid.
-For an action discovered in a .razor/.cshtml file the edits are mapped back to the Razor source;
-an edit that cannot be mapped (for example a using or member added to generated scaffolding) is
-error=NotSupported, mismatched Razor text error=Conflict, and nothing is written. A file edited on
-disk since it was loaded is error=Stale.
-Returns 'applied', 'action', 'status' header, a blank line, then one solution-relative
-changed-file path per line.
+Applies an actionId from get_code_actions. Re-resolves the action at its original position;
+no action state is retained between calls.
+
+- Conflict: action no longer resolves after edits; rerun get_code_actions.
+- Invalid: malformed actionId.
+- Stale: a target file changed on disk since loading.
+
+Razor actions use the shared mapping rules. Adding usings/members to generated scaffolding may
+be unmappable (NotSupported); mismatched Razor text returns Conflict, before saving.
+
+Returns applied, action and status headers, then a blank line and solution-relative changed paths.

@@ -3,7 +3,7 @@
 SupportsPaging=Y
 
 Finds the methods, constructors, property or event accessors and operators that the named member's
-code calls - the inverse of get_callers, answering "what does this call?".
+code calls.
 Callees in the solution are grouped like get_callers; callees declared in a referenced assembly
 (BCL, NuGet) are grouped under one top-level '<external:AssemblyName>' line per assembly instead
 of a project, with an empty loc and a pipe-delimited parameterTypes field only when the callee's

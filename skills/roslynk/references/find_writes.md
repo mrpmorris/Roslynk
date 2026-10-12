@@ -3,8 +3,7 @@
 SupportsPaging=Y
 
 Finds the writes (assign, compound, increment, ref, out and init) of a field, property or
-parameter across the solution, resolved semantically, so same-named symbols in other scopes are
-never reported.
+parameter across the solution, resolved semantically.
 The body has the find_references shape with one location per leaf and the access kind appended:
 ```
   resolvedSymbol=<name; a parameter is written Member:parameter>
@@ -16,6 +15,15 @@ The body has the find_references shape with one location per leaf and the access
   \t\t\t\t<typeKind>,<typeName>
   \t\t\t\t\t<memberKind>,<memberName>,<loc>,<accessKind>
 ```
-accessKind is one of read, assign (simple '='), compound ('+=', '??=' and friends), increment ('++'/'--'), ref (passed by ref, 'ref x', or '&x'), out (passed as out), init (a declaration initialiser, an object or 'with' initialiser, an attribute named argument, or an assignment to the constructor's own field/property in its constructor). compound, increment and ref both read and write: each such location appears in BOTH find_reads and find_writes with the same accessKind, so do not add the two tools' counts together. nameof(...), doc-comment crefs and named arguments ('M(value: 1)') are neither, and are omitted.
+Access kinds:
+
+- read; assign: simple '='.
+- compound: '+=', '??=', etc.; increment: '++'/'--'.
+- ref: passed by ref, 'ref x', '&x'; out: passed as out.
+- init: declaration, object/with initializer, attribute named argument, or assignment to
+  a constructor's own field/property in that constructor.
+
+compound, increment and ref appear in both find_reads and find_writes; do not sum their counts.
+nameof, documentation crefs and named call arguments ('M(value: 1)') are excluded.
 error=NotSupported is returned for a symbol that cannot be read or written (a method, type, event
 or local variable).

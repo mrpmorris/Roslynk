@@ -1,23 +1,27 @@
 # `extract_method`
 
-Extracts a contiguous selection of C# statements or a single expression into a new method (or
-local function) and replaces the selection with a call, using Roslyn's own Extract Method
-refactoring and data-flow analysis to decide parameters, ref/out, return value, static/async
-modifiers and the call site; the deterministic equivalent of picking 'Extract method' from
-get_code_actions. Surrounding whitespace in the selection is ignored.
-Returns 'applied', 'method' (the final name), 'symbolName' (the extracted method's full name, e.g.
-'N.T.M(int).NewMethod(string)' for a local function, ready to pass to the name-based tools),
-'kind' (Method or LocalFunction), 'signature' (the new declaration's header) and 'call' (the
-statement now containing the call) headers, 'status', a blank line, then one solution-relative
-changed-file path per line.
-Before anything is written the result is checked: a selection Roslyn cannot extract, or whose
-extraction Roslyn flags as possibly changing behavior, is error=NotSupported with the reason; an
-extraction that would introduce compile errors is error=NotSupported listing them; a methodName
-that would bind a call to a different member is error=Conflict; a file edited since the extraction
-was computed is error=Stale. Nothing is written in any failure case. A documentPath that is not a
-solution-compiled .cs, .razor or .cshtml document is error=NotFound; generated code (.g.cs,
-including Razor output) is error=NotSupported. In a .razor/.cshtml file the selection must be
-inside C# (an @code block or expression), otherwise error=NotSupported; the extraction is computed
-on the generated C# and mapped back to the Razor source, and an edit that cannot be mapped (such
-as a method inserted outside the @code block) is error=NotSupported, mismatched Razor text
-error=Conflict; an out-of-range or empty selection, or an invalid methodName, is error=Invalid.
+Extracts contiguous C# statements or one expression into a method/local function and replaces
+the selection with a call. Uses Roslyn's Extract Method and data-flow analysis for parameters,
+ref/out, return value, static/async and call-site code. Ignores surrounding selection whitespace.
+
+## Result
+
+Headers, then a blank line and solution-relative changed paths:
+
+- applied; method: final name.
+- symbolName: extracted member's full name, usable in name-based tools,
+  e.g. N.T.M(int).NewMethod(string) for a local function.
+- kind: Method|LocalFunction; signature: new declaration header.
+- call: statement containing the call; status follows the shared protocol.
+
+## Validation and errors
+
+- NotSupported: Roslyn cannot extract, warns of possible behavior changes, or extraction adds
+  compile errors (listed). Also generated .g.cs targets, including Razor output.
+- Conflict: methodName would bind a call to a different member, or Razor text mismatches.
+- Stale: a target file changed since computation.
+- NotFound: documentPath is not a solution-compiled .cs/.razor/.cshtml file.
+- Invalid: empty/out-of-range selection or invalid methodName.
+
+Razor selections outside C# (@code or expressions) return NotSupported. Shared mapping rules apply;
+inserting a method outside @code may be unmappable (NotSupported). Validation occurs before saving.

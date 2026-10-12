@@ -1,11 +1,10 @@
 # `remove_unused_usings`
 
-Removes unnecessary using directives (the compiler's CS8019) across the solution, or in one file
-when documentPath is given. .razor and .cshtml files are included: an unnecessary @using line
-written in the file is removed, while directives from imports files (_Imports.razor,
-_ViewImports.cshtml) are left alone because other components share them. A documentPath that is
-not a solution-compiled .cs, .razor or .cshtml document is error=NotFound; a file edited on disk
-since it was loaded is error=Stale. With nothing to remove the call still succeeds with applied=N
-and removedCount=0 (not an error, and safe to re-run).
-Returns 'applied', 'removedCount', 'status' header, a blank line, then one solution-relative
-changed-file path per line.
+Removes unnecessary using directives (CS8019) solution-wide or in documentPath.
+Includes .razor/.cshtml @using lines; preserves shared _Imports.razor/_ViewImports.cshtml usings.
+
+Returns applied, removedCount and status headers, then a blank line and solution-relative
+changed paths. With nothing to remove: applied=N, removedCount=0; safe to rerun.
+
+NotFound: documentPath is not a solution-compiled .cs/.razor/.cshtml file.
+Stale: a target file changed on disk since loading.

@@ -1,117 +1,98 @@
 ---
 name: roslynk
-description: Use Roslynk for C#/.NET code review, investigation, compiler diagnostics, symbol navigation, and semantic edits when its MCP server is available. Applies to .cs, .razor, and .cshtml code — checking compilation, finding definitions, references, callers or implementations, renaming, applying fixes or refactorings, and dead-code analysis — even when the user never names Roslynk. Prefer it over grep, file reads, hand edits, and dotnet build for those questions.
+description: Use Roslynk for C#/.NET semantic inspection, diagnostics, navigation, references, call graphs, dead-code analysis and edits when its MCP server is available, even when not named. Applies to .cs, .razor and .cshtml; prefer it over grep, source reads, hand edits and dotnet build for semantic questions.
 ---
 
 # Roslynk
 
-Use Roslynk for semantic inspection and editing of *.cs, *.razor and *.cshtml files.
-
-Read this guide once per session, then read each tool's linked reference before first use.
-Read only references needed for the task. Inspect MCP schemas only when needed to investigate
-tool metadata or parameters.
+Read this guide once per session and `references/<tool_name>.md` before first using a tool.
+Load only relevant references. Inspect MCP schemas when investigating metadata or parameters.
 
 ## Scope
 
-Roslynk only sees files compiled in the solution. When a tool reports a file as not found, you may
-use standard tools to read or edit that file, and re-check each time in case it is later added to a
-project. Standard tools may also inspect diffs, non-code files (.csproj, .json, .md) and bounded
-source excerpts at locations Roslynk has already reported.
+Roslynk sees solution-compiled files. If a file is not found, use standard file tools; re-check
+on later use in case it joined a project. Standard tools may inspect diffs, non-code files
+(.csproj, .json, .md) and bounded source excerpts at Roslynk-reported locations.
 
-## Lifecycle: opening, indexing and reloading
+## Lifecycle
 
-open_solution returns a solutionId; every other tool needs it. While a solution loads, tools
-report error=Indexing: retry shortly, or poll get_solution_status (a load finishes in seconds to
-a minute). The file watcher folds edits, including your own, so never call reload_solution on
-your own initiative; suggest it to the user when the model may be stale (branch switch, dotnet
-restore, SDK or Directory.Build.props change).
+open_solution returns solutionId for subsequent calls. During loading, error=Indexing means retry shortly or poll
+get_solution_status. The watcher folds edits, including your own. Never initiate reload_solution;
+suggest it when the model may be stale after a branch switch, restore, SDK or build-property change.
 
 ## Output protocol
 
-Results are compact text, not JSON: 'key=value' header lines, a blank line, then a tab-indented
-body (no blank line means all headers; status= appears only when the solution is not Ready).
-Newlines are '\n'; booleans are Y or N. A parameter whose (Default value: ...) matches your intent
-may be omitted. A leaf is 'kind,name,loc[,extra]': kind is one of
-method|localfunction|property|field|event|class|struct|interface|enum|delegate; loc is
-line:col or startLine:startCol-endLine:endCol, several locations pipe-delimited (loc|loc|...); a
-value containing a comma is single-quoted; extra fields follow loc in the documented order. Paths
-are solution-relative. A path-bearing result labels the owning project (project file name, .csproj
-omitted, other extensions kept): a #project=<project> header beside a single #path, or the
-outermost node above the path in a nested body, absent when the result has no source (a metadata
-symbol). In a nested body the path is split into a folder line with the file name nested beneath
-it. A location declared by a source generator has a virtual path marked generated=Y
-(generator=<type>): read that code with get_symbol_body, not from disk.
+Results are text: key=value headers, a blank line, then a tab-indented body. Without a blank line,
+all lines are headers. status appears only when not Ready. Newlines are '\n'; booleans are Y/N.
+Omit parameters whose defaults match your intent.
+
+Leaves use kind,name,loc[,extra]. Kinds: method|localfunction|property|field|event|class|struct|
+interface|enum|delegate. loc is line:col or startLine:startCol-endLine:endCol; multiple locations
+use pipes. Comma-containing values are single-quoted; extra fields follow the tool's documented order.
+
+Paths are solution-relative. Source results identify the project by project-file name without
+.csproj (other extensions retained): #project beside #path for a single source, or the outermost
+node in nested results. Metadata results omit the project. Nested paths split folder and filename
+across successive levels. Generator declarations use virtual paths with generated=Y and
+generator=<type>; read them with get_symbol_body rather than from disk.
 
 ## Name grammar
 
-Pass exactly the fully-qualified names tools return; on error=Ambiguous or error=NotFound the
-response lists candidate= names the same tool accepts - send one back verbatim. A method or indexer
-may carry a parameter-type list to select one overload ('Ns.T.M(int, string)',
-'Ns.T.this[int]'); parameter names, defaults and nullability are ignored and fully-qualified
-parameter types are accepted. A bare generic name resolves when one arity exists; several arities
-give error=Ambiguous with one candidate per arity, and a non-generic of the same name wins. Arity
-spellings are interchangeable ('Box<T>', 'Box<int>', 'Box`1', 'Box<>', metadata
-'Ns.Outer`1+Inner'). A local function is named as a member of the member declaring it
-('Ns.T.M.local', 'Ns.T.M.outer.inner'); any segment may carry a parameter list.
+Reuse returned fully-qualified names verbatim, including candidate names from Ambiguous/NotFound.
+Methods/indexers accept parameter types to select overloads: Ns.T.M(int, string), Ns.T.this[int].
+Parameter names, defaults and nullability are ignored; qualified parameter types are accepted.
+
+Bare generic names resolve when one arity exists; multiple arities return Ambiguous, and a
+same-named non-generic wins. Equivalent arity spellings: Box<T>, Box<int>, Box`1, Box<>, and
+metadata Ns.Outer`1+Inner. Local functions nest under their declaring member:
+Ns.T.M.local, Ns.T.M.outer.inner. Any segment may carry parameter types.
 
 ## Conditional coverage
 
-Coverage: every loaded target framework, plus derived compilations each toggling one preprocessor
-symbol that is uniformly defined or undefined across the C# projects. A branch needing several
-symbols toggled at once, or guarded by a symbol defined in some projects but not others, is not
-analyzed.
+Covers loaded target frameworks plus variants toggling one symbol uniformly defined or undefined
+across C# projects. Branches needing multiple simultaneous toggles or mixed-definition symbols
+may be uncovered.
 
-## Failures
+## Failures and freshness
 
-Failures are header-only: error=<code>, errorMessage=..., zero or more candidate= lines. Stale means a target file changed on disk since it was read: recompute from current
-state and retry.
-
-## Freshness
-
-Results are a snapshot of a live solution: after a relevant change (any write, or the user saving a
-file) re-query before relying on an earlier result.
+Failures are header-only: error=<code>, errorMessage=..., optional candidate lines.
+Stale means a target changed since reading: recompute and retry. After relevant writes or user
+saves, re-query before relying on earlier snapshot results.
 
 ## Paging
 
-Narrow queries to the task. Fetch further pages only as needed; retrieve all relevant pages
-before claiming complete coverage.
+Narrow queries to the task. Fetch pages as needed; retrieve all relevant pages before claiming
+complete coverage. A tool supports paging only if its reference states SupportsPaging=Y.
 
-A tool supports paging only if its reference states SupportsPaging=Y.
-For those tools, an oversized result is paged - count=<set size>, truncated=Y, nextStartItem=<k>; re-call
-with startItem=<k> and the same other arguments. Each page repeats the container lines open above
-its first item and reads standalone. maxSize (characters; 0 = the response budget, 80,000 by
-default) bounds a page but not count=; maxResults caps the result set, and paging walks that capped
-set (count= names its size); an item longer than a whole page is delivered as far as it fits,
-partialItem=<n>, the rest unretrievable. Tools without paging cut oversized results after the last whole line: outputTruncated=Y with fullOutputChars=<n>; narrow the request
-and re-call.
+Paged results report count=<set size>, truncated=Y and nextStartItem=<k>. Continue with
+startItem=<k> and unchanged other arguments. Pages repeat enclosing containers and stand alone.
+maxSize bounds page characters (0 uses the response budget, default 80,000). maxResults caps the
+result set; count describes that capped set. Tool references document exceptions.
+An item exceeding a page is partially returned with partialItem=<n>; the remainder is unretrievable.
+Unpaged oversized results stop after a whole line: outputTruncated=Y, fullOutputChars=<n>.
+Narrow the request and retry.
 
-## Batching reads with multi_query
+## Batching
 
-When several facts are needed before a change, batch the read-only queries in one multi_query
-call: its operations run against one snapshot and cannot disagree; its continuation protocol is in
-[its reference](references/multi_query.md).
+Batch independent read-only queries with multi_query for one consistent snapshot.
+See [multi_query](references/multi_query.md) for supported operations and continuation.
 
 ## Editing and diagnostics
 
-Preview broad edits: every write tool takes checkOnly=true and returns the changed files without
-writing. Validation failures write nothing. Files are replaced atomically; if a batch fails during saving,
-rollback is attempted but may fail. Writes are stale-guarded. Make all the
-edits a task needs, then call get_diagnostics once at the end (it compiles and analyzes affected
-projects, so it is costly; a repeat with nothing changed is near-instant). Fix a diagnostic with
-apply_code_fix (its id, line and column); on error=Conflict pass the chosen candidate actionId to
-apply_code_action. Keep the code's declared intent: do not hand-edit, apply_patch or delete a
-declaration to make a diagnostic go away unless the user asks for that.
+Preview broad edits with checkOnly=true. Validation failures write nothing. Individual file
+replacements are atomic; saving failures trigger attempted rollback, which may fail.
+Writes are stale-guarded.
+
+Complete the task's edits, then call get_diagnostics once; it compiles/analyzes affected projects
+and caches unchanged results. Fix diagnostics with apply_code_fix using id, line and column.
+On Conflict with candidates, pass the chosen actionId to apply_code_action.
+Do not hand-edit, patch or delete declarations solely to silence diagnostics unless the user asks.
 
 ## Razor
 
-documentPath accepts .razor and .cshtml; give positions in the Razor file itself, inside its C#
-(@code/@functions, @{ }, expressions). Edits are computed on the generated C# and written back to
-the Razor source in the file's own indentation; an edit that cannot be mapped back is
-error=NotSupported, mismatched Razor text error=Conflict. Analyzers do not run on Razor-generated
-code: compiler diagnostics are supported, plus CS8019/IDE0005 (which remove the unnecessary @using
-on that line); the Razor compiler's own RZxxxx diagnostics are reported against the file;
-_Imports.razor/_ViewImports.cshtml usings are never removed.
+documentPath accepts .razor/.cshtml; positions refer to C# in the Razor source
+(@code/@functions, @{ }, expressions). Edits map generated C# back to source with its indentation.
+Unmappable edits return NotSupported; mismatched source returns Conflict.
 
-## Tool references
-
-Before first use of a tool, read `references/<tool_name>.md`.
+Analyzers skip Razor-generated code. Compiler diagnostics, RZxxxx and unused-using fixes
+(CS8019/IDE0005) are supported. Import-file usings (_Imports.razor/_ViewImports.cshtml) are never removed.

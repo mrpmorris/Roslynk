@@ -1,9 +1,8 @@
 # `multi_query`
 
 Runs independent read-only operations against one solution snapshot; delivered results are in
-request order. Operations cannot reference each other's output. Batch several facts needed before
-a change rather than making sequential calls.
-Batch only the independent queries needed to answer the question.
+request order. Operations cannot reference each other's output. Batch only queries needed for
+the question.
 
 ## Operations
 
