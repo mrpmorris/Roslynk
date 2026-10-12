@@ -109,75 +109,62 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 	}
 
 	[Fact]
-	public void WhenToolsArePublished_ThenTheyCarryNoDescription()
+	public void WhenToolsArePublished_ThenTheyPreserveTheirCurrentDescriptions()
 	{
-		// Tool guidance moved to the roslynk skill (one reference file per tool); MCP metadata carries
-		// no tool or server descriptions, so the skill is the single documentation home.
+		Dictionary<string, MethodInfo> methods = ToolMethods()
+			.ToDictionary(item => item.ToolName, item => item.Method, StringComparer.Ordinal);
+
 		foreach (McpServerTool tool in Tools)
 		{
-			string? description = tool.ProtocolTool.Description;
-			Assert.True(
-				description is null,
-				$"Tool '{tool.ProtocolTool.Name}' publishes a description: {description}. Move it to skills/roslynk/references/{tool.ProtocolTool.Name}.md.");
+			string? expected = methods[tool.ProtocolTool.Name]
+				.GetCustomAttribute<System.ComponentModel.DescriptionAttribute>()?.Description;
+			Assert.False(string.IsNullOrWhiteSpace(expected), $"Tool '{tool.ProtocolTool.Name}' has no description.");
+			Assert.Equal(expected, tool.ProtocolTool.Description);
 		}
 	}
 
 	[Fact]
-	public void WhenEveryToolIsPublished_ThenTheSkillHasAReferenceAndIndexEntryForIt()
+	public void WhenQueryGuidanceIsPublished_ThenDescriptionsCarryCurrentContracts()
 	{
-		string skillDirectory = FindSkillDirectory();
-		string index = File.ReadAllText(Path.Combine(skillDirectory, "SKILL.md"));
-
-		foreach (McpServerTool tool in Tools)
-		{
-			string name = tool.ProtocolTool.Name;
-
-			Assert.True(
-				File.Exists(Path.Combine(skillDirectory, "references", name + ".md")),
-				$"Tool '{name}' has no reference file under skills/roslynk/references.");
-			Assert.Contains(
-				$"(references/{name}.md)",
-				index,
-				StringComparison.Ordinal);
-		}
-	}
-
-	[Fact]
-	public void WhenTheImpactAnalysisHintsAreExpected_ThenTheSkillReferenceFilesCarryThem()
-	{
-		// Issue #22: the roslynk skill steers impact/usage questions to multi_query. The hints moved from
-		// the tool descriptions into their reference files; pinning the exact sentences makes a future
-		// reword a deliberate decision, not a silent drift.
-		string skillDirectory = FindSkillDirectory();
 		string Normalize(string text) => string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-		string multiQuery = File.ReadAllText(Path.Combine(skillDirectory, "references", "multi_query.md"));
+		string multiQuery = Tools.Single(tool => tool.ProtocolTool.Name == "multi_query").ProtocolTool.Description!;
 		Assert.Contains(
-			"For usage/impact questions, batch find_references, get_callers, get_callees, find_implementations and get_type_hierarchy in one call.",
+			"Operations cannot reference each other's output. Batch only queries needed for the question.",
 			Normalize(multiQuery),
 			StringComparison.Ordinal);
 
-		string findReferences = File.ReadAllText(Path.Combine(skillDirectory, "references", "find_references.md"));
+		string findReferences = Tools.Single(tool => tool.ProtocolTool.Name == "find_references").ProtocolTool.Description!;
 		Assert.Contains(
 			"Combine with get_callers/get_callees/find_implementations/get_type_hierarchy via multi_query for usage/impact analysis.",
 			Normalize(findReferences),
 			StringComparison.Ordinal);
 	}
 
-	private static string FindSkillDirectory()
+	[Fact]
+	public void WhenServerIsConfigured_ThenInstructionsCarrySharedLibraryGuidance()
 	{
-		// The skill is repo source, not test output: walk up from the test bin directory to the checkout
-		// root that contains it.
-		DirectoryInfo? directory = new DirectoryInfo(AppContext.BaseDirectory);
-		while (directory is not null)
-		{
-			string candidate = Path.Combine(directory.FullName, "skills", "roslynk");
-			if (File.Exists(Path.Combine(candidate, "SKILL.md")))
-				return candidate;
-			directory = directory.Parent;
-		}
+		Type registration = typeof(Morris.Roslynk.Mcp.Hosting.StdioBridge).Assembly
+			.GetType("Morris.Roslynk.Mcp.McpServerRegistration", throwOnError: true)!;
+		var options = new McpServerOptions();
+		registration.GetMethod("Configure", BindingFlags.Public | BindingFlags.Static)!
+			.Invoke(null, [options]);
 
-		throw new InvalidOperationException("Could not locate skills/roslynk above the test directory.");
+		Assert.False(string.IsNullOrWhiteSpace(options.ServerInstructions));
+		foreach (string section in new[]
+		{
+			"Scope", "Lifecycle", "Output protocol", "Name grammar", "Conditional coverage",
+			"Failures and freshness", "Paging", "Batching", "Editing and diagnostics", "Razor"
+		})
+			Assert.Contains("## " + section, options.ServerInstructions, StringComparison.Ordinal);
+
+		Assert.Contains("saving failures trigger attempted rollback, which may fail", options.ServerInstructions, StringComparison.Ordinal);
+		foreach (McpServerTool tool in Tools)
+		{
+			Assert.DoesNotContain("## Shared paging protocol", tool.ProtocolTool.Description!, StringComparison.Ordinal);
+			Assert.DoesNotContain("## Name grammar", tool.ProtocolTool.Description!, StringComparison.Ordinal);
+			Assert.DoesNotContain("## Output protocol", tool.ProtocolTool.Description!, StringComparison.Ordinal);
+		}
 	}
 
 	[Fact]

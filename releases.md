@@ -2,8 +2,8 @@
 
 ## Unreleased
 
-- Tool guidance moved out of MCP metadata entirely: tool-level `[Description]` attributes and the server instructions no longer reach `tools/list`, and the roslynk skill carries one reference file per tool (`skills/roslynk/references/<tool>.md`) indexed from its `SKILL.md` (Fixes #99, Fixes #100)
-- Shared tool guidance (output protocol, name grammar, paging, freshness, edit/diagnostic workflow, Razor handling) lives in the roslynk skill (`skills/roslynk/SKILL.md`), not in MCP metadata; parameter attributes keep each tool's own contract, and identical parameter contracts share constants (Fixes #100)
+- Current tool guidance is published from C# method `[Description]` attributes; per-tool Markdown copies are removed, while the skill retains minimal routing guidance (Fixes #99, Fixes #100)
+- Shared workflows (scope, lifecycle, output, names, paging, freshness, editing, diagnostics and Razor) are returned in MCP server instructions from `McpServerRegistration.Configure`; the skill is reduced to routing guidance (Fixes #100)
 - The roslynk skill is reduced to routing guidance; the duplicated tool-reference file is removed (Fixes #99)
 - `multi_query` runs every operation, then delivers whole results smallest-first until the response budget is filled, naming the rest in a `retry=<index>:<size>` header (each size is that result's cost as a ratio of the budget, rounded up to 0.1); batch order no longer matters, slots are complete or absent, and nothing is ever cut mid-body (Fixes #96)
 - `multi_query` runs its operations in parallel and derives its operation limit from the framing itself (a batch whose retry line cannot fit is refused with `error=Invalid` before anything runs) instead of a fixed 25 (Fixes #96)
