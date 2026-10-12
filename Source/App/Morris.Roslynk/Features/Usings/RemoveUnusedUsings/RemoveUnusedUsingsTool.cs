@@ -56,18 +56,6 @@ public sealed class RemoveUnusedUsingsTool
 		Idempotent = true,
 		Destructive = true,
 		OpenWorld = false)]
-	[Description(
-		"""
-		Removes unnecessary using directives (the compiler's CS8019) across the solution, or in one file
-		when documentPath is given. .razor and .cshtml files are included: an unnecessary @using line
-		written in the file is removed, while directives from imports files (_Imports.razor,
-		_ViewImports.cshtml) are left alone because other components share them. A documentPath that is
-		not a solution-compiled .cs, .razor or .cshtml document is error=NotFound; a file edited on disk
-		since it was loaded is error=Stale. With nothing to remove the call still succeeds with applied=N
-		and removedCount=0 (not an error, and safe to re-run).
-		Returns 'applied', 'removedCount', 'status' header, a blank line, then one solution-relative
-		changed-file path per line.
-		""")]
 	public async Task<string> RemoveUnusedUsings(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("Optional path of a single .cs, .razor or .cshtml file to clean (absolute or relative to the solution folder). Omit to clean the whole solution.")] string? documentPath = null,

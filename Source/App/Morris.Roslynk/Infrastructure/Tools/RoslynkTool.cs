@@ -84,6 +84,9 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 	/// <summary>
 	/// Copies the protocol tool through JSON so every field the SDK filled in is preserved, replacing only
 	/// the input schema. The original instance is left untouched because the SDK caches and shares it.
+	/// An empty description is normalized to null: the SDK pipeline (AIFunctionFactory) yields an empty
+	/// string when a tool method has no [Description], and Roslynk publishes no descriptions at all - tool
+	/// guidance lives in the roslynk skill - so the empty placeholder must not reach the wire.
 	/// </summary>
 	private static Tool Republish(Tool tool)
 	{
@@ -91,6 +94,7 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 		Tool copy = JsonSerializer.Deserialize<Tool>(json, McpJsonUtilities.DefaultOptions)
 			?? throw new InvalidOperationException($"Could not copy the protocol definition of tool '{tool.Name}'.");
 		copy.InputSchema = AIJsonUtilities.TransformSchema(tool.InputSchema, SchemaTransformOptions);
+		copy.Description = string.IsNullOrEmpty(copy.Description) ? null : copy.Description;
 		return copy;
 	}
 

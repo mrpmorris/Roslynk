@@ -37,18 +37,6 @@ public sealed class FindImplementationsTool
 		Idempotent = true,
 		Destructive = false,
 		OpenWorld = false)]
-	[Description(
-		"""
-		Finds the implementations or overrides of an interface, interface member or abstract member.
-		Implementors are grouped file -> namespace, each leaf as '<typeKind>,<typeName>,<loc>':
-		  resolvedSymbol=<name, parameter types included for a method or indexer>
-
-		  <project>
-		  \t<relative/forward-slash/folder>
-		  \t\t<file.cs|file.razor>
-		  \t\t\t<namespace>
-		  \t\t\t\t<typeKind>,<typeName>,<loc>
-		""")]
 	public async Task<string> FindImplementations(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("Fully-qualified name of the interface/abstract symbol; reuse names returned by discovery. Include parameter types to select one overload.")] string symbolName,

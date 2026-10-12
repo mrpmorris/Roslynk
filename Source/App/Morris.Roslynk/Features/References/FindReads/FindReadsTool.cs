@@ -34,25 +34,6 @@ public sealed class FindReadsTool
 		Idempotent = true,
 		Destructive = false,
 		OpenWorld = false)]
-	[Description(
-		$"""
-		Finds the reads of a field, property or parameter - including the read half of compound, increment
-		and ref - across the solution, resolved semantically, so same-named symbols in other scopes are
-		never reported.
-		The body has the find_references shape with one location per leaf and the access kind appended:
-		  resolvedSymbol=<name; a parameter is written Member:parameter>
-
-		  <project>
-		  \t<relative/forward-slash/folder>
-		  \t\t<file.cs|file.razor>
-		  \t\t\t<namespace, or "<global>">
-		  \t\t\t\t<typeKind>,<typeName>
-		  \t\t\t\t\t<memberKind>,<memberName>,<loc>,<accessKind>
-		{OutlineDescriptions.AccessKinds}
-		error=NotSupported is returned for a symbol that cannot be read or written (a method, type, event
-		or local variable).
-		{OutlineDescriptions.AccessCoverage}
-		""")]
 	public async Task<string> FindReads(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description(OutlineDescriptions.AccessSymbolName)] string symbolName,

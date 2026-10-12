@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
@@ -37,15 +37,6 @@ public sealed class GetSymbolTool
 		Idempotent = true,
 		Destructive = false,
 		OpenWorld = false)]
-	[Description(
-		"""
-		Returns a symbol's declaration without its implementation, resolved by fully-qualified name; its
-		metadata signature when no source is available. A single source match returns '#project=',
-		'#path=', '#loc=' headers, a blank line, then the verbatim declaration cut before its body (the
-		opening brace or '=>'); the declaration line conveys accessibility, kind, return type, name and
-		parameters, so those are not repeated. A metadata symbol instead returns '#source=metadata',
-		'#kind', '#signature', '#assembly'.
-		""")]
 	public async Task<string> GetSymbol(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("Fully-qualified symbol name; reuse names returned by discovery. Include parameter types to select one overload.")] string symbolName,

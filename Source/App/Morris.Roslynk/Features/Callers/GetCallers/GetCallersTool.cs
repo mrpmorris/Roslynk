@@ -40,26 +40,6 @@ public sealed class GetCallersTool
 		Idempotent = true,
 		Destructive = false,
 		OpenWorld = false)]
-	[Description(
-		"""
-		Finds the methods that call the named method. Calls the compiler inserts count too: foreach/await
-		plumbing (GetEnumerator, MoveNext, Current, an enumerator's Dispose, await foreach and await using
-		equivalents, GetAwaiter, IsCompleted, GetResult), the Dispose/DisposeAsync a using or await using
-		runs, deconstruction and positional patterns, collection-initializer Add, user-defined operators
-		and conversions (including +=, ++, implicit conversions and true/false in a condition),
-		query-expression methods, interpolated-string handler members, implicit base() calls, and the
-		Length/Count behind ^ and ...
-		Callers are grouped file -> namespace -> containing type -> calling member, each leaf showing the
-		caller's declaration location:
-		  resolvedSymbol=<name, parameter types included for a method or indexer>
-
-		  <project>
-		  \t<relative/forward-slash/folder>
-		  \t\t<file.cs|file.razor>
-		  \t\t\t<namespace>
-		  \t\t\t\t<typeKind>,<typeName>
-		  \t\t\t\t\t<memberKind>,<memberName>,<loc>
-		""")]
 	public async Task<string> GetCallers(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("Fully-qualified method name; reuse names returned by discovery. Include parameter types to select one overload.")] string methodName,
