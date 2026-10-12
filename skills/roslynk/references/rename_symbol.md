@@ -1,8 +1,8 @@
 # `rename_symbol`
 
-Renames a symbol and all its references across the solution; correct across partial classes,
-code-behind, every #if/#else branch and every target framework; string literals and comments are
-left untouched.
+Renames a symbol and its references across partial classes, code-behind and loaded target
+frameworks, subject to the shared conditional-coverage limits. String literals and comments
+are left untouched.
 Symbols declared or referenced in .razor/.cshtml files are renamed by rewriting those files directly
 - edits computed against the Razor-generated code are mapped back through the compiler's #line
 directives, covering @code blocks, markup expressions, and component-attribute usages in other
