@@ -19,4 +19,3 @@ The body has the find_references shape with one location per leaf and the access
 accessKind is one of read, assign (simple '='), compound ('+=', '??=' and friends), increment ('++'/'--'), ref (passed by ref, 'ref x', or '&x'), out (passed as out), init (a declaration initialiser, an object or 'with' initialiser, an attribute named argument, or an assignment to the constructor's own field/property in its constructor). compound, increment and ref both read and write: each such location appears in BOTH find_reads and find_writes with the same accessKind, so do not add the two tools' counts together. nameof(...), doc-comment crefs and named arguments ('M(value: 1)') are neither, and are omitted.
 error=NotSupported is returned for a symbol that cannot be read or written (a method, type, event
 or local variable).
-Coverage: every loaded target framework, plus derived compilations each toggling ONE preprocessor symbol
