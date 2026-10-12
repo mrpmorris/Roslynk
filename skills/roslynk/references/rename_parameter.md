@@ -1,24 +1,36 @@
 # `rename_parameter`
 
-Renames one parameter of one method, local function, constructor or indexer overload: the
-declaration, every use in the body, named arguments at call sites and <paramref> documentation
-references are updated; string literals, comments and same-named text elsewhere are left untouched.
-The rename cascades across the member's override/interface group - overridden and overriding
-members, interface members and their implementations, and both parts of a partial method -
-wherever the related declaration is in source and its parameter at the same position has the same
-old name. Related declarations that use a different name, that live in metadata, or that are
-declared only by a source generator are left as they are and reported in 'unchangedRelated'.
-Returns 'applied' (N for a checkOnly preview), 'resolvedMethod' (the member as resolved, before
-the rename), 'parameter' (the old name), 'renamedMembers' (how many declarations had the
-parameter renamed, including the target), 'unchangedRelated' (semicolon-separated related members
-left alone; omitted when there are none), 'status' header, a blank line, then one
-solution-relative changed-file path per line.
-Errors: an invalid identifier, or a newName equal to parameterName, is error=Invalid; an ambiguous
-methodId returns one candidate= line per overload and a methodId that matches nothing returns
-fuzzy suggestions (copy a candidate back verbatim); a parameterName the member does not declare is
-error=NotFound listing its parameters; a newName already used by another parameter, local, local
-function, lambda/query variable or type parameter inside a renamed declaration is error=Conflict;
-a target that is not a method, local function, constructor or indexer, a positional record
-parameter, a member declared only in metadata, or a member declared only by a source generator is
-error=NotSupported (naming the generator in the last case); a file edited on disk since it was
-loaded is error=Stale. Nothing is written in any failure case.
+Renames a parameter of one method, local function, constructor or indexer overload. Updates its
+declaration, body uses, named call arguments and <paramref> documentation; leaves strings,
+comments and unrelated same-named text unchanged.
+
+## Related members
+
+Cascades through overridden/overriding members, interfaces/implementations and both partial-method
+parts when a source parameter at the same position has the same old name. Different names,
+metadata declarations and generated-only declarations remain unchanged and appear in
+unchangedRelated.
+
+## Result
+
+Headers, then a blank line and one solution-relative changed-file path per line:
+
+- applied: N for checkOnly previews.
+- resolvedMethod: resolved member before rename; parameter: old parameter name.
+- renamedMembers: renamed declaration count, including the target.
+- unchangedRelated: semicolon-separated unchanged related members; omitted when empty.
+- status: follows the shared output protocol.
+
+## Errors and recovery
+
+- Invalid: invalid identifier or newName equals parameterName.
+- Ambiguous methodId: one candidate per overload. No match: fuzzy suggestions.
+  Copy a candidate back verbatim.
+- NotFound: parameterName absent; lists the member's parameters.
+- Conflict: newName clashes with a parameter, local, local function, lambda/query variable
+  or type parameter inside a renamed declaration.
+- NotSupported: target is not a method/local function/constructor/indexer, is a positional
+  record parameter, or is declared only in metadata or generated source (names the generator).
+- Stale: a file changed on disk since loading.
+
+Nothing is written in any failure case.
