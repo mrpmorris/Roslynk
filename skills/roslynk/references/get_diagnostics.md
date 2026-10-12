@@ -6,6 +6,9 @@ Returns compiler and analyzer diagnostics for the solution. Costly: it compiles 
 project the edits since the last call affect - make all the edits a task needs first and call this
 once at the end, not after every edit; a repeat call with nothing changed in between is
 near-instant.
+Use summaryOnly=true for an overview; request detailed diagnostics when individual locations
+are needed.
+
 Per-severity counts are always in the header so filtering is never silent; diagnostics nest file ->
 severity:
 ```
