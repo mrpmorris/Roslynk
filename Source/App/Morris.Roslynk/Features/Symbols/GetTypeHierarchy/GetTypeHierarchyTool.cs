@@ -18,12 +18,14 @@ public sealed class GetTypeHierarchyTool
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
 	private readonly ProjectionService ProjectionService;
+	private readonly ResponseBudget Budget;
 
-	public GetTypeHierarchyTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
+	public GetTypeHierarchyTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService, ResponseBudget? responseBudget = null)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
 		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
+		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
 	[McpServerTool(
@@ -49,20 +51,30 @@ public sealed class GetTypeHierarchyTool
 		  \t<typeKind>,<fully-qualified name>
 		  derived
 		  \t<typeKind>,<fully-qualified name>
-		where typeKind is class|struct|interface|enum|delegate; {OutlineDescriptions.ListFieldQuoting}. {OutlineDescriptions.ErrorBlock} Prefer this
+		where typeKind is class|struct|interface|enum|delegate; {OutlineDescriptions.ListFieldQuoting}.
+		{OutlineDescriptions.Paging} {OutlineDescriptions.ErrorBlock} Prefer this
 		over reading files to reconstruct a hierarchy; the chain comes from the compiler, including base types
 		defined in referenced assemblies.
 		""")]
 	public async Task<string> GetTypeHierarchy(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description($"Fully-qualified name of the type, e.g. 'MyNamespace.MyType'. {OutlineDescriptions.SymbolNameGrammar}")] string typeName)
+		[Description($"Fully-qualified name of the type, e.g. 'MyNamespace.MyType'. {OutlineDescriptions.SymbolNameGrammar}")] string typeName,
+		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
+		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await GetTypeHierarchyCoreAsync(model, instance, typeName, CancellationToken.None);
+		return await GetTypeHierarchyCoreAsync(model, instance, typeName, startItem, maxSize, Budget);
 	}
 
-	internal async Task<string> GetTypeHierarchyCoreAsync(SolutionModel model, RoslynInstance instance, string typeName, CancellationToken token = default)
+	internal async Task<string> GetTypeHierarchyCoreAsync(
+		SolutionModel model,
+		RoslynInstance instance,
+		string typeName,
+		int startItem = 1,
+		int maxSize = 0,
+		ResponseBudget? budget = null,
+		CancellationToken token = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
@@ -115,15 +127,38 @@ public sealed class GetTypeHierarchyTool
 			.OrderBy(SymbolResolver.FullyQualifiedName, StringComparer.Ordinal)
 			.ToList();
 
-		var builder = new OutlineBuilder();
-		builder.Header("resolvedType", SymbolResolver.SignatureName(type));
-		builder.Status(model.Status);
-		builder.BeginBody();
+		// Items for the shared pager: one per entry, its section header as the open container line.
+		var items = new List<OutlineItem>();
+		void Collect(string title, IReadOnlyList<INamedTypeSymbol> types)
+		{
+			foreach (INamedTypeSymbol entry in types)
+				items.Add(OutlineItem.Single($"{SymbolKindText.Of(entry)},{SymbolResolver.FullyQualifiedName(entry)}", [title]));
+		}
 
-		Section(builder, "base", baseTypes);
-		Section(builder, "interfaces", interfaces);
-		Section(builder, "derived", derived);
-		return builder.ToString();
+		Collect("base", baseTypes);
+		Collect("interfaces", interfaces);
+		Collect("derived", derived);
+
+		PagedRender render = ItemPaging.Render(
+			model.Status,
+			builder => builder.Header("resolvedType", SymbolResolver.SignatureName(type)),
+			builder =>
+			{
+				Section(builder, "base", baseTypes);
+				Section(builder, "interfaces", interfaces);
+				Section(builder, "derived", derived);
+			},
+			items,
+			startItem,
+			maxSize,
+			budget);
+		return render switch
+		{
+			PagedRender.Complete complete => complete.Output,
+			PagedRender.Page paged => paged.Output,
+			PagedRender.Invalid invalid => Failure(Error.Invalid(invalid.Message)),
+			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
+		};
 	}
 
 	private void Section(OutlineBuilder builder, string title, IReadOnlyList<INamedTypeSymbol> types)

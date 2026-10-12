@@ -158,7 +158,7 @@ public class FindReadsAndWritesTests
 			string result = await writes.FindWrites(TestSolutions.Access, "AccessSpace.Counter.Total", maxResults: 2);
 
 			Assert.Contains("truncated=Y", result);
-			Assert.Contains("count=9", result);
+			Assert.Contains("count=2", result);
 			Assert.Equal(2, Lines(result).Count(line => line.EndsWith(",init") || line.EndsWith(",assign")));
 		}
 	}

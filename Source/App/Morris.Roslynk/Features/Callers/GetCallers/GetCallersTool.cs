@@ -22,12 +22,14 @@ public sealed class GetCallersTool
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
 	private readonly ProjectionService ProjectionService;
+	private readonly ResponseBudget Budget;
 
-	public GetCallersTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
+	public GetCallersTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService, ResponseBudget? responseBudget = null)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
 		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
+		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
 	[McpServerTool(
@@ -59,19 +61,28 @@ public sealed class GetCallersTool
 		  \t\t\t\t<typeKind>,<typeName>
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc>
 		where kind is one of {OutlineDescriptions.KindList} and {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}.
-		{OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over grepping for call sites; it resolves the actual
+		{OutlineDescriptions.Paging} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over grepping for call sites; it resolves the actual
 		method through the compiler, so overloads and same-named methods are not confused.
 		""")]
 	public async Task<string> GetCallers(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description($"Fully-qualified name of the method, e.g. 'MyNamespace.MyType.MyMethod'. {OutlineDescriptions.SymbolNameGrammar}")] string methodName)
+		[Description($"Fully-qualified name of the method, e.g. 'MyNamespace.MyType.MyMethod'. {OutlineDescriptions.SymbolNameGrammar}")] string methodName,
+		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
+		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await GetCallersCoreAsync(model, instance, methodName, CancellationToken.None);
+		return await GetCallersCoreAsync(model, instance, methodName, startItem, maxSize, Budget, CancellationToken.None);
 	}
 
-	internal async Task<string> GetCallersCoreAsync(SolutionModel model, RoslynInstance instance, string methodName, CancellationToken token = default)
+	internal async Task<string> GetCallersCoreAsync(
+		SolutionModel model,
+		RoslynInstance instance,
+		string methodName,
+		int startItem = 1,
+		int maxSize = 0,
+		ResponseBudget? budget = null,
+		CancellationToken token = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
@@ -128,13 +139,21 @@ public sealed class GetCallersTool
 		foreach ((ISymbol caller, Solution callerSolution) in callers.Items)
 			SymbolPlacement.Place(root, caller, callerSolution, solutionDirectory);
 
-		var builder = new OutlineBuilder();
-		builder.Header("resolvedSymbol", SymbolResolver.SignatureName(resolved[0].Symbol));
-		builder.Status(model.Status);
-		builder.BeginBody();
-		root.Render(builder);
-		return builder.ToString();
-
+		PagedRender render = ItemPaging.Render(
+			model.Status,
+			builder => builder.Header("resolvedSymbol", SymbolResolver.SignatureName(resolved[0].Symbol)),
+			builder => root.Render(builder),
+			root.Items(),
+			startItem,
+			maxSize,
+			budget);
+		return render switch
+		{
+			PagedRender.Complete complete => complete.Output,
+			PagedRender.Page paged => paged.Output,
+			PagedRender.Invalid invalid => Failure(Error.Invalid(invalid.Message)),
+			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
+		};
 	}
 
 	/// <summary>

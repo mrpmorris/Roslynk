@@ -90,6 +90,35 @@ public sealed class SymbolNode
 			child.RenderInto(builder, depth + 1);
 	}
 
+	/// <summary>
+	/// The outline's items in render order: every node that carries data of its own — a node with
+	/// locations, or a childless node whose line is itself the record (find_dead_code's leaves) — paired
+	/// with the chain of container lines open above it. Walking in render order with the chain makes the
+	/// item sequence an exact decomposition of <see cref="Render"/>: a page that re-emits each item's
+	/// chain suffix is a subsequence of the very lines the whole render writes, and page 1 over all items
+	/// reproduces it line for line.
+	/// </summary>
+	internal IReadOnlyList<OutlineItem> Items()
+	{
+		var items = new List<OutlineItem>();
+		var chain = new List<string>();
+		Collect(this, chain, items);
+		return items;
+	}
+
+	private static void Collect(SymbolNode node, List<string> chain, List<OutlineItem> items)
+	{
+		foreach (SymbolNode child in node.Ordered())
+		{
+			string line = child.LineText();
+			if (child.Locations.Count > 0 || child.Children.Count == 0)
+				items.Add(OutlineItem.Single(line, chain.ToArray()));
+			chain.Add(line);
+			Collect(child, chain, items);
+			chain.RemoveAt(chain.Count - 1);
+		}
+	}
+
 	private IEnumerable<SymbolNode> Ordered() =>
 		Children
 			.OrderBy(node => node.SortKey, StringComparer.Ordinal)

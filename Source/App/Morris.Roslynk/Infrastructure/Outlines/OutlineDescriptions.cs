@@ -74,27 +74,44 @@ internal static class OutlineDescriptions
 		the solution is not Ready (Building or Faulted); its absence means Ready.
 		When a parameter specifies a default value you should not pass a value to it unless you certainly need
 		the non-default behaviour.
-		{OutputBudget}
 		{Freshness}
 		""";
 
+	/// <summary>
+	/// The item-paging contract shared by every tool whose result can be too large: an oversized result
+	/// pages instead of being cut, and every page is self-contained.
+	/// </summary>
+	public const string Paging =
+		"Long results are paged, never cut: an oversized result carries count=<items in the result set>, "
+		+ "truncated=Y and nextStartItem=<k>; call again with startItem=<k> and the same other arguments for "
+		+ "the next page. Each page repeats the container lines open above its first item, so it reads "
+		+ "standalone; the preamble counts against maxSize but not against count=. maxSize (characters; "
+		+ "default: the response budget) bounds a page; an item longer than a whole page is delivered as far "
+		+ "as it fits and named partialItem=<n> - the rest of that item is not retrievable. startItem past "
+		+ "the end, or a maxSize too small to carry one item beside its container lines, is error=Invalid. "
+		+ "maxResults bounds the SET of results (paging walks that capped set, and count= names its size); "
+		+ "omit maxResults and page when you want everything. A result that fits whole carries no paging "
+		+ "headers at all.";
+
 	/// <summary>How a capped (paginated) result announces that it dropped rows, when the total is known.</summary>
 	public const string Truncation =
-		"If the result is capped at maxResults, a count=<total available> and truncated=Y header precede the "
-		+ "body; both are absent when nothing was dropped, so the body is then the complete set.";
+		"If the result set was capped at maxResults, count=<items in the capped set> and truncated=Y precede "
+		+ "the body; when the result also pages, nextStartItem=<k> names the continuation. Both are absent "
+		+ "when the body is the complete, fitting set.";
 
-	/// <summary>How an oversized result announces the generic budget cut (the wrapper's last resort).</summary>
+	/// <summary>How an oversized result announces the generic budget cut (the wrapper's last resort for the tools that cannot page).</summary>
 	public const string OutputBudget =
 		"A result longer than the response budget (about 80,000 characters) is cut after its last whole line "
-		+ "and starts with outputTruncated=Y and fullOutputChars=<n>; narrow the request (a filter, maxResults "
-		+ "or a paging parameter) to see the rest.";
+		+ "and starts with outputTruncated=Y and fullOutputChars=<n>; narrow the request (a filter or "
+		+ "maxResults) and re-call.";
 
 	/// <summary>
-	/// How a capped result announces truncation when it cannot cheaply know the total (a scan that
-	/// early-exits), so only the flag is emitted.
+	/// How find_dead_code's capped scan announces itself: maxResults bounds the scan, paging walks what it found.
 	/// </summary>
 	public const string TruncationFlag =
-		"A truncated=Y header is present only when more results exist beyond maxResults; it is absent otherwise.";
+		"maxResults bounds the scan, not a page: count=<candidates found> and truncated=Y appear when the "
+		+ "cap cut the scan short, and nextStartItem=<k> appears only when a page of the result does not "
+		+ "show all of them.";
 
 	/// <summary>The shared failure shape every tool falls back to.</summary>
 	public const string ErrorBlock =

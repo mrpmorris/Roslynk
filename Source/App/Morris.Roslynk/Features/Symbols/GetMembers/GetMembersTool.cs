@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -21,12 +21,14 @@ public sealed class GetMembersTool
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
 	private readonly ProjectionService ProjectionService;
+	private readonly ResponseBudget Budget;
 
-	public GetMembersTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
+	public GetMembersTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService, ResponseBudget? responseBudget = null)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
 		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
+		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
 	[McpServerTool(
@@ -58,7 +60,7 @@ public sealed class GetMembersTool
 		accessibilities including private are listed; inherited members are excluded unless requested; narrow
 		a large type with nameFilter (a trailing '*' matches by prefix, otherwise a case-insensitive
 		substring) and the include* kind toggles.
-		{OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading the .cs or .razor file; it is the compiler's view,
+		{OutlineDescriptions.Paging} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading the .cs or .razor file; it is the compiler's view,
 		correct across partial classes and (with includeInherited) base types.
 		""")]
 	public async Task<string> GetMembers(
@@ -70,11 +72,13 @@ public sealed class GetMembersTool
 		[Description("Include field members.")] bool includeFields = true,
 		[Description("Include property members.")] bool includeProperties = true,
 		[Description("Include event members.")] bool includeEvents = true,
-		[Description("Include nested type members.")] bool includeNestedTypes = true)
+		[Description("Include nested type members.")] bool includeNestedTypes = true,
+		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
+		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await GetMembersCoreAsync(model, instance, typeName, includeInherited, nameFilter, includeMethods, includeFields, includeProperties, includeEvents, includeNestedTypes, CancellationToken.None);
+		return await GetMembersCoreAsync(model, instance, typeName, includeInherited, nameFilter, includeMethods, includeFields, includeProperties, includeEvents, includeNestedTypes, startItem, maxSize, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> GetMembersCoreAsync(
@@ -88,6 +92,9 @@ public sealed class GetMembersTool
 		bool includeProperties = true,
 		bool includeEvents = true,
 		bool includeNestedTypes = true,
+		int startItem = 1,
+		int maxSize = 0,
+		ResponseBudget? budget = null,
 		CancellationToken token = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
@@ -172,37 +179,68 @@ public sealed class GetMembersTool
 			entries.Add((project, file, order, line, localFunctions));
 		}
 
-		var builder = new OutlineBuilder();
-		builder.Header("resolvedType", SymbolResolver.SignatureName(type));
-		builder.Status(model.Status);
-		builder.BeginBody();
-
 		var byProject = entries
 			.GroupBy(entry => entry.Project)
 			.OrderBy(group => group.Key is null)
 			.ThenBy(group => group.Key, StringComparer.Ordinal);
 
-		foreach (var project in byProject)
+		void RenderBody(OutlineBuilder target, List<OutlineItem>? collect)
 		{
-			int fileDepth = 0;
-			if (project.Key is string projectName)
+			foreach (var project in byProject)
 			{
-				builder.Line(0, projectName);
-				fileDepth = 1;
-			}
-
-			FolderFiles.Write(builder, fileDepth, project, entry => entry.File, (memberDepth, file) =>
-			{
-				foreach (var entry in file.OrderBy(item => item.Order).ThenBy(item => item.Line, StringComparer.Ordinal))
+				int fileDepth = 0;
+				if (project.Key is string projectName)
 				{
-					builder.Line(memberDepth, entry.Line);
-					foreach ((int depth, string localLine) in entry.LocalFunctions)
-						builder.Line(memberDepth + depth, localLine);
+					target.Line(0, projectName);
+					fileDepth = 1;
 				}
-			});
+
+				FolderFiles.Write(target, fileDepth, project, entry => entry.File, (memberDepth, file) =>
+				{
+					foreach (var entry in file.OrderBy(item => item.Order).ThenBy(item => item.Line, StringComparer.Ordinal))
+					{
+						target.Line(memberDepth, entry.Line);
+						foreach ((int depth, string localLine) in entry.LocalFunctions)
+							target.Line(memberDepth + depth, localLine);
+
+						if (collect is not null)
+						{
+							// The chain is the project line, folder line and file line the member renders
+							// under; its local functions ride with it as deeper lines of the same item.
+							(string? folder, string fileName) = OutlinePath.Split(entry.File);
+							string[] context;
+							if (project.Key is string p)
+								context = folder is null ? [p, fileName] : [p, folder, fileName];
+							else
+								context = folder is null ? [fileName] : [folder, fileName];
+							var lines = new List<(int Depth, string Text)> { (0, entry.Line) };
+							foreach ((int depth, string localLine) in entry.LocalFunctions)
+								lines.Add((depth, localLine));
+							collect.Add(new OutlineItem(lines.ToArray(), context));
+						}
+					}
+				});
+			}
 		}
 
-		return builder.ToString();
+		var collected = new List<OutlineItem>();
+		RenderBody(new OutlineBuilder(), collected);
+
+		PagedRender render = ItemPaging.Render(
+			model.Status,
+			builder => builder.Header("resolvedType", SymbolResolver.SignatureName(type)),
+			builder => RenderBody(builder, null),
+			collected,
+			startItem,
+			maxSize,
+			budget);
+		return render switch
+		{
+			PagedRender.Complete complete => complete.Output,
+			PagedRender.Page paged => paged.Output,
+			PagedRender.Invalid invalid => Failure(Error.Invalid(invalid.Message)),
+			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
+		};
 	}
 
 	/// <summary>

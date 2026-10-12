@@ -2,6 +2,10 @@ using Morris.Roslynk.Infrastructure.Outlines;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Outlines;
 
+/// <summary>
+/// LineWindow survives issue 96 only as a line counter (get_symbol_body's parts overview still needs
+/// it); slicing itself moved to <see cref="ItemPaging"/>.
+/// </summary>
 public class LineWindowTests
 {
 	[Fact]
@@ -15,87 +19,27 @@ public class LineWindowTests
 	}
 
 	[Fact]
-	public void WhenTheWindowFits_ThenThePageIsTheWholeTextAndNothingIsMarked()
+	public void WhenLinesAreEmptyOrUnbroken_ThenEachStillCounts()
 	{
-		var (page, totalLines, more, nextStartLine, partialLine) = LineWindow.Slice("a\r\nb\r\nc", 1, 10, 100);
-
-		Assert.Equal("a\r\nb\r\nc", page);
-		Assert.Equal(3, totalLines);
-		Assert.False(more);
-		Assert.Equal(4, nextStartLine);
-		Assert.Equal(0, partialLine);
+		Assert.Equal(1, LineWindow.CountLines("\n"));
+		Assert.Equal(3, LineWindow.CountLines("a\n\nb"));
+		Assert.Equal(3, LineWindow.CountLines("a\n\nb\n"));
 	}
 
 	[Fact]
-	public void WhenMaxLinesBinds_ThenTheCutLandsAfterAWholeLine()
-	{
-		var (page, _, more, nextStartLine, partialLine) = LineWindow.Slice("a\r\nb\r\nc", 1, 2, 100);
-
-		Assert.Equal("a\r\nb\r\n", page); // the CRLF stays intact; the page is a byte-exact slice
-		Assert.True(more);
-		Assert.Equal(3, nextStartLine);
-		Assert.Equal(0, partialLine);
-	}
-
-	[Fact]
-	public void WhenMaxCharsBindsBeforeMaxLines_ThenThePageIsShorterStill()
-	{
-		// Three 5-char lines fit maxLines=10, but the 9-char ceiling fits only the first.
-		var (page, _, more, nextStartLine, _) = LineWindow.Slice("aaaa\nbbbb\ncccc\n", 1, 10, 9);
-
-		Assert.Equal("aaaa\n", page);
-		Assert.True(more);
-		Assert.Equal(2, nextStartLine);
-	}
-
-	[Fact]
-	public void WhenStartLineContinues_ThenThePageStartsExactlyThere()
-	{
-		var (page, _, more, nextStartLine, _) = LineWindow.Slice("one\ntwo\nthree\n", 2, 1, 100);
-
-		Assert.Equal("two\n", page);
-		Assert.True(more);
-		Assert.Equal(3, nextStartLine);
-	}
-
-	[Fact]
-	public void WhenASingleLineExceedsTheWholeCeiling_ThenAsMuchAsFitsIsDeliveredAndNamed()
-	{
-		string text = new('x', 100);
-		var (page, totalLines, more, nextStartLine, partialLine) = LineWindow.Slice(text, 1, 10, 40);
-
-		Assert.Equal(new string('x', 40), page);
-		Assert.Equal(1, totalLines);
-		Assert.True(more);
-		Assert.Equal(2, nextStartLine);
-		Assert.Equal(1, partialLine);
-	}
-
-	[Fact]
-	public void WhenASafeCutWouldSplitASurrogatePairOrACrlf_ThenItStepsBack()
-	{
-		// A high surrogate followed by a low surrogate: cutting after the high surrogate would tear the pair.
-		string surrogate = "a" + char.ConvertFromUtf32(0x1F600) + "b";
-		Assert.Equal(1, ResponseBudget.SafeCut(surrogate, 0, 2)); // 'a' only; the pair is indivisible
-		Assert.Equal(3, ResponseBudget.SafeCut(surrogate, 0, 3));
-
-		// A CRLF: cutting between the '\r' and the '\n' would tear the line ending.
-		Assert.Equal(1, ResponseBudget.SafeCut("a\r\nb", 0, 2));
-	}
-
-	[Fact]
-	public void WhenTheBudgetEndsTheWindow_ThenThePageStaysWithinIt()
+	public void WhenCountingALongText_ThenEveryBreakCounts()
 	{
 		string text = string.Concat(Enumerable.Range(0, 1_000).Select(index => $"line {index:D5} has content\n"));
-		var (page, totalLines, more, nextStartLine, _) = LineWindow.Slice(text, 1, 1_000, 2_000);
-
-		Assert.True(page.Length <= 2_000, $"Page was {page.Length} chars.");
-		Assert.True(more);
-		Assert.True(totalLines == 1_000);
-		Assert.True(nextStartLine > 1);
+		Assert.Equal(1_000, LineWindow.CountLines(text));
 	}
 }
 
+/// <summary>
+/// The Fit backstop for the four structurally bounded tools that cannot page (get_symbol,
+/// find_definition, get_expression_info, get_solution_status): an oversized result is cut after its
+/// last whole line and marked. Issue 96 exempted multi_query from it - the envelope enforces the
+/// budget with whole-or-drop selection - but the backstop itself stays.
+/// </summary>
 public class ResponseBudgetTests
 {
 	[Fact]
@@ -152,5 +96,17 @@ public class ResponseBudgetTests
 
 		Assert.True(cut.Length <= ResponseBudget.MinimumMaxChars);
 		Assert.StartsWith("outputTruncated=Y\n", cut);
+	}
+
+	[Fact]
+	public void WhenASafeCutWouldSplitASurrogatePairOrACrlf_ThenItStepsBack()
+	{
+		// A high surrogate followed by a low surrogate: cutting after the high surrogate would tear the pair.
+		string surrogate = "a" + char.ConvertFromUtf32(0x1F600) + "b";
+		Assert.Equal(1, ResponseBudget.SafeCut(surrogate, 0, 2)); // 'a' only; the pair is indivisible
+		Assert.Equal(3, ResponseBudget.SafeCut(surrogate, 0, 3));
+
+		// A CRLF: cutting between the '\r' and the '\n' would tear the line ending.
+		Assert.Equal(1, ResponseBudget.SafeCut("a\r\nb", 0, 2));
 	}
 }

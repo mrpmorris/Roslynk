@@ -20,11 +20,13 @@ public sealed class GetDiagnosticsTool
 
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly DiagnosticsService DiagnosticsService;
+	private readonly ResponseBudget Budget;
 
-	public GetDiagnosticsTool(InstanceRegistry instanceRegistry, DiagnosticsService diagnosticsService)
+	public GetDiagnosticsTool(InstanceRegistry instanceRegistry, DiagnosticsService diagnosticsService, ResponseBudget? responseBudget = null)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		DiagnosticsService = diagnosticsService ?? throw new ArgumentNullException(nameof(diagnosticsService));
+		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
 	[McpServerTool(
@@ -66,7 +68,7 @@ public sealed class GetDiagnosticsTool
 		FILTERED set, and every active filter is echoed as a filter=<parameter>:<value> header before them - an empty
 		body with a filter= header means the filter matched nothing, not that the solution is clean. A projectName or
 		filePath that is not in the solution is error=NotFound with candidate= values; one that exists but has no
-		diagnostics returns zero counts. {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.Truncation} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to hunt for problems, and over running
+		diagnostics returns zero counts. {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.Paging} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to hunt for problems, and over running
 		`dotnet build`; it returns the compiler's and analyzers' own diagnostics with exact locations.
 		Multi-targeted projects report diagnostics across their loaded target frameworks. The Razor compiler's own
 		diagnostics (RZxxxx, e.g. an unclosed @code block) are reported against the .razor/.cshtml file. Diagnostic
@@ -83,8 +85,10 @@ public sealed class GetDiagnosticsTool
 		[Description("Only diagnostics from this project: the name exactly as the outline prints it (the project file name; the .csproj extension is omitted, other extensions such as .vbproj are kept) or that name carrying its extension. Case-insensitive. A multi-targeted project is matched across every loaded target framework.")] string? projectName = null,
 		[Description("Only diagnostics located in this file: absolute, or relative to the solution folder (the same spellings find_definition accepts). A .razor/.cshtml path also matches the diagnostics reported against it. Case-insensitive.")] string? filePath = null,
 		[Description("Only these diagnostic ids, e.g. [\"CS0246\",\"CS0103\"]; case-insensitive. Omit, or pass an empty list, for every id.")] string[]? ids = null,
-		[Description($"Optional cap on the entries listed in the body (id lines when summaryOnly is set); the per-severity header counts stay complete. Default: no cap. {OutlineDescriptions.Truncation}")] int? maxResults = null,
-		[Description("Optional. true lists one line per diagnostic id (its count, one example location and the example message) instead of every diagnostic, ordered by count descending then id; it covers every severity unless an include flag is set. Default false.")] bool summaryOnly = false)
+		[Description($"Optional cap on the entries listed in the body (id lines when summaryOnly is set); the per-severity header counts stay complete. Omit it to page through everything with startItem. {OutlineDescriptions.Truncation}")] int? maxResults = null,
+		[Description("Optional. true lists one line per diagnostic id (its count, one example location and the example message) instead of every diagnostic, ordered by count descending then id; it covers every severity unless an include flag is set. Default false.")] bool summaryOnly = false,
+		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
+		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
@@ -156,7 +160,7 @@ public sealed class GetDiagnosticsTool
 		if (includeHidden)
 			wanted.Add(DiagnosticSeverity.Hidden);
 
-		int cap = Math.Max(0, maxResults ?? int.MaxValue);
+		int cap = maxResults is int given ? Math.Max(0, given) : int.MaxValue;
 		List<Diagnostic> items;
 		IReadOnlyList<IdSummary> summaries;
 		if (summaryOnly)
@@ -173,79 +177,119 @@ public sealed class GetDiagnosticsTool
 				solutionDirectory);
 		}
 
-		var builder = new OutlineBuilder();
-		if (projectNameFilter is string echoedProject)
-			builder.Header("filter", $"projectName:{echoedProject}");
-		if (fullFilePath is not null)
-			builder.Header("filter", $"filePath:{filePath!.Trim()}");
-		if (idSet is not null)
-			builder.Header("filter", $"ids:{string.Join('|', idSet.Order(StringComparer.Ordinal))}");
-
-		// Counts span the content-filtered set, every severity, independent of the include toggles.
-		builder.Header("errors", filtered.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
-		builder.Header("warnings", filtered.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning));
-		builder.Header("infos", filtered.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Info));
-		builder.Header("hidden", filtered.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Hidden));
-
 		int totalRows = summaryOnly ? summaries.Count : items.Count;
-		if (totalRows > cap)
+		bool capped = totalRows > cap;
+
+		void RenderBody(OutlineBuilder target, List<OutlineItem>? collect)
 		{
-			builder.Header("count", totalRows);
-			builder.Header("truncated", true);
-		}
-
-		builder.Status(instance.CurrentModel.Status);
-		builder.BeginBody();
-
-		if (summaryOnly)
-		{
-			foreach (IdSummary summary in summaries.Take(cap))
-				builder.Line(0, SummaryEntryText(summary, solutionDirectory, compiled));
-
-			return builder.ToString();
-		}
-
-		IEnumerable<IGrouping<string?, Diagnostic>> byProject = items
-			.Take(cap)
-			.GroupBy(diagnostic => ProjectOf(diagnostic, compiled))
-			.OrderBy(group => group.Key is null)
-			.ThenBy(group => group.Key, StringComparer.Ordinal);
-
-		foreach (IGrouping<string?, Diagnostic> project in byProject)
-		{
-			int fileDepth = 0;
-			if (project.Key is string projectLabel)
+			if (summaryOnly)
 			{
-				builder.Line(0, projectLabel);
-				fileDepth = 1;
+				foreach (IdSummary summary in summaries.Take(cap))
+				{
+					string entry = SummaryEntryText(summary, solutionDirectory, compiled);
+					target.Line(0, entry);
+					collect?.Add(OutlineItem.Single(entry, []));
+				}
+
+				return;
 			}
 
-			FolderFiles.Write(builder, fileDepth, project, diagnostic => FileOf(diagnostic, solutionDirectory), (severityDepth, file) =>
+			IEnumerable<IGrouping<string?, Diagnostic>> byProject = items
+				.Take(cap)
+				.GroupBy(diagnostic => ProjectOf(diagnostic, compiled))
+				.OrderBy(group => group.Key is null)
+				.ThenBy(group => group.Key, StringComparer.Ordinal);
+
+			foreach (IGrouping<string?, Diagnostic> project in byProject)
 			{
-				IEnumerable<IGrouping<DiagnosticSeverity, Diagnostic>> bySeverity = file
-					.GroupBy(diagnostic => diagnostic.Severity)
-					.OrderByDescending(group => group.Key);
-
-				foreach (IGrouping<DiagnosticSeverity, Diagnostic> severity in bySeverity)
+				int fileDepth = 0;
+				if (project.Key is string projectLabel)
 				{
-					builder.Line(severityDepth, SeverityLabel(severity.Key));
-
-					IEnumerable<Diagnostic> ordered = severity
-						.OrderBy(diagnostic => HasFile(diagnostic.Location) ? 0 : 1)
-						.ThenBy(diagnostic => HasFile(diagnostic.Location)
-							? diagnostic.Location.GetDisplaySpan().StartLinePosition.Line
-							: int.MaxValue)
-						.ThenBy(diagnostic => HasFile(diagnostic.Location)
-							? diagnostic.Location.GetDisplaySpan().StartLinePosition.Character
-							: int.MaxValue);
-
-					foreach (Diagnostic diagnostic in ordered)
-						builder.Line(severityDepth + 1, EntryText(diagnostic));
+					target.Line(0, projectLabel);
+					fileDepth = 1;
 				}
-			});
+
+				FolderFiles.Write(target, fileDepth, project, diagnostic => FileOf(diagnostic, solutionDirectory), (severityDepth, file) =>
+				{
+					IEnumerable<IGrouping<DiagnosticSeverity, Diagnostic>> bySeverity = file
+						.GroupBy(diagnostic => diagnostic.Severity)
+						.OrderByDescending(group => group.Key);
+
+					foreach (IGrouping<DiagnosticSeverity, Diagnostic> severity in bySeverity)
+					{
+						target.Line(severityDepth, SeverityLabel(severity.Key));
+
+						IEnumerable<Diagnostic> ordered = severity
+							.OrderBy(diagnostic => HasFile(diagnostic.Location) ? 0 : 1)
+							.ThenBy(diagnostic => HasFile(diagnostic.Location)
+								? diagnostic.Location.GetDisplaySpan().StartLinePosition.Line
+								: int.MaxValue)
+							.ThenBy(diagnostic => HasFile(diagnostic.Location)
+								? diagnostic.Location.GetDisplaySpan().StartLinePosition.Character
+								: int.MaxValue);
+
+						foreach (Diagnostic diagnostic in ordered)
+						{
+							string entry = EntryText(diagnostic);
+							target.Line(severityDepth + 1, entry);
+							if (collect is not null)
+							{
+								// The chain is the project line, folder line, file line and severity label the
+								// entry renders under.
+								string fileLabel = FileOf(diagnostic, solutionDirectory);
+								(string? folder, string fileName) = OutlinePath.Split(fileLabel);
+								string[] context;
+								if (project.Key is string p)
+									context = folder is null ? [p, fileName] : [p, folder, fileName];
+								else
+									context = folder is null ? [fileName] : [folder, fileName];
+								collect.Add(OutlineItem.Single(entry, [.. context, SeverityLabel(severity.Key)]));
+							}
+						}
+					}
+				});
+			}
 		}
 
-		return builder.ToString();
+		var collected = new List<OutlineItem>();
+		RenderBody(new OutlineBuilder(), collected);
+
+		PagedRender render = ItemPaging.Render(
+			instance.CurrentModel.Status,
+			builder =>
+			{
+				if (projectNameFilter is string echoedProject)
+					builder.Header("filter", $"projectName:{echoedProject}");
+				if (fullFilePath is not null)
+					builder.Header("filter", $"filePath:{filePath!.Trim()}");
+				if (idSet is not null)
+					builder.Header("filter", $"ids:{string.Join('|', idSet.Order(StringComparer.Ordinal))}");
+
+				// Counts span the content-filtered set, every severity, independent of the include toggles.
+				builder.Header("errors", filtered.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+				builder.Header("warnings", filtered.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning));
+				builder.Header("infos", filtered.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Info));
+				builder.Header("hidden", filtered.Count(diagnostic => diagnostic.Severity == DiagnosticSeverity.Hidden));
+			},
+			capHeaders: capped
+				? builder =>
+				{
+					builder.Header("count", Math.Min(totalRows, cap));
+					builder.Header("truncated", true);
+				}
+				: null,
+			renderBody: builder => RenderBody(builder, null),
+			items: collected,
+			startItem: startItem,
+			maxSize: maxSize,
+			budget: Budget);
+		return render switch
+		{
+			PagedRender.Complete complete => complete.Output,
+			PagedRender.Page paged => paged.Output,
+			PagedRender.Invalid invalid => OutlineError.Format(Error.Invalid(invalid.Message), instance.CurrentModel.Status),
+			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
+		};
 	}
 
 	/// <summary>

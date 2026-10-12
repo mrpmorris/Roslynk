@@ -173,16 +173,35 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 
 		// The paging parameters are plain omittable integers - their defaults live in the descriptions, the
 		// MoveDefaultKeywordToDescription transform having stripped the schema's default keyword.
-		foreach (string name in new[] { "startLine", "maxLines", "part" })
+		foreach (string name in new[] { "startItem", "maxSize", "part" })
 		{
 			Assert.True(properties.ContainsKey(name), $"{name} is missing from the get_symbol_body schema.");
 			Assert.Equal("integer", properties[name].GetProperty("type").GetString());
 			Assert.DoesNotContain(name, required);
 		}
 
-		Assert.Contains("Default 400", properties["maxLines"].GetProperty("description").GetString(), StringComparison.Ordinal);
-		Assert.Contains("Default 1", properties["startLine"].GetProperty("description").GetString(), StringComparison.Ordinal);
+		Assert.Contains("Default: the response budget", properties["maxSize"].GetProperty("description").GetString(), StringComparison.Ordinal);
+		Assert.Contains("Default 1", properties["startItem"].GetProperty("description").GetString(), StringComparison.Ordinal);
 		Assert.Contains("Default 0", properties["part"].GetProperty("description").GetString(), StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public void WhenAPagingToolIsPublished_ThenStartItemAndMaxSizeAreOptionalIntegers()
+	{
+		// Every tool that pages exposes the same two omittable parameters, so a caller learns the contract
+		// once; the schema carries no defaults (the descriptions do).
+		foreach (string toolName in new[] { "find_references", "get_callers", "get_callees", "find_implementations", "search_symbols", "get_members", "get_type_hierarchy", "find_dead_code", "find_dead_conditionals", "get_diagnostics" })
+		{
+			JsonElement schema = Tools.Single(tool => tool.ProtocolTool.Name == toolName).ProtocolTool.InputSchema;
+			IReadOnlyDictionary<string, JsonElement> properties = Properties(schema);
+			IReadOnlyCollection<string> required = Required(schema);
+			foreach (string name in new[] { "startItem", "maxSize" })
+			{
+				Assert.True(properties.ContainsKey(name), $"{name} is missing from the {toolName} schema.");
+				Assert.Equal("integer", properties[name].GetProperty("type").GetString());
+				Assert.DoesNotContain(name, required);
+			}
+		}
 	}
 
 	private static IEnumerable<(string ToolName, MethodInfo Method)> ToolMethods()

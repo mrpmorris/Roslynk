@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Microsoft.CodeAnalysis;
@@ -12,133 +13,289 @@ using Morris.Roslynk.Infrastructure.Results;
 
 namespace Morris.Roslynk.Tests.Features.MultiQuery;
 
+/// <summary>
+/// The whole-or-drop envelope (issue 96): every operation executes against the one pinned snapshot,
+/// whole results are selected smallest-first (ties by request index) until the budget is filled,
+/// delivered slots emit in request order, and dropped operations become one retry= line of cost
+/// ratios. Nothing is ever cut mid-body; a batch that cannot even be framed is refused before
+/// anything runs. Slot bodies of controlled size come from <see cref="StubCoreHost"/> through the
+/// internal seam catalog.
+/// </summary>
 public class MultiQueryLimitTests
 {
 	[Fact]
-	public async Task WhenOperationsExceedTheLimit_ThenTheFirst25RunAndTheRestAreTruncated()
+	public async Task WhenEveryResultFits_ThenEveryOperationIsDeliveredWholeInRequestOrder()
 	{
 		(MultiQueryTool subject, _) = await CreateAsync();
 
-		// 30 ops of the same cheap query: 25 run, 5 truncated.
-		var operations = Enumerable.Range(0, 30)
-			.Select(_ => new MultiQueryOperation(MultiQueryOp.search_symbols, Args(("query", Json("Widget")))))
-			.ToList();
-
+		var operations = new List<MultiQueryOperation>
+		{
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("SimpleLibrary.Greeter")))),
+			new(MultiQueryOp.get_members, Args(("typeName", Json("SimpleLibrary.Greeter")))),
+			new(MultiQueryOp.search_symbols, Args(("query", Json("Widget")))),
+		};
 		string envelope = await subject.MultiQuery(TestSolutions.Simple, operations);
 
-		Assert.Contains("operations=30", envelope);
-		Assert.Contains("truncatedSlots=5", envelope);
-		for (int index = 26; index <= 30; index++)
-			Assert.Contains($"slot={index} tool=search_symbols", envelope);
-		Assert.Equal(5, CountOccurrences(envelope, "error=Truncated"));
-		// The first 25 slots carry real bodies (search_symbols for Widget hits at least one symbol).
-		Assert.Contains("class,Widget", envelope);
-		Assert.True(envelope.Length <= ResponseBudget.DefaultMaxChars);
-	}
+		Assert.StartsWith("operations=3\nsnapshot=", envelope);
+		Assert.Equal("", ExtractHeaderOrEmpty(envelope, "retry")); // nothing dropped, no retry line
+		Assert.DoesNotContain("truncatedSlots", envelope);
+		Assert.Contains("\nslot=1 tool=get_symbol\n", envelope);
+		Assert.Contains("\nslot=2 tool=get_members\n", envelope);
+		Assert.Contains("\nslot=3 tool=search_symbols\n", envelope);
+		Assert.True(
+			envelope.IndexOf("\nslot=1 tool=", StringComparison.Ordinal) < envelope.IndexOf("\nslot=2 tool=", StringComparison.Ordinal),
+			"Slots must emit in request order.");
+		Assert.True(
+			envelope.IndexOf("\nslot=2 tool=", StringComparison.Ordinal) < envelope.IndexOf("\nslot=3 tool=", StringComparison.Ordinal),
+			"Slots must emit in request order.");
+		Assert.True(SlotBody(envelope, 1).Length > 0, "Slot 1 delivered an empty body.");
+		Assert.True(SlotBody(envelope, 2).Length > 0, "Slot 2 delivered an empty body.");
+		Assert.True(SlotBody(envelope, 3).Length > 0, "Slot 3 delivered an empty body.");
 
-	[Fact]
-	public async Task WhenTheOverBudgetBodyHasNoLineBoundary_ThenTheSlotIsRefusedWhole()
-	{
-		(MultiQueryTool subject, InstanceRegistry registry) = await CreateAsync();
-		RoslynInstance instance = await registry.GetOrBeginAsync(TestSolutions.Simple);
-		SolutionModel model = await instance.ReadModelAsync();
-
-		// A stub core emitting a 250k-char single line: no whole line fits any slot's allowance, so every
-		// slot is refused whole rather than shipping a torn fragment - three complete Truncated blocks.
-		var catalog = new Dictionary<string, MultiQueryCatalog.OpEntry>(StringComparer.Ordinal)
-		{
-			["get_symbol"] = new("get_symbol", typeof(StubCoreHost), nameof(StubCoreHost.BigBodyAsync)),
-		};
-		string envelope = await subject.ExecuteBatchAsync(
-			model,
-			instance,
-			catalog,
-			Enumerable.Range(0, 3)
-				.Select(_ => new MultiQueryOperation(MultiQueryOp.get_symbol, Args(("symbolName", Json("SimpleLibrary.Greeter")))))
-				.ToList());
-
-		Assert.Contains("operations=3", envelope);
-		Assert.Contains("truncatedSlots=3", envelope);
-		Assert.Equal(3, CountOccurrences(envelope, "error=Truncated"));
-		Assert.DoesNotContain("error=Faulted", envelope);
-		Assert.DoesNotContain("yyyyy", envelope); // nothing of the oversized body ships
+		// Framing integrity: one delimiter line per delivered slot plus the terminator.
+		string boundary = ExtractHeader(envelope, "boundary");
+		Assert.Equal(4, CountOccurrences(envelope, "\n--" + boundary));
 		Assert.True(envelope.Length <= ResponseBudget.DefaultMaxChars, $"Envelope was {envelope.Length} chars.");
 	}
 
 	[Fact]
-	public async Task WhenASlotIsCutAtALineBoundary_ThenItIsMarkedAndTheFramingHolds()
+	public async Task WhenNoResultFits_ThenOnlyTheRetryLineRemainsAndNoSlotFramesAreEmitted()
 	{
-		(MultiQueryTool subject, InstanceRegistry registry) = await CreateAsync();
-		RoslynInstance instance = await registry.GetOrBeginAsync(TestSolutions.Simple);
-		SolutionModel model = await instance.ReadModelAsync();
+		(MultiQueryTool subject, _, SolutionModel model, RoslynInstance instance) = await CreateSeamAsync(20_000);
 
-		// A 2,000-line body (102,000 chars): slot 1 is cut after a whole line and marked on its meta line;
-		// slots 2-3 are refused whole. The envelope stays within the budget and its framing stays intact.
-		var catalog = new Dictionary<string, MultiQueryCatalog.OpEntry>(StringComparer.Ordinal)
-		{
-			["get_symbol"] = new("get_symbol", typeof(StubCoreHost), nameof(StubCoreHost.LineBodyAsync)),
-		};
-		var operations = Enumerable.Range(0, 3)
+		// Two 250K bodies against a 20K budget: both dropped whole, no slot frame of any kind.
+		var catalog = StubCatalog(nameof(StubCoreHost.BigBodyAsync));
+		var operations = Enumerable.Range(0, 2)
 			.Select(_ => new MultiQueryOperation(MultiQueryOp.get_symbol, Args(("symbolName", Json("SimpleLibrary.Greeter")))))
 			.ToList();
 		string envelope = await subject.ExecuteBatchAsync(model, instance, catalog, operations);
 
-		Assert.Matches(@"\nslot=1 tool=get_symbol truncated=Y\n", envelope);
-		Assert.Equal(2, CountOccurrences(envelope, "error=Truncated"));
-		Assert.Contains("truncatedSlots=3", envelope);
-		Assert.Contains("response budget exhausted: slot 1 (get_symbol)", envelope);
-
-		string cutBody = SlotBody(envelope, 1);
-		Assert.EndsWith("]", cutBody);
-		Assert.Contains("\n", cutBody[..^1]); // the cut ends exactly after a whole line
-
 		string boundary = ExtractHeader(envelope, "boundary");
-		Assert.Equal(5, envelope.Split("\n--" + boundary).Length); // n+1 delimiters split into n+2 parts
-		Assert.True(envelope.Length <= ResponseBudget.DefaultMaxChars, $"Envelope was {envelope.Length} chars.");
-
-		// The bracketed trailer names the continuation and stays well inside its reserved bound.
-		string trailer = cutBody[cutBody.LastIndexOf('\n')..];
-		Assert.Contains("expectSnapshot=" + ExtractHeader(envelope, "snapshot"), trailer);
-		Assert.True(trailer.Length < 512, $"Trailer was {trailer.Length} chars.");
+		int net = int.Parse(ExtractHeader(envelope, "budget"), CultureInfo.InvariantCulture);
+		Assert.Equal(ExpectedRetry(boundary, net, (1, StubCoreHost.BigBodyChars), (2, StubCoreHost.BigBodyChars)), ExtractHeader(envelope, "retry"));
+		Assert.DoesNotContain("\n--" + boundary + "\nslot=", envelope); // no frames, no bodies
+		Assert.DoesNotContain("yyyyy", envelope); // nothing of the oversized bodies ships
+		Assert.DoesNotContain("error=Truncated", envelope); // the old per-slot refusal is gone
+		Assert.Equal(1, CountOccurrences(envelope, "\n--" + boundary)); // terminator only
+		Assert.True(envelope.Length <= 20_000, $"Envelope was {envelope.Length} chars.");
 	}
 
 	[Fact]
-	public async Task WhenOneSlotWouldExceedTheBudget_ThenMultiQueryStaysWithinTheBudget()
+	public async Task WhenOnlySomeResultsFit_ThenTheSmallestAreDeliveredAndTheRestAreListedForRetry()
 	{
-		(MultiQueryTool subject, _) = await CreateAsync(budgetChars: 20_000, onLargeType: true);
+		(MultiQueryTool subject, _, SolutionModel model, RoslynInstance instance) = await CreateSeamAsync(20_000);
 
-		// Two get_symbol_body ops on the ~164K declaration: the budget-aware core pages itself within its
-		// slot's share (nextStartLine in its body, never a generic cut) and the remainder is refused.
+		var catalog = StubCatalog(nameof(StubCoreHost.SizedBodyAsync));
 		var operations = new List<MultiQueryOperation>
 		{
-			new(MultiQueryOp.get_symbol_body, Args(("symbolName", Json("Repro.Big")), ("maxLines", Json(5000)))),
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("a")), ("chars", Json(1_000)))),
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("b")), ("chars", Json(25_000)))),
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("c")), ("chars", Json(2_000)))),
+		};
+		string envelope = await subject.ExecuteBatchAsync(model, instance, catalog, operations);
+
+		// Smallest-first selection: 1,000 + 2,000 plus their frames fit; 25,000 does not.
+		Assert.Contains("\nslot=1 tool=get_symbol\n", envelope);
+		Assert.DoesNotContain("\nslot=2 tool=get_symbol\n", envelope);
+		Assert.Contains("\nslot=3 tool=get_symbol\n", envelope);
+		Assert.Equal(ExpectedBody(1_000), SlotBody(envelope, 1));
+		Assert.Equal(ExpectedBody(2_000), SlotBody(envelope, 3));
+
+		string boundary = ExtractHeader(envelope, "boundary");
+		int net = int.Parse(ExtractHeader(envelope, "budget"), CultureInfo.InvariantCulture);
+		Assert.Equal(ExpectedRetry(boundary, net, (2, 25_000)), ExtractHeader(envelope, "retry"));
+		Assert.True(envelope.Length <= 20_000, $"Envelope was {envelope.Length} chars.");
+	}
+
+	[Fact]
+	public async Task WhenTwoResultsTie_ThenTheEarlierRequestIndexIsDelivered()
+	{
+		(MultiQueryTool subject, _, SolutionModel model, RoslynInstance instance) = await CreateSeamAsync(20_000);
+
+		var catalog = StubCatalog(nameof(StubCoreHost.SizedBodyAsync));
+		var operations = new List<MultiQueryOperation>
+		{
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("a")), ("chars", Json(15_000)))),
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("b")), ("chars", Json(15_000)))),
+		};
+		string envelope = await subject.ExecuteBatchAsync(model, instance, catalog, operations);
+
+		// Exact-size ties break by request index: only one 15K result fits, and it is op 1.
+		Assert.Contains("\nslot=1 tool=get_symbol\n", envelope);
+		Assert.DoesNotContain("\nslot=2 tool=get_symbol\n", envelope);
+		Assert.Equal(ExpectedBody(15_000), SlotBody(envelope, 1));
+
+		string boundary = ExtractHeader(envelope, "boundary");
+		int net = int.Parse(ExtractHeader(envelope, "budget"), CultureInfo.InvariantCulture);
+		Assert.Equal(ExpectedRetry(boundary, net, (2, 15_000)), ExtractHeader(envelope, "retry"));
+	}
+
+	[Fact]
+	public async Task WhenTheSameBatchIsReordered_ThenTheSameSetOfResultsIsDelivered()
+	{
+		(MultiQueryTool subject, _, SolutionModel model, RoslynInstance instance) = await CreateSeamAsync(20_000);
+
+		var catalog = StubCatalog(nameof(StubCoreHost.SizedBodyAsync));
+		var first = new List<MultiQueryOperation>
+		{
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("big")), ("chars", Json(25_000)))),
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("small")), ("chars", Json(1_000)))),
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("medium")), ("chars", Json(2_000)))),
+		};
+		var reordered = new List<MultiQueryOperation>
+		{
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("small")), ("chars", Json(1_000)))),
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("medium")), ("chars", Json(2_000)))),
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("big")), ("chars", Json(25_000)))),
+		};
+
+		string firstEnvelope = await subject.ExecuteBatchAsync(model, instance, catalog, first);
+		string secondEnvelope = await subject.ExecuteBatchAsync(model, instance, catalog, reordered);
+
+		// The delivered SET is the same regardless of request order; only the slot indices move.
+		var firstBodies = new[] { SlotBody(firstEnvelope, 2), SlotBody(firstEnvelope, 3) };
+		var secondBodies = new[] { SlotBody(secondEnvelope, 1), SlotBody(secondEnvelope, 2) };
+		Assert.Equal(firstBodies.OrderBy(body => body, StringComparer.Ordinal), secondBodies.OrderBy(body => body, StringComparer.Ordinal));
+
+		// And the same op is dropped in both, named by its own request index.
+		int net = int.Parse(ExtractHeader(firstEnvelope, "budget"), CultureInfo.InvariantCulture);
+		Assert.Equal(ExpectedRetry(ExtractHeader(firstEnvelope, "boundary"), net, (1, 25_000)), ExtractHeader(firstEnvelope, "retry"));
+		net = int.Parse(ExtractHeader(secondEnvelope, "budget"), CultureInfo.InvariantCulture);
+		Assert.Equal(ExpectedRetry(ExtractHeader(secondEnvelope, "boundary"), net, (3, 25_000)), ExtractHeader(secondEnvelope, "retry"));
+	}
+
+	[Fact]
+	public async Task WhenResultsAreDropped_ThenTheRetryLineNamesAscendingIndicesWithRoundedUpRatios()
+	{
+		(MultiQueryTool subject, _, SolutionModel model, RoslynInstance instance) = await CreateSeamAsync(8_000);
+
+		// 7,900 chars misses the ~7,848 net allowance by a hair; 100 chars would fit but rides along
+		// after the 7,900 is dropped only if the selection reaches it - it does (smallest first); the
+		// 250K one never fits. Ratios: cost/net rounded up to one decimal, floor 0.1.
+		var catalog = StubCatalog(nameof(StubCoreHost.SizedBodyAsync));
+		var operations = new List<MultiQueryOperation>
+		{
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("wide")), ("chars", Json(7_900)))),
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("tiny")), ("chars", Json(100)))),
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("huge")), ("chars", Json(250_000)))),
+		};
+		string envelope = await subject.ExecuteBatchAsync(model, instance, catalog, operations);
+
+		Assert.Equal(ExpectedBody(100), SlotBody(envelope, 2)); // the 100-char result is delivered whole
+
+		string boundary = ExtractHeader(envelope, "boundary");
+		int net = int.Parse(ExtractHeader(envelope, "budget"), CultureInfo.InvariantCulture);
+		string retry = ExtractHeader(envelope, "retry");
+		Assert.Equal(ExpectedRetry(boundary, net, (1, 7_900), (3, 250_000)), retry);
+
+		// Indices ascend; no ratio is ever 0.0.
+		var entries = retry.Split(',');
+		int lastIndex = 0;
+		foreach (string entry in entries)
+		{
+			int index = int.Parse(entry[..entry.IndexOf(':')], CultureInfo.InvariantCulture);
+			double ratio = double.Parse(entry[(entry.IndexOf(':') + 1)..], CultureInfo.InvariantCulture);
+			Assert.True(index > lastIndex, $"retry indices must ascend: '{retry}'.");
+			Assert.True(ratio >= 0.1, $"A dropped operation's ratio must be at least 0.1: '{entry}'.");
+			lastIndex = index;
+		}
+
+		// The echoed budget is the NET allowance: framing plus the retry reserve held back.
+		Assert.True(net < 8_000, $"budget= echoed {net}, the raw ceiling.");
+		Assert.True(envelope.Length <= 8_000, $"Envelope was {envelope.Length} chars.");
+		Assert.Equal(2, CountOccurrences(envelope, "\n--" + boundary)); // one slot + terminator
+	}
+
+	[Fact]
+	public async Task WhenTheWorstCaseRetryLineCannotFit_ThenTheBatchIsRefusedBeforeAnythingRuns()
+	{
+		(MultiQueryTool subject, _, SolutionModel model, RoslynInstance instance) = await CreateSeamAsync(8_000);
+
+		// 2,000 operations: even at its narrowest ('<index>:0.1') the retry line cannot fit the budget,
+			// so the batch is refused before a single core runs.
+		StubCoreHost.Invocations = 0;
+		var catalog = StubCatalog(nameof(StubCoreHost.ThrowingBodyAsync));
+		var operations = Enumerable.Range(0, 2_000)
+			.Select(_ => new MultiQueryOperation(MultiQueryOp.get_symbol, Args(("symbolName", Json("SimpleLibrary.Greeter")))))
+			.ToList();
+		string envelope = await subject.ExecuteBatchAsync(model, instance, catalog, operations);
+
+		Assert.StartsWith("error=Invalid", envelope);
+		Assert.Contains("the retry line alone would not fit", envelope);
+		Assert.DoesNotContain("slot=", envelope);
+		Assert.Equal(0, StubCoreHost.Invocations); // nothing executed
+	}
+
+	[Fact]
+	public async Task WhenAHugeErrorResultIsDropped_ThenItIsListedForRetryLikeAnyResult()
+	{
+		(MultiQueryTool subject, _, SolutionModel model, RoslynInstance instance) = await CreateSeamAsync(20_000);
+
+		// A ~250K error block (a giant NotFound candidate list) is a result like any other: dropped
+			// whole, named in retry=, never special-cased into a cut-down slot.
+		var catalog = new Dictionary<string, MultiQueryCatalog.OpEntry>(StringComparer.Ordinal)
+		{
+			["get_symbol"] = new("get_symbol", typeof(StubCoreHost), nameof(StubCoreHost.ErrorBodyAsync)),
+			["get_members"] = new("get_members", typeof(StubCoreHost), nameof(StubCoreHost.SizedBodyAsync)),
+		};
+		var operations = new List<MultiQueryOperation>
+		{
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("enormous")))),
+			new(MultiQueryOp.get_members, Args(("typeName", Json("small")), ("chars", Json(1_000)))),
+		};
+		string envelope = await subject.ExecuteBatchAsync(model, instance, catalog, operations);
+
+		Assert.DoesNotContain("error=NotFound", envelope); // the huge error block ships nowhere
+		Assert.DoesNotContain("candidate-", envelope);
+		Assert.Contains("\nslot=2 tool=get_members\n", envelope);
+		Assert.StartsWith("1:", ExtractHeader(envelope, "retry"));
+		Assert.True(envelope.Length <= 20_000, $"Envelope was {envelope.Length} chars.");
+	}
+
+	[Fact]
+	public async Task WhenAnOperationPagesExplicitly_ThenTheWholePageIsDeliveredAsOneSlot()
+	{
+		(MultiQueryTool subject, _) = await CreateAsync(20_000, onLargeType: true);
+
+		// An op with explicit maxSize pages inside the batch (its own body carries nextStartItem=) and
+			// the page is delivered whole; the unpaged sibling is far larger than the budget and is dropped.
+		var operations = new List<MultiQueryOperation>
+		{
+			new(MultiQueryOp.get_symbol_body, Args(("symbolName", Json("Repro.Big")), ("maxSize", Json(5_000)))),
 			new(MultiQueryOp.get_symbol_body, Args(("symbolName", Json("Repro.Big")))),
 		};
 		string envelope = await subject.MultiQuery(TestSolutions.LargeType, operations);
 
 		Assert.True(envelope.Length <= 20_000, $"Envelope was {envelope.Length} chars.");
-		Assert.Contains("budget=20000", envelope);
-		string firstBody = SlotBody(envelope, 1);
-		Assert.Contains("nextStartLine=", firstBody);
-		Assert.DoesNotContain("outputTruncated=", envelope);
-		Assert.Contains("truncatedSlots=1", envelope);
+		Assert.Contains("\nslot=1 tool=get_symbol_body\n", envelope);
+		string pagedBody = SlotBody(envelope, 1);
+		Assert.Contains("nextStartItem=", pagedBody);
+		Assert.Contains("truncated=Y\n", pagedBody);
+		Assert.True(pagedBody.Length <= 5_200, $"The paged slot body was {pagedBody.Length} chars.");
+		Assert.StartsWith("2:", ExtractHeader(envelope, "retry"));
+		Assert.DoesNotContain("outputTruncated=", envelope); // whole-or-drop, never a cut
 	}
 
 	[Fact]
 	public async Task WhenGetSymbolBodySlotsShareABudget_ThenTheUnionOfPagesIsComplete()
 	{
-		(MultiQueryTool subject, _) = await CreateAsync(budgetChars: 20_000, onLargeType: true);
+		(MultiQueryTool subject, _) = await CreateAsync(20_000, onLargeType: true);
 		string? snapshot = null;
 		var pages = new List<string>();
-		int? startLine = null;
+		int? startItem = null;
 
-		// The agent recipe end to end: batch, read each slot's nextStartLine, continue on the same snapshot
-		// until nothing is truncated - the pages must reassemble the declaration exactly.
+		// The agent recipe end to end: batch, read the slot's nextStartItem, re-send that operation
+			// with explicit maxSize on the same snapshot until nothing is truncated - the pages must
+			// reassemble the declaration exactly.
 		while (true)
 		{
-			var arguments = new List<(string Key, JsonElement Value)> { ("symbolName", Json("Repro.Big")) };
-			if (startLine is int line)
-				arguments.Add(("startLine", Json(line)));
+			var arguments = new List<(string Key, JsonElement Value)>
+			{
+				("symbolName", Json("Repro.Big")),
+				("maxSize", Json(15_000)),
+			};
+			if (startItem is int item)
+				arguments.Add(("startItem", Json(item)));
 
 			string envelope = await subject.MultiQuery(
 				TestSolutions.LargeType,
@@ -149,34 +306,42 @@ public class MultiQueryLimitTests
 			Assert.StartsWith("operations=1\nsnapshot=", envelope);
 			string body = SlotBody(envelope, 1);
 			Assert.DoesNotContain("outputTruncated=", body);
-			pages.Add(Body(body)[..^1]);
+			pages.Add(Body(body));
 
-			// The slot body's own truncated=Y drives the walk: a self-paged slot is a complete answer to
-			// the question asked, so the envelope's truncatedSlots= deliberately does not count it.
-			if (ExtractHeaderOrEmpty(body, "truncated") != "Y")
-				break;
-			startLine = int.Parse(ExtractHeader(body, "nextStartLine"), System.Globalization.CultureInfo.InvariantCulture);
+			string? next = ExtractHeaderOrEmpty(body, "nextStartItem");
+			if (next == "")
+				break; // a slot without nextStartItem= completes the walk
+			startItem = int.Parse(next, CultureInfo.InvariantCulture);
 		}
 
 		Assert.True(pages.Count > 1, "The 164K declaration must take several pages under a 20K budget.");
-		Assert.Equal(TestSolutions.BigDeclaration, string.Concat(pages));
+		// Every slot body ends with its last line's builder-added newline; the concatenated whole
+		// is the declaration plus exactly one trailing newline.
+		Assert.Equal(TestSolutions.BigDeclaration, string.Concat(pages)[..^1]);
 	}
 
 	[Fact]
-	public async Task WhenTheBudgetIsConfigured_ThenTheEnvelopeRespectsIt()
+	public async Task WhenTheSameBatchRunsTwice_ThenTheDeliveredSetAndSizesAreIdentical()
 	{
-		(MultiQueryTool subject, _) = await CreateAsync(budgetChars: 8_000, onLargeType: true);
+		(MultiQueryTool subject, _, SolutionModel model, RoslynInstance instance) = await CreateSeamAsync(20_000);
 
-		string envelope = await subject.MultiQuery(
-			TestSolutions.LargeType,
-			[
-				new MultiQueryOperation(MultiQueryOp.get_symbol_body, Args(("symbolName", Json("Repro.Big")))),
-				new MultiQueryOperation(MultiQueryOp.search_symbols, Args(("query", Json("Wide")))),
-			]);
+		// Every operation runs in parallel against the pinned snapshot; renders are deterministic, so
+			// the delivered set and sizes are degree-of-parallelism-invariant.
+		var catalog = StubCatalog(nameof(StubCoreHost.SizedBodyAsync));
+		var operations = new List<MultiQueryOperation>
+		{
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("a")), ("chars", Json(1_000)))),
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("b")), ("chars", Json(500)))),
+			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("c")), ("chars", Json(2_000)))),
+		};
 
-		Assert.Contains("budget=8000", envelope);
-		Assert.True(envelope.Length <= 8_000, $"Envelope was {envelope.Length} chars.");
-		Assert.Contains("truncatedSlots=", envelope); // the first slot spends the budget; the rest are refused
+		string first = await subject.ExecuteBatchAsync(model, instance, catalog, operations);
+		string second = await subject.ExecuteBatchAsync(model, instance, catalog, operations);
+
+		Assert.Equal(DeliveredBodies(first), DeliveredBodies(second));
+		Assert.Equal(ExtractHeader(first, "budget"), ExtractHeader(second, "budget"));
+		Assert.Equal("", ExtractHeaderOrEmpty(first, "retry"));
+		Assert.Equal("", ExtractHeaderOrEmpty(second, "retry"));
 	}
 
 	[Theory]
@@ -186,7 +351,7 @@ public class MultiQueryLimitTests
 	[InlineData(80_000, 30)]
 	public async Task WhenAnyBatchRuns_ThenTheEnvelopeNeverExceedsTheBudget(int budgetChars, int operationCount)
 	{
-		(MultiQueryTool subject, _) = await CreateAsync(budgetChars: budgetChars);
+		(MultiQueryTool subject, _) = await CreateAsync(budgetChars);
 
 		var operations = Enumerable.Range(0, operationCount)
 			.Select(index => index % 2 == 0
@@ -196,36 +361,11 @@ public class MultiQueryLimitTests
 
 		string envelope = await subject.MultiQuery(TestSolutions.LargeType, operations);
 
-		// The one narrow bend of truncate-don't-reject: a batch whose own framing cannot fit returns a
-		// header-only Invalid; anything else is a complete envelope within the budget.
+		// The one narrow bend of whole-or-drop: a batch whose own framing cannot fit returns a
+			// header-only Invalid; anything else is a complete envelope within the budget.
 		Assert.True(
 			envelope.StartsWith("error=Invalid", StringComparison.Ordinal) || envelope.Length <= budgetChars,
 			$"Envelope was {envelope.Length} chars against a {budgetChars}-char budget.");
-	}
-	[Fact]
-	public async Task WhenATruncatedBatchIsContinuedOnTheSameSnapshot_ThenTheUnionIsComplete()
-	{
-		(MultiQueryTool subject, _) = await CreateAsync();
-
-		var operations = Enumerable.Range(0, 30)
-			.Select(_ => new MultiQueryOperation(MultiQueryOp.search_symbols, Args(("query", Json("Widget")))))
-			.ToList();
-		string first = await subject.MultiQuery(TestSolutions.Simple, operations);
-
-		string snapshot = ExtractHeader(first, "snapshot");
-		var continuation = Enumerable.Range(26, 5)
-			.Select(index => operations[index - 1])
-			.ToList();
-
-		string second = await subject.MultiQuery(
-			TestSolutions.Simple,
-			continuation,
-			expectSnapshot: snapshot);
-
-		// The continuation names the same snapshot, so it runs: 5 real bodies, no truncation this time.
-		Assert.DoesNotContain("error=Truncated", second);
-		Assert.DoesNotContain("truncatedSlots=", second);
-		Assert.Equal(snapshot, ExtractHeader(second, "snapshot"));
 	}
 
 	[Fact]
@@ -236,7 +376,7 @@ public class MultiQueryLimitTests
 		SolutionModel before = await instance.ReadModelAsync();
 
 		// A real write: advance the instance to a fresh model (the RoslynInstanceTests pattern), so the
-		// pinned id and the current id genuinely differ.
+			// pinned id and the current id genuinely differ.
 		await ApplyRealEditAsync(instance);
 
 		string second = await subject.MultiQuery(
@@ -262,7 +402,7 @@ public class MultiQueryLimitTests
 		var subject = new MultiQueryTool(provider, registry);
 
 		// A nonexistent solution path faults its load, so the model has no snapshot - deterministic,
-		// unlike racing a warm real load. The convention is the tools': null Solution -> Indexing.
+			// unlike racing a warm real load. The convention is the tools': null Solution -> Indexing.
 		string missing = TestSolutions.Simple.Replace(".slnx", ".missing.slnx");
 
 		string result = await subject.MultiQuery(
@@ -293,13 +433,11 @@ public class MultiQueryLimitTests
 		SolutionModel model = await instance.ReadModelAsync();
 
 		// The honest proof of the n+1 integrity check: a stub core that emits the CURRENT request's
-		// boundary. ExecuteBatchAsync accepts the boundary at the seam, so the stub can be handed the very
-		// value the envelope will use - the collision is real, and the call must fault rather than ship.
+			// boundary. ExecuteBatchAsync accepts the boundary at the seam, so the stub can be handed the
+			// very value the envelope will use - the collision is real, and the call must fault rather
+			// than ship.
 		const string boundary = "cafebabecafebabecafebabecafebabe";
-		var catalog = new Dictionary<string, MultiQueryCatalog.OpEntry>(StringComparer.Ordinal)
-		{
-			["get_symbol"] = new("get_symbol", typeof(StubCoreHost), nameof(StubCoreHost.EmitBoundaryAsync)),
-		};
+		var catalog = StubCatalog(nameof(StubCoreHost.EmitBoundaryAsync));
 		var operations = new List<MultiQueryOperation>
 		{
 			new(MultiQueryOp.get_symbol, Args(("boundary", Json(boundary)))),
@@ -325,6 +463,27 @@ public class MultiQueryLimitTests
 		return (new MultiQueryTool(provider, registry, budgetChars is int chars ? new ResponseBudget(chars) : null), registry);
 	}
 
+	/// <summary>CreateAsync plus the pinned model/instance the internal seam needs.</summary>
+	private static async Task<(MultiQueryTool Subject, InstanceRegistry Registry, SolutionModel Model, RoslynInstance Instance)> CreateSeamAsync(int budgetChars)
+	{
+		(MultiQueryTool subject, InstanceRegistry registry) = await CreateAsync(budgetChars);
+		RoslynInstance instance = await registry.GetOrBeginAsync(TestSolutions.Simple);
+		SolutionModel model = await instance.ReadModelAsync();
+		return (subject, registry, model, instance);
+	}
+
+	private static Dictionary<string, MultiQueryCatalog.OpEntry> StubCatalog(string method) => new(StringComparer.Ordinal)
+	{
+		["get_symbol"] = new("get_symbol", typeof(StubCoreHost), method),
+	};
+
+	private static IReadOnlyDictionary<string, JsonElement> Args(params (string Key, JsonElement Value)[] pairs) =>
+		MultiQueryTestHelpers.Args(pairs);
+
+	private static JsonElement Json(string value) => MultiQueryTestHelpers.Json(value);
+
+	private static JsonElement Json(int value) => MultiQueryTestHelpers.Json(value);
+
 	/// <summary>
 	/// Publishes a new model on the instance via a real EnqueueWriteAsync fold (the RoslynInstanceTests
 	/// pattern), so the pinned id and the current id genuinely differ.
@@ -340,12 +499,44 @@ public class MultiQueryLimitTests
 		await instance.EnqueueWriteAsync((_, _) => Task.FromResult(new WriteResult(edited, ["Widget.cs"])));
 	}
 
-	private static IReadOnlyDictionary<string, JsonElement> Args(params (string Key, JsonElement Value)[] pairs) =>
-		MultiQueryTestHelpers.Args(pairs);
+	/// <summary>The body a SizedBodyAsync stub core returns for a given char count.</summary>
+	private static string ExpectedBody(int chars) => new((char)('a' + chars % 26), chars);
 
-	private static JsonElement Json(string value) => MultiQueryTestHelpers.Json(value);
+	/// <summary>
+	/// The retry line the envelope must emit for the dropped slots: each entry is that slot's frame
+		/// plus body over the echoed net budget, rounded up to one decimal (floor 0.1). The frame is fully
+		/// determined - the boundary is in the envelope, and the tests stub get_symbol.
+	/// </summary>
+	private static string ExpectedRetry(string boundary, int net, params (int Slot, int BodyChars)[] dropped)
+	{
+		double Ratio((int Slot, int BodyChars) entry)
+		{
+			int frame = $"\n--{boundary}\nslot={entry.Slot} tool=get_symbol\n\n".Length;
+			return Math.Max(0.1, Math.Ceiling((frame + entry.BodyChars) * 10d / net) / 10d);
+		}
 
-	private static JsonElement Json(int value) => MultiQueryTestHelpers.Json(value);
+		return string.Join(",", dropped.Select(entry => $"{entry.Slot}:{Ratio(entry).ToString("0.0", CultureInfo.InvariantCulture)}"));
+	}
+
+	private static IReadOnlyList<string> DeliveredBodies(string envelope)
+	{
+		var bodies = new List<string>();
+		string boundary = ExtractHeader(envelope, "boundary");
+		int at = 0;
+		while (true)
+		{
+			int frame = envelope.IndexOf($"\n--{boundary}\nslot=", at, StringComparison.Ordinal);
+			if (frame < 0)
+				break;
+
+			int bodyStart = envelope.IndexOf("\n\n", frame, StringComparison.Ordinal) + 2;
+			int next = envelope.IndexOf($"\n--{boundary}", bodyStart, StringComparison.Ordinal);
+			bodies.Add(envelope[bodyStart..next]);
+			at = next;
+		}
+
+		return bodies;
+	}
 
 	/// <summary>The body of one slot: everything after its frame's blank line, up to the next delimiter.</summary>
 	private static string SlotBody(string envelope, int slot)
@@ -389,6 +580,7 @@ public class MultiQueryLimitTests
 			count++;
 			at += token.Length;
 		}
+
 		return count;
 	}
 }
@@ -396,20 +588,31 @@ public class MultiQueryLimitTests
 /// <summary>Stub cores invoked through the seam catalog (instance methods, so reflection resolves them).</summary>
 internal sealed class StubCoreHost
 {
+	public const int BigBodyChars = 250_000;
+
+	/// <summary>Counts executions, so a pre-flight refusal can prove nothing ran.</summary>
+	public static int Invocations;
+
 	public Task<string> BigBodyAsync(SolutionModel model, RoslynInstance instance, string symbolName, CancellationToken token) =>
-		Task.FromResult(new string('y', 250_000));
+		Task.FromResult(new string('y', BigBodyChars));
 
-	/// <summary>A 2,000-line body: 51 chars per line including the newline, 102,000 chars in all.</summary>
-	public Task<string> LineBodyAsync(SolutionModel model, RoslynInstance instance, string symbolName, CancellationToken token)
+	/// <summary>A body of exactly <c>chars</c> characters, filled with a size-derived letter so bodies of
+	/// different sizes are byte-distinguishable.</summary>
+	public Task<string> SizedBodyAsync(SolutionModel model, RoslynInstance instance, string symbolName, int chars, CancellationToken token) =>
+		Task.FromResult(new string((char)('a' + chars % 26), chars));
+
+	/// <summary>A huge error block - a giant NotFound candidate list - shaped like any tool result.</summary>
+	public Task<string> ErrorBodyAsync(SolutionModel model, RoslynInstance instance, string symbolName, CancellationToken token) =>
+		Task.FromResult(OutlineError.Format(
+			Error.NotFound(
+				"No symbol matched 'enormous'.",
+				Enumerable.Range(0, 50).Select(index => $"candidate-{index}-" + new string('e', 5_000)).ToArray()),
+			SolutionStatus.Ready));
+
+	public Task<string> ThrowingBodyAsync(SolutionModel model, RoslynInstance instance, string symbolName, CancellationToken token)
 	{
-		var builder = new StringBuilder();
-		for (int index = 0; index < 2_000; index++)
-		{
-			builder.Append('x', 50);
-			builder.Append('\n');
-		}
-
-		return Task.FromResult(builder.ToString());
+		Interlocked.Increment(ref Invocations);
+		throw new InvalidOperationException("The stub core ran although the batch was refused before execution.");
 	}
 
 	public Task<string> EmitBoundaryAsync(SolutionModel model, RoslynInstance instance, string boundary, CancellationToken token) =>

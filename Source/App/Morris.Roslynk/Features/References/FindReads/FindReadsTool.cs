@@ -16,12 +16,14 @@ public sealed class FindReadsTool
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
 	private readonly ProjectionService ProjectionService;
+	private readonly ResponseBudget Budget;
 
-	public FindReadsTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
+	public FindReadsTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService, ResponseBudget? responseBudget = null)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
 		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
+		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
 	[McpServerTool(
@@ -47,21 +49,31 @@ public sealed class FindReadsTool
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc>,<accessKind>
 		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.Loc}; {OutlineDescriptions.ListFieldQuoting}.
 		{OutlineDescriptions.AccessKinds}
-		{OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock}
+		{OutlineDescriptions.Paging} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock}
 		error=NotSupported is returned for a symbol that cannot be read or written (a method, type, event or local variable).
 		{OutlineDescriptions.AccessCoverage}
 		""")]
 	public async Task<string> FindReads(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description(OutlineDescriptions.AccessSymbolName)] string symbolName,
-		[Description("Maximum locations to return.")] int maxResults = 100,
+		[Description("Maximum locations to return. Omit for every location (paging walks the result with startItem).")] int? maxResults = null,
+		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
+		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
-		return await FindReadsCoreAsync(model, instance, symbolName, maxResults, cancellationToken);
+		return await FindReadsCoreAsync(model, instance, symbolName, maxResults, startItem, maxSize, Budget, cancellationToken);
 	}
 
-	internal Task<string> FindReadsCoreAsync(SolutionModel model, RoslynInstance instance, string symbolName, int maxResults = 100, CancellationToken cancellationToken = default) =>
-		AccessQuery.RunAsync(model, SymbolResolver, ProjectionService, symbolName, maxResults, AccessKindText.IsRead, cancellationToken);
+	internal Task<string> FindReadsCoreAsync(
+		SolutionModel model,
+		RoslynInstance instance,
+		string symbolName,
+		int? maxResults = null,
+		int startItem = 1,
+		int maxSize = 0,
+		ResponseBudget? budget = null,
+		CancellationToken cancellationToken = default) =>
+		AccessQuery.RunAsync(model, SymbolResolver, ProjectionService, symbolName, AccessKindText.IsRead, maxResults, startItem, maxSize, budget, cancellationToken);
 }

@@ -1,4 +1,4 @@
-﻿using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
+using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 
@@ -171,7 +171,7 @@ public class GetDiagnosticsTests
 
 		Assert.Contains("errors=2", result);
 		Assert.Contains("warnings=0", result);
-		Assert.Contains("count=2", result);
+		Assert.Contains("count=1", result); // count= names the capped set, the per-severity counts stay complete
 		Assert.Contains("truncated=Y", result);
 		string[] leaves = [.. result.Split('\n').Where(line => line.StartsWith('\t') && line.Contains("CS0"))];
 		Assert.Single(leaves);
@@ -302,7 +302,7 @@ public class GetDiagnosticsTests
 
 		Assert.DoesNotContain("error=", result);
 		Assert.Contains("errors=2", result);
-		Assert.Contains("count=2", result);
+		Assert.Contains("count=0", result); // the capped set is empty; the header counts stay complete
 		Assert.Contains("truncated=Y", result);
 		Assert.DoesNotContain("CS0029", result);
 	}
@@ -432,8 +432,9 @@ public class GetDiagnosticsTests
 		string result = await subject.GetDiagnostics(
 			solutionPath, includeAnalyzers: false, summaryOnly: true, ids: ["CS0029", "CS0103"], maxResults: 1);
 
-		// Three diagnostics collapse to two id rows; the cap counts id rows, not diagnostics.
-		Assert.Contains("count=2", result);
+		// Three diagnostics collapse to two id rows; the cap counts id rows, so count= names the one
+		// row the capped set carries.
+		Assert.Contains("count=1", result);
 		Assert.Contains("truncated=Y", result);
 		Assert.Contains("errors=3", result);
 		string[] body = BodyOf(result).Split('\n', StringSplitOptions.RemoveEmptyEntries);

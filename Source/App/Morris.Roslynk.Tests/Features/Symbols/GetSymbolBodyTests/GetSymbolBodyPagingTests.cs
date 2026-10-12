@@ -7,10 +7,11 @@ using Morris.Roslynk.Infrastructure.Resolution;
 namespace Morris.Roslynk.Tests.Features.Symbols.GetSymbolBodyTests;
 
 /// <summary>
-/// get_symbol_body's paging contract against the LargeType fixture: an oversized declaration arrives as a
-/// page naming totalLines/nextStartLine, an oversized generated part arrives as a whole-or-omitted listing,
-/// and a fitting declaration is byte-identical to the unpaged output. One loaded registry is shared by the
-/// class (the fixture's Repro.Big is ~164KB; loading it per test would dominate the runtime).
+/// get_symbol_body's re-contracted paging (issue 96): items are the text's lines, pages are bounded in
+/// CHARACTERS by maxSize and the response budget (the old 400-line default cap is gone), headers are
+/// count=/nextStartItem=/partialItem=, and an oversized single line is delivered as far as it fits and
+/// named. The parts overview is ceiling-bounded only. One loaded registry is shared by the class (the
+/// fixture's Repro.Big is ~164KB; loading it per test would dominate the runtime).
 /// </summary>
 public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.LargeTypeFixture>
 {
@@ -22,140 +23,167 @@ public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.L
 	}
 
 	[Fact]
-	public async Task WhenABodyExceedsMaxLines_ThenGetSymbolBodyTruncatesAndReportsTheNextStartLine()
+	public async Task WhenABodyExceedsMaxSize_ThenGetSymbolBodyPagesAndReportsTheNextStartItem()
 	{
-		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", maxLines: 400);
+		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", maxSize: 20_000);
 
 		Assert.Contains("truncated=Y\n", result);
-		Assert.Contains("totalLines=3003\n", result);
-		Assert.Contains("nextStartLine=401\n", result);
-		Assert.True(result.Length < 40_000); // 400 lines x ~53 chars + headers; the unpaged body is ~164K
+		Assert.Contains("count=3003\n", result);
+		Assert.Contains("nextStartItem=", result);
+		Assert.True(result.Length <= 20_000, $"Page was {result.Length} chars against maxSize 20,000.");
 		Assert.StartsWith("public class Big", RawBody(result));
-		// Lines 1-400 of the declaration: the two class-header lines plus methods 0000-0397.
+		// Lines are packed by characters: roughly 370 of the 3,003 fit a 20,000-char page.
 		Assert.Contains("public int Method0000(int value) => value + 0;", result);
-		Assert.Contains("public int Method0397(int value) => value + 397;", result);
-		Assert.DoesNotContain("Method0398", result);
+		Assert.DoesNotContain("public int Method0400(", result);
 	}
 
 	[Fact]
-	public async Task WhenMaxLinesIsBelowOne_ThenInvalidNamesTheParameter()
+	public async Task WhenNoMaxSizeIsGiven_ThenTheResultIsTheWholeDeclarationByteForByte()
 	{
-		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", maxLines: 0);
+		// A generous budget: the whole declaration fits, so there is no paging and no 400-line default
+		// cap - the result is the unpaged output itself, byte for byte.
+		string result = await Fixture.CoreWithAllowance(500_000)
+			.GetSymbolBody(TestSolutions.LargeType, "Repro.Big");
 
-		Assert.StartsWith("error=Invalid", result);
-		Assert.Contains("'maxLines'", result);
+		Assert.DoesNotContain("\ntruncated=", result);
+		Assert.DoesNotContain("nextStartItem=", result);
+		Assert.StartsWith("project=LargeTypeLib\n", result);
+		int bodyStart = result.IndexOf("\n\n", StringComparison.Ordinal) + 2;
+		Assert.Equal(TestSolutions.BigDeclaration + "\n", result[bodyStart..]);
 	}
 
 	[Fact]
-	public async Task WhenStartLineIsBelowOne_ThenInvalid()
+	public async Task WhenMaxSizeIsBelowZero_ThenInvalidNamesTheParameter()
 	{
-		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startLine: 0);
+		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", maxSize: -1);
 
 		Assert.StartsWith("error=Invalid", result);
-		Assert.Contains("'startLine'", result);
+		Assert.Contains("'maxSize'", result);
 	}
 
 	[Fact]
-	public async Task WhenStartLineIsBeyondTheBody_ThenInvalidNamesTheTotalLines()
+	public async Task WhenStartItemIsBelowOne_ThenInvalid()
 	{
-		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startLine: 4000);
+		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startItem: 0);
 
 		Assert.StartsWith("error=Invalid", result);
+		Assert.Contains("'startItem'", result);
+	}
+
+	[Fact]
+	public async Task WhenStartItemIsBeyondTheBody_ThenInvalidNamesTheCount()
+	{
+		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startItem: 4000);
+
+		Assert.StartsWith("error=Invalid", result);
+		Assert.Contains("'startItem' is past the end", result);
 		Assert.Contains("3003", result);
 	}
 
 	[Fact]
-	public async Task WhenStartLineContinuesAPreviousPage_ThenNoLinesRepeatAndNoneAreSkipped()
+	public async Task WhenStartItemContinuesAPreviousPage_ThenNoLinesRepeatAndNoneAreSkipped()
 	{
-		string secondPage = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startLine: 401, maxLines: 400);
+		string firstPage = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", maxSize: 20_000);
+		int nextStartItem = int.Parse(Header(firstPage, "nextStartItem"), System.Globalization.CultureInfo.InvariantCulture);
+		string[] declarationLines = TestSolutions.BigDeclaration.Split('\n');
 
-		// Line 401 of the declaration is Method0398 (the class headers occupy lines 1-2).
-		Assert.StartsWith("    public int Method0398(int value) => value + 398;", RawBody(secondPage));
-		Assert.DoesNotContain("Method0397", secondPage);
+		string secondPage = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startItem: nextStartItem, maxSize: 20_000);
+
+		// The continuation starts exactly at the named item: the declaration's line nextStartItem, byte
+		// for byte (its trailing CR included), and the predecessor line is nowhere on the page.
+		Assert.Equal(declarationLines[nextStartItem - 1], RawBody(secondPage).Split('\n')[0]);
+		Assert.DoesNotContain(declarationLines[nextStartItem - 2], secondPage);
 	}
 
 	[Fact]
-	public async Task WhenPagesAreWalkedByNextStartLine_ThenTheyReassembleTheDeclarationByteExactly()
+	public async Task WhenPagesAreWalkedByNextStartItem_ThenTheyReassembleTheDeclarationByteExactly()
 	{
 		var subject = Subject();
 		var pages = new List<string>();
-		int startLine = 1;
+		int startItem = 1;
 		while (true)
 		{
-			string page = await subject.GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startLine: startLine, maxLines: 400);
+			string page = await subject.GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startItem: startItem, maxSize: 40_000);
 			pages.Add(RawBody(page));
-			if (Header(page, "truncated") != "Y")
-				break;
-			startLine = int.Parse(Header(page, "nextStartLine"), System.Globalization.CultureInfo.InvariantCulture);
+			string? next = HeaderOrEmpty(page, "nextStartItem");
+			if (next == "")
+				break; // a page without nextStartItem= completes the walk
+			startItem = int.Parse(next, System.Globalization.CultureInfo.InvariantCulture);
 		}
 
-		// Every page's body ends with one builder-added newline over its last whole line; stripping exactly
-		// that and concatenating must reproduce the declaration verbatim - no line repeated, none skipped,
-		// no CRLF torn in half.
-		string reassembled = string.Concat(pages.Select(page => page[..^1]));
+		// Every page's body ends with the builder-added newline of its last whole line; concatenating
+		// them whole reproduces the declaration plus exactly one trailing newline - no line repeated,
+		// none skipped, no CRLF torn in half.
+		string reassembled = string.Concat(pages)[..^1];
 		Assert.Equal(TestSolutions.BigDeclaration, reassembled);
 	}
 
 	[Fact]
-	public async Task WhenTheSourceUsesCrlf_ThenNoPageEndsWithACarriageReturn()
+	public async Task WhenTheSourceUsesCrlf_ThenNoPageEndsWithATornCarriageReturn()
 	{
 		var subject = Subject();
-		int startLine = 1;
+		int startItem = 1;
 		while (true)
 		{
-			string page = await subject.GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startLine: startLine, maxLines: 400);
+			string page = await subject.GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startItem: startItem, maxSize: 40_000);
 			string body = RawBody(page);
 
-			// A body ends either with the builder's newline over a complete line (whose own CRLF precedes
-			// it) or, on the last page, with the closing brace. A dangling '\r' would mean a torn CRLF.
-			Assert.False(body.EndsWith("\r\n", StringComparison.Ordinal), $"Page at {startLine} ends with a torn carriage return.");
+			// A page's lines keep their CR (the source's CRLF minus the LF the builder writes), so a
+			// mid-file page ends "\r\n". A dangling '\r' with no newline would mean a torn pair.
+			Assert.False(body.EndsWith("\r", StringComparison.Ordinal), $"Page at {startItem} ends with a torn carriage return.");
 
-			if (Header(page, "truncated") != "Y")
-				break;
-			startLine = int.Parse(Header(page, "nextStartLine"), System.Globalization.CultureInfo.InvariantCulture);
+			string? next = HeaderOrEmpty(page, "nextStartItem");
+			if (next == "")
+				break; // a page without nextStartItem= completes the walk
+			startItem = int.Parse(next, System.Globalization.CultureInfo.InvariantCulture);
 		}
 	}
 
 	[Fact]
-	public async Task WhenThePageReachesTheEnd_ThenTruncatedAndNextStartLineAreAbsent()
+	public async Task WhenThePageReachesTheEnd_ThenNextStartItemIsAbsent()
 	{
 		// Lines 2604-3003 are exactly the last 400 lines, ending at the class's closing brace.
-		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startLine: 2604, maxLines: 400);
+		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startItem: 2604, maxSize: 40_000);
 
+		// The completing page names the set but drops neither truncated= nor nextStartItem=: nothing
+		// remains to fetch, and truncated= only ever means "more retrievable content".
+		Assert.Contains("count=3003\n", result);
 		Assert.DoesNotContain("truncated=", result);
-		Assert.DoesNotContain("nextStartLine=", result);
+		Assert.DoesNotContain("nextStartItem=", result);
 		Assert.EndsWith("}", RawBody(result).TrimEnd('\n'));
 	}
 
 	[Fact]
-	public async Task WhenTheBudgetEndsThePageBeforeMaxLines_ThenNextStartLineIsStillCorrect()
+	public async Task WhenTheBudgetEndsThePageBeforeMaxSize_ThenNextStartItemIsStillCorrect()
 	{
+		// No maxSize: the page is char-bounded by the tool's budget alone.
 		string result = await Fixture.CoreWithAllowance(10_000)
-			.GetSymbolBodyCoreAsync(Fixture.Model, Fixture.Instance, "Repro.Big", maxLines: 3_000, budget: ResponseBudget.Allowance(10_000));
+			.GetSymbolBodyCoreAsync(Fixture.Model, Fixture.Instance, "Repro.Big", budget: new ResponseBudget(10_000));
 
-		Assert.True(result.Length <= 10_000, $"Result was {result.Length} chars; the allowance is 10,000.");
+		Assert.True(result.Length <= 10_000, $"Result was {result.Length} chars; the budget is 10,000.");
 		Assert.Contains("truncated=Y\n", result);
-		int nextStartLine = int.Parse(Header(result, "nextStartLine"), System.Globalization.CultureInfo.InvariantCulture);
-		Assert.InRange(nextStartLine, 2, 3004);
+		int nextStartItem = int.Parse(Header(result, "nextStartItem"), System.Globalization.CultureInfo.InvariantCulture);
+		Assert.InRange(nextStartItem, 2, 3004);
 
 		// The continuation starts exactly where the page stopped: no overlap, no gap.
 		string lastMethod = RawBody(result).TrimEnd('\n')
 			.Split('\n')
 			.Select(line => line.TrimEnd('\r'))
 			.Last(line => line.Contains("Method", StringComparison.Ordinal));
-		int lastLineNumber = nextStartLine - 1;
+		int lastLineNumber = nextStartItem - 1;
 		Assert.Equal($"    public int Method{lastLineNumber - 3:D4}(int value) => value + {lastLineNumber - 3};", lastMethod);
 	}
 
 	[Fact]
-	public async Task WhenASingleLineExceedsTheWholeBudget_ThenPartialLineNamesIt()
+	public async Task WhenASingleLineExceedsTheWholeBudget_ThenPartialItemNamesIt()
 	{
 		string result = await Fixture.CoreWithAllowance(10_000)
-			.GetSymbolBodyCoreAsync(Fixture.Model, Fixture.Instance, "Repro.LongLine.Value", budget: ResponseBudget.Allowance(10_000));
+			.GetSymbolBodyCoreAsync(Fixture.Model, Fixture.Instance, "Repro.LongLine.Value", budget: new ResponseBudget(10_000));
 
 		Assert.Contains("truncated=Y\n", result);
-		Assert.Contains("totalLines=1\n", result);
-		Assert.Contains("partialLine=1\n", result);
+		Assert.Contains("count=1\n", result);
+		Assert.Contains("partialItem=1\n", result);
+		Assert.DoesNotContain("nextStartItem=", result);
 		Assert.True(result.Length <= 10_000);
 		Assert.StartsWith("public const string Value = \"aaa", RawBody(result));
 	}
@@ -163,7 +191,9 @@ public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.L
 	[Fact]
 	public async Task WhenAGeneratedPartDoesNotFit_ThenTheOverviewOmitsItAndListsItsLineCount()
 	{
-		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext", maxLines: 10);
+		// The overview triggers on the ceiling alone; a 1,500-char budget cannot carry the generated part.
+		string result = await Fixture.CoreWithAllowance(1_500)
+			.GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext");
 
 		Assert.Contains("parts=", result);
 		Assert.Contains("truncated=Y\n", result);
@@ -181,7 +211,8 @@ public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.L
 	public async Task WhenAnOmittedPartIsRequested_ThenOnlyThatPartIsReturnedAndPaged()
 	{
 		// The overview is parsed, not pinned: generator part shapes and counts are SDK-dependent.
-		string overview = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext", maxLines: 10);
+		string overview = await Fixture.CoreWithAllowance(1_500)
+			.GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext");
 		string[] partLines = PartLines(overview);
 		int partsCount = int.Parse(Header(overview, "parts"), System.Globalization.CultureInfo.InvariantCulture);
 		Assert.Equal(partLines.Length, partsCount);
@@ -190,19 +221,21 @@ public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.L
 			.First(pair => pair.line.EndsWith(",omitted=Y", StringComparison.Ordinal));
 		Assert.True(omittedPart > 1, "The hand-written part should be shown whole before any generated part is omitted.");
 
-		string part = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext", maxLines: 10, part: omittedPart);
+		string part = await Fixture.CoreWithAllowance(10_000)
+			.GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext", maxSize: 500, part: omittedPart);
 
 		Assert.StartsWith($"parts={partsCount}\n", part);
 		Assert.Contains($"\npart={omittedPart}\n", part);
 		Assert.Contains("generated=Y\n", part);
-		Assert.Contains("truncated=Y\n", part); // the part is far larger than 10 lines
-		Assert.Contains("nextStartLine=11\n", part);
+		Assert.Contains("truncated=Y\n", part); // the part is far larger than 500 characters
+		Assert.NotEqual("", Header(part, "nextStartItem"));
 	}
 
 	[Fact]
 	public async Task WhenPartIsBeyondTheParts_ThenInvalidNamesTheCount()
 	{
-		string overview = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext", maxLines: 10);
+		string overview = await Fixture.CoreWithAllowance(1_500)
+			.GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext");
 		int partsCount = int.Parse(Header(overview, "parts"), System.Globalization.CultureInfo.InvariantCulture);
 
 		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext", part: partsCount + 1);
@@ -212,9 +245,9 @@ public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.L
 	}
 
 	[Fact]
-	public async Task WhenStartLineIsGivenForSeveralPartsWithoutPart_ThenInvalidAsksForPart()
+	public async Task WhenStartItemIsGivenForSeveralPartsWithoutPart_ThenInvalidAsksForPart()
 	{
-		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext", startLine: 2);
+		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext", startItem: 2);
 
 		Assert.StartsWith("error=Invalid", result);
 		Assert.Contains("pass part=<n>", result);
@@ -233,9 +266,10 @@ public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.L
 	[Fact]
 	public async Task WhenEveryPartFits_ThenEachPartLineCarriesItsLineCount()
 	{
-		// A raised maxLines keeps every part (the generated one is far larger than the default page size),
-		// so the result is the complete listing with lines= counts appended to each part line.
-		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext", maxLines: 5_000);
+		// A generous ceiling keeps every part (the generated one would otherwise be omitted), so the
+			// result is the complete listing with lines= counts appended to each part line.
+		string result = await Fixture.CoreWithAllowance(500_000)
+			.GetSymbolBody(TestSolutions.LargeType, "Repro.WideContext");
 
 		string[] partLines = PartLines(result);
 		Assert.Equal(partLines.Length, int.Parse(Header(result, "parts"), System.Globalization.CultureInfo.InvariantCulture));
@@ -247,13 +281,6 @@ public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.L
 
 	private GetSymbolBodyTool Subject() => new(Fixture.Registry, new SymbolResolver(), new ProjectionService());
 
-	private static string Body(string result)
-	{
-		string normalized = result.Replace("\r\n", "\n");
-		int separator = normalized.IndexOf("\n\n", StringComparison.Ordinal);
-		return separator < 0 ? "" : normalized[(separator + 2)..];
-	}
-
 	private static string[] PartLines(string result) =>
 		result.Split('\n').Where(line => line.StartsWith("part=", StringComparison.Ordinal)).ToArray();
 
@@ -262,6 +289,18 @@ public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.L
 	{
 		int separator = result.IndexOf("\n\n", StringComparison.Ordinal);
 		return separator < 0 ? "" : result[(separator + 2)..];
+	}
+
+	private static string HeaderOrEmpty(string result, string key)
+	{
+		string prefix = key + "=";
+		foreach (string line in result.Replace("\r\n", "\n").Split('\n'))
+		{
+			if (line.StartsWith(prefix, StringComparison.Ordinal))
+				return line[prefix.Length..];
+		}
+
+		return "";
 	}
 
 	private static string Header(string result, string key)
@@ -296,6 +335,6 @@ public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.L
 
 		/// <summary>A tool whose budget is the given per-result character ceiling, for core-level tests.</summary>
 		public GetSymbolBodyTool CoreWithAllowance(int maxChars) =>
-			new(Registry, new SymbolResolver(), new ProjectionService(), ResponseBudget.Allowance(maxChars));
+			new(Registry, new SymbolResolver(), new ProjectionService(), new ResponseBudget(maxChars));
 	}
 }

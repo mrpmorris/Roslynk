@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
@@ -20,12 +20,14 @@ public sealed class FindReferencesTool
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
 	private readonly ProjectionService ProjectionService;
+	private readonly ResponseBudget Budget;
 
-	public FindReferencesTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
+	public FindReferencesTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService, ResponseBudget? responseBudget = null)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
 		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
+		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
 	[McpServerTool(
@@ -50,7 +52,7 @@ public sealed class FindReferencesTool
 		  \t\t\t\t<typeKind>,<typeName>,<loc|loc|...>   (locations present only when the type declaration itself references the symbol)
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc|loc|...>
 		where kind is one of {OutlineDescriptions.KindList}; {OutlineDescriptions.Loc}; {OutlineDescriptions.LocList}; {OutlineDescriptions.ListFieldQuoting}.
-		{OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} It matches the compiler's
+		{OutlineDescriptions.Paging} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} It matches the compiler's
 		symbol, not text, so it skips comments, strings and unrelated same-named members, and still finds
 		usages in code-behind and partial classes.
 		{OutlineDescriptions.ProjectionCoverage}
@@ -60,15 +62,25 @@ public sealed class FindReferencesTool
 	public async Task<string> FindReferences(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description($"Fully-qualified name of the symbol, e.g. 'MyNamespace.MyType' or 'MyNamespace.MyType.MyMethod'. {OutlineDescriptions.SymbolNameGrammar}")] string symbolName,
-		[Description("Maximum reference locations to return.")] int maxResults = 100,
+		[Description("Maximum reference locations to return. Omit for every reference (paging walks the result with startItem).")] int? maxResults = null,
+		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
+		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
-		return await FindReferencesCoreAsync(model, instance, symbolName, maxResults, cancellationToken);
+		return await FindReferencesCoreAsync(model, instance, symbolName, maxResults, startItem, maxSize, Budget, cancellationToken);
 	}
 
-	internal async Task<string> FindReferencesCoreAsync(SolutionModel model, RoslynInstance instance, string symbolName, int maxResults = 100, CancellationToken cancellationToken = default)
+	internal async Task<string> FindReferencesCoreAsync(
+		SolutionModel model,
+		RoslynInstance instance,
+		string symbolName,
+		int? maxResults = null,
+		int startItem = 1,
+		int maxSize = 0,
+		ResponseBudget? budget = null,
+		CancellationToken cancellationToken = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
@@ -116,8 +128,12 @@ public sealed class FindReferencesTool
 			}
 		}
 
-		List<(Location Location, Solution Solution)> page = hits.Take(Math.Max(0, maxResults)).ToList();
-		bool truncated = hits.Count > page.Count;
+		// The result set: capped only when the caller asked for a cap, so omitting maxResults pages through
+		// everything. count= names the size of this set.
+		IReadOnlyList<(Location Location, Solution Solution)> page = maxResults is int cap
+			? hits.Take(Math.Max(0, cap)).ToList()
+			: hits;
+		bool capped = hits.Count > page.Count;
 
 		var root = new SymbolNode();
 		foreach ((Location location, Solution locationSolution) in page)
@@ -141,16 +157,27 @@ public sealed class FindReferencesTool
 				span.EndLinePosition.Character + 1);
 		}
 
-		var builder = new OutlineBuilder();
-		builder.Header("resolvedSymbol", SymbolResolver.SignatureName(representative));
-		if (truncated)
+		PagedRender render = ItemPaging.Render(
+			model.Status,
+			builder => builder.Header("resolvedSymbol", SymbolResolver.SignatureName(representative)),
+			capHeaders: capped
+				? builder =>
+				{
+					builder.Header("count", page.Count);
+					builder.Header("truncated", true);
+				}
+				: null,
+			renderBody: builder => root.Render(builder),
+			items: root.Items(),
+			startItem: startItem,
+			maxSize: maxSize,
+			budget: Budget);
+		return render switch
 		{
-			builder.Header("count", hits.Count);
-			builder.Header("truncated", true);
-		}
-		builder.Status(model.Status);
-		builder.BeginBody();
-		root.Render(builder);
-		return builder.ToString();
+			PagedRender.Complete complete => complete.Output,
+			PagedRender.Page paged => paged.Output,
+			PagedRender.Invalid invalid => Failure(Error.Invalid(invalid.Message)),
+			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
+		};
 	}
 }

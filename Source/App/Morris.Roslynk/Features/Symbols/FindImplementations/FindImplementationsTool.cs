@@ -19,12 +19,14 @@ public sealed class FindImplementationsTool
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
 	private readonly ProjectionService ProjectionService;
+	private readonly ResponseBudget Budget;
 
-	public FindImplementationsTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
+	public FindImplementationsTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService, ResponseBudget? responseBudget = null)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
 		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
+		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
 	[McpServerTool(
@@ -48,19 +50,28 @@ public sealed class FindImplementationsTool
 		  \t\t<file.cs|file.razor>
 		  \t\t\t<namespace>
 		  \t\t\t\t<typeKind>,<typeName>,<loc>
-		{OutlineDescriptions.ListFieldQuoting} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to find implementors; it walks the
+		{OutlineDescriptions.Paging} {OutlineDescriptions.ListFieldQuoting} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading files to find implementors; it walks the
 		compiler's type graph, not text.
 		""")]
 	public async Task<string> FindImplementations(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
-		[Description($"Fully-qualified name of the interface/abstract symbol, e.g. 'MyNamespace.IMyType'. {OutlineDescriptions.SymbolNameGrammar}")] string symbolName)
+		[Description($"Fully-qualified name of the interface/abstract symbol, e.g. 'MyNamespace.IMyType'. {OutlineDescriptions.SymbolNameGrammar}")] string symbolName,
+		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
+		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await FindImplementationsCoreAsync(model, instance, symbolName, CancellationToken.None);
+		return await FindImplementationsCoreAsync(model, instance, symbolName, startItem, maxSize, Budget, CancellationToken.None);
 	}
 
-	internal async Task<string> FindImplementationsCoreAsync(SolutionModel model, RoslynInstance instance, string symbolName, CancellationToken token = default)
+	internal async Task<string> FindImplementationsCoreAsync(
+		SolutionModel model,
+		RoslynInstance instance,
+		string symbolName,
+		int startItem = 1,
+		int maxSize = 0,
+		ResponseBudget? budget = null,
+		CancellationToken token = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
@@ -94,11 +105,20 @@ public sealed class FindImplementationsTool
 		foreach ((ISymbol implementation, Solution implementationSolution) in implementors.Items)
 			SymbolPlacement.Place(root, implementation, implementationSolution, solutionDirectory);
 
-		var builder = new OutlineBuilder();
-		builder.Header("resolvedSymbol", SymbolResolver.SignatureName(resolved[0].Symbol));
-		builder.Status(model.Status);
-		builder.BeginBody();
-		root.Render(builder);
-		return builder.ToString();
+		PagedRender render = ItemPaging.Render(
+			model.Status,
+			builder => builder.Header("resolvedSymbol", SymbolResolver.SignatureName(resolved[0].Symbol)),
+			builder => root.Render(builder),
+			root.Items(),
+			startItem,
+			maxSize,
+			budget);
+		return render switch
+		{
+			PagedRender.Complete complete => complete.Output,
+			PagedRender.Page paged => paged.Output,
+			PagedRender.Invalid invalid => Failure(Error.Invalid(invalid.Message)),
+			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
+		};
 	}
 }

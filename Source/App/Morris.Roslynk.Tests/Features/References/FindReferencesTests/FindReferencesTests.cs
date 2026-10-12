@@ -1,4 +1,4 @@
-﻿using Morris.Roslynk.Features.References.FindReferences;
+using Morris.Roslynk.Features.References.FindReferences;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -37,20 +37,6 @@ public class FindReferencesTests
 		string result = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.DoesNotExist");
 
 		Assert.Contains("error=NotFound", result);
-	}
-
-	[Fact]
-	public async Task WhenMoreReferencesMatchThanMaxResults_ThenTheHeaderReportsTruncated()
-	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
-
-		string result = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Greeter", maxResults: 0);
-
-		Assert.Contains("truncated=Y", result);
-		Assert.Contains("count=", result);
-		Assert.DoesNotContain("count=0", result);
 	}
 
 	[Fact]

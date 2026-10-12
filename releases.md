@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `multi_query` runs every operation, then delivers whole results smallest-first until the response budget is filled, naming the rest in a `retry=<index>:<size>` header (each size is that result's cost as a ratio of the budget, rounded up to 0.1); batch order no longer matters, slots are complete or absent, and nothing is ever cut mid-body (Fixes #96)
+- `multi_query` runs its operations in parallel and derives its operation limit from the framing itself (a batch whose retry line cannot fit is refused with `error=Invalid` before anything runs) instead of a fixed 25 (Fixes #96)
+- Oversized results from find_references, find_reads, find_writes, get_callers, get_callees, get_members, search_symbols, find_implementations, get_type_hierarchy, find_dead_code, find_dead_conditionals, get_diagnostics and get_symbol_body page by item with `startItem`/`maxSize` (`count=`/`truncated=Y`/`nextStartItem=`), and every page repeats its container lines so it reads standalone; a result that fits whole carries no paging headers (Fixes #96)
+- `maxResults` on the query tools now defaults to uncapped - omit it and page when you want everything; passing it bounds the result set and paging walks that capped set, with `count=` naming its size (Fixes #96)
+- `get_symbol_body` renames `startLine`/`maxLines` to `startItem`/`maxSize` and reports `totalLines=`/`nextStartLine=` as `count=`/`nextStartItem=` (`partialLine=` becomes `partialItem=`); pages are character-bounded rather than line-bounded (Fixes #96)
 - Name lookup resolves a bare generic type or member written without its type parameters (`Repro.Box`, `Repro.Box.Get`) when only one arity exists, reports `error=Ambiguous` with one candidate per arity when several do, and still lets a non-generic of that name win (Fixes #72)
 - Metadata-spelled names (``Repro.Box`1``, ``Repro.Outer`1+Inner``) and constructed spellings (`Repro.Box<int>`) are accepted wherever a name is accepted, including `get_symbol_body`, which returns the source body (Fixes #72)
 - `get_diagnostics` accepts `projectName`, `filePath`, `ids` and `maxResults` to narrow and cap the listed diagnostics; filtered per-severity counts stay in the header with a `filter=` line, and capped bodies report `count=`/`truncated=Y` (Fixes #73)

@@ -26,12 +26,6 @@ public sealed partial class ResponseBudget
 	public int MaxChars { get; private set; }
 
 	public ResponseBudget(int maxChars) => MaxChars = Math.Max(MinimumMaxChars, maxChars);
-
-	/// <summary>A per-slot share of the budget; not clamped, because multi_query hands out exact remainders.</summary>
-	internal static ResponseBudget Allowance(int maxChars) => new() { MaxChars = maxChars };
-
-	private ResponseBudget() { }
-
 	/// <summary>
 	/// Returns <paramref name="output"/> unchanged when it fits; otherwise the longest prefix ending after a
 	/// whole line, preceded by 'outputTruncated=Y' and 'fullOutputChars=&lt;n&gt;' headers, all within

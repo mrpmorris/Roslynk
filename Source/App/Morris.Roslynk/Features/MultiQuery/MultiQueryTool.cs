@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using ModelContextProtocol.Server;
@@ -15,19 +16,11 @@ public sealed class MultiQueryTool
 	public const string MultiQueryName = "multi_query";
 
 	/// <summary>
-	/// The op-count limit (Decision 1). Operations beyond it are not executed; each still gets a numbered
-	/// slot carrying a whole error=Truncated block, so the caller can re-send exactly the missing ops.
+	/// The 'retry=' line reserved in the budget even when it turns out empty, so the model's planning
+	/// arithmetic is exact: a continuation batch whose dropped operations sum to ratios of at most 1.0
+	/// fits the same envelope shape as this one.
 	/// </summary>
-	public const int MaxOperations = 25;
-
-	/// <summary>
-	/// Below this a slot cannot carry even its headers usefully, so it is refused rather than run: its
-	/// allowance is smaller than one whole error block would be worth spending a result on.
-	/// </summary>
-	private const int MinSlotChars = 2_000;
-
-	/// <summary>An upper bound on the bracketed trailer a cut slot appends (see <see cref="CutTrailer"/>).</summary>
-	private const int BudgetTrailerBound = 512;
+	private const int RetryReserveChars = 7; // "retry=\n"
 
 	private static readonly IReadOnlyDictionary<string, JsonElement> NoArguments =
 		new Dictionary<string, JsonElement>(StringComparer.Ordinal);
@@ -53,8 +46,8 @@ public sealed class MultiQueryTool
 	[Description(
 		$"""
 		Executes several read-only operations in one call, against a single consistent snapshot of the
-		solution, and returns one result per operation in request order. Operations are independent - no
-		operation may reference another's output.
+		solution, and returns one result per delivered operation in request order. Operations are
+		independent - no operation may reference another's output.
 		When you need several facts before making a change, send them as one multi_query call rather than as
 		sequential calls.
 		For usage/impact questions, batch find_references, get_callers, get_callees,
@@ -65,21 +58,24 @@ public sealed class MultiQueryTool
 		get_diagnostics and get_solution_status are ordinary single calls.
 		Each operation takes exactly that tool's single-call parameter names; unknown or misspelled parameters
 		are rejected rather than ignored, and omitted parameters take the tool's declared defaults.
-		The batch carries at most 25 operations, and the whole response stays within the server's response
-		budget (about 80,000 characters by default; set Roslynk:MaxResponseChars to change it - the envelope
-		echoes it as budget=<n>). Each operation gets what earlier slots left: get_symbol_body pages itself
-		within its share (truncated=Y/nextStartLine= in its slot); any other tool's output that would not fit
-		is cut after its last whole line - its meta line gains truncated=Y and its body ends with a bracketed
-		[response budget exhausted: ...] note naming the continuation. Trust rule: a slot whose META LINE
-		carries truncated=Y was cut by the batch budget, so its body is a prefix - do not derive tool-level
-		paging (e.g. nextStartLine) from it; re-send that operation alone. Only a complete slot's own body
-		headers may drive tool-level paging. Remaining slots are whole error=Truncated blocks
-		(truncatedSlots=<n> counts every slot that did not deliver a complete result) - re-send exactly those
-		operations, from your own copy of the request (slot meta lines carry the index and tool name only,
-		never the arguments). The header names the snapshot=<id> every slot was computed against; pass it back
-		as expectSnapshot when you continue so a continuation that would straddle two generations of the
-		solution (a write, or the user saving a file) is refused with error=Stale instead of silently mixing
-		them - on Stale, re-run the whole batch.
+		The whole response stays within the server's response budget (about 80,000 characters by default; set
+		Roslynk:MaxResponseChars to change it - the envelope echoes the per-operation allowance as budget=<n>).
+		Every operation runs; results are then delivered WHOLE, smallest first, until the budget is filled -
+		a slot is complete or absent, never cut. Operations whose result did not fit are listed once in the
+		header as retry=<index>:<size>, in request order, where size is that result's cost as a ratio of the
+		budget rounded up to 0.1 (0.1 is the smallest value reported, never 0.0). Plan the continuation from
+		those ratios: a size of 1.0 or more can never fit beside anything, so re-send that operation on its
+		own (it will page with nextStartItem=); sizes summing to at most 1.0 fit one continuation batch
+		together; ceil(size) is roughly the number of pages a solo call needs. Sizes smaller than 0.1 of the
+		budget are indistinguishable, so about ten such operations per continuation batch is the safe number.
+		Re-send exactly the operations listed, with their original arguments, from your own copy of the
+		request - slot frames carry the index and tool name only, never the arguments. Pass the response's
+		snapshot=<id> as expectSnapshot when you continue: a continuation that would straddle two
+		generations of the solution (a write, or the user saving a file) is refused with error=Stale instead
+		of silently mixing them - on Stale, re-run the whole batch. Ratios describe one snapshot only; a
+		re-run against a moved solution re-measures and re-decides.
+		Trust rule: a delivered slot is always a complete result, so only a slot body's own headers may drive
+		tool-level paging (nextStartItem=); nothing in a multi_query response is ever cut mid-body.
 		{OutlineDescriptions.Freshness}
 		""")]
 	public async Task<string> MultiQuery(
@@ -103,9 +99,9 @@ public sealed class MultiQueryTool
 		if (model.Solution is null)
 			return OutlineError.Format(Error.Indexing(), model.Status);
 
-		// Continuation seam check (Decision 8): refuse before any op runs, so a rejected continuation costs
-		// nothing. The current id is emitted as a real header (the candidate= precedent) so the caller can
-		// see exactly which generation it would have been stitching onto.
+		// Continuation seam check: refuse before any op runs, so a rejected continuation costs nothing. The
+		// current id is emitted as a real header (the candidate= precedent) so the caller can see exactly
+		// which generation it would have been stitching onto.
 		if (expectSnapshot is not null)
 		{
 			if (!Guid.TryParse(expectSnapshot, out Guid expected))
@@ -131,130 +127,101 @@ public sealed class MultiQueryTool
 	/// public surface must never accept.
 	/// </summary>
 	/// <remarks>
-	/// The budget is a hard ceiling on the whole rendered envelope: everything that is not slot output is
-	/// reserved up front (the header, one frame per slot at its widest, the widest truncatedSlots footer and
-	/// the terminator), each slot is handed exactly what remains (less what later slots need at their
-	/// minimum, one refused block each), and a non-fitting body is cut after a whole line or refused whole.
-	/// A cut only removes a tail and appends a bracketed trailer, so framing integrity is untouched: the
-	/// boundary is a fresh random GUID absent from any verbatim body, and the n+1 check below still faults
-	/// loudly on any envelope bug.
+	/// Every operation runs (speculatively - an op whose result is dropped has still cost its query), each
+	/// result is measured as its frame plus body, and whole results are selected smallest-first until the
+	/// budget is filled. Selection maximises the number of queries answered; the count-optimal order is
+	/// smallest-first (an exchange argument: any selection can be improved by swapping a chosen result for
+	/// a smaller unchosen one), with exact-size ties broken by request index. Delivered slots are emitted
+	/// in request order; dropped operations become one retry= header line. The batch limit is not a
+	/// constant but the framing itself: a batch whose worst-case retry line cannot fit the budget is
+	/// refused before anything runs.
 	/// </remarks>
 	internal async Task<string> ExecuteBatchAsync(
 		SolutionModel pinnedModel,
-		RoslynInstance instance,
+		RoslynInstance pinnedInstance,
 		IReadOnlyDictionary<string, MultiQueryCatalog.OpEntry> catalog,
 		IReadOnlyList<MultiQueryOperation> operations,
 		string? boundary = null)
 	{
 		string effectiveBoundary = boundary ?? Guid.NewGuid().ToString("N");
-		var envelope = new StringBuilder();
-		envelope.Append("operations=").Append(operations.Count).Append('\n');
-		envelope.Append("snapshot=").Append(pinnedModel.Id.ToString("N")).Append('\n');
-		envelope.Append("boundary=").Append(effectiveBoundary).Append('\n');
-		envelope.Append("budget=").Append(Budget.MaxChars).Append('\n');
 
-		// Blocks for refused slots are deterministic: format each once and account its real length.
-		string overCount = OutlineError.Format(
-			Error.Truncated($"At most {MaxOperations} operations per batch. This operation was not run; re-send it (with its original arguments) to continue."),
-			pinnedModel.Status);
-		string overBudget = OutlineError.Format(
-			Error.Truncated("Response budget exhausted. This operation was not run; re-send it (with its original arguments) in a new multi_query, or call the tool directly."),
-			pinnedModel.Status);
-
-		// Everything the envelope writes whatever the slots return: the header so far, one frame per slot
-		// (at its widest, with the truncated=Y meta marker), the widest truncatedSlots footer, the terminator.
-		int fixedChars = envelope.Length + Terminator(effectiveBoundary).Length;
-		for (int index = 0; index < operations.Count; index++)
+		// The net budget echoed to the caller: the raw ceiling less this envelope's own fixed framing (the
+		// base header, the terminator and the retry= prefix a continuation may need). Iterated because the
+		// echoed value's own width is part of what it is subtracted from; converges immediately.
+		int terminatorChars = Terminator(effectiveBoundary).Length;
+		int net = Budget.MaxChars;
+		for (int iteration = 0; iteration < 3; iteration++)
 		{
-			fixedChars += Math.Max(
-				SlotFrame(effectiveBoundary, index, operations[index].Tool, cut: false).Length,
-				SlotFrame(effectiveBoundary, index, operations[index].Tool, cut: true).Length);
+			int headerChars = BaseHeader(operations.Count, pinnedModel.Id, effectiveBoundary, net).Length;
+			net = Math.Max(1, Budget.MaxChars - headerChars - terminatorChars - RetryReserveChars);
 		}
-		fixedChars += $"truncatedSlots={operations.Count}\n".Length;
 
-		// later[i] is the least the slots from i onward can cost: each is at minimum one refused block,
-		// whose actual measured length is what sums here.
-		var later = new int[operations.Count + 1];
-		for (int index = operations.Count - 1; index >= 0; index--)
-			later[index] = later[index + 1] + (index >= MaxOperations ? overCount.Length : overBudget.Length);
+		string header = BaseHeader(operations.Count, pinnedModel.Id, effectiveBoundary, net);
 
-		if (fixedChars + later[0] > Budget.MaxChars)
+		// Derived batch limit: the retry line must fit even when every operation is dropped. Each entry is
+		// then at its narrowest ('<index>:0.1'), so a batch whose minimum-width retry line cannot fit is
+		// refused before anything executes - no arbitrary operation count.
+		int minimumRetryChars = RetryLine(Enumerable.Range(0, operations.Count).Select(MinimumRetryEntry).ToArray()).Length;
+		if (header.Length + minimumRetryChars + terminatorChars > Budget.MaxChars)
+		{
 			return OutlineError.Format(
 				Error.Invalid(
-					$"{operations.Count} operations cannot be framed within the {Budget.MaxChars}-character response budget. Send at most {MaxOperations}."),
+					$"{operations.Count} operations cannot be framed within the {Budget.MaxChars}-character response budget: the retry line alone would not fit. Send fewer operations."),
 				pinnedModel.Status);
-
-		int truncatedCount = 0;   // every slot that did not deliver a complete result: refused OR cut
-		int bodyChars = 0;
-		for (int index = 0; index < operations.Count; index++)
-		{
-			// The two truncation triggers (Decisions 1 and 5): an op beyond the count limit, or a slot whose
-			// allowance cannot carry a useful result, is not executed - its slot carries a whole
-			// error=Truncated block naming why, so the caller can re-send exactly these operations.
-			int allowance = Budget.MaxChars - fixedChars - bodyChars - later[index + 1];
-			string body;
-			bool cut = false;
-			if (index >= MaxOperations)
-			{
-				truncatedCount++;
-				body = overCount;
-				bodyChars += overCount.Length;
-			}
-			else if (allowance < MinSlotChars)
-			{
-				truncatedCount++;
-				body = overBudget;
-				bodyChars += overBudget.Length;
-			}
-			else
-			{
-				// A budget-aware core pages itself within the allowance (get_symbol_body reports
-				// nextStartLine); anything else is cut after its last whole line and marked - or refused
-				// whole when not even one line fits, because a torn verbatim body is worse than a refusal.
-				body = await ExecuteOperationAsync(pinnedModel, instance, catalog, operations[index], ResponseBudget.Allowance(allowance)).ConfigureAwait(false);
-				if (body.Length > allowance)
-				{
-					truncatedCount++;
-					string prefix = LongestWholeLinePrefix(body, allowance - BudgetTrailerBound);
-					if (prefix.Length == 0)
-					{
-						body = overBudget;
-						bodyChars += overBudget.Length;
-					}
-					else
-					{
-						cut = true;
-						body = prefix + CutTrailer(
-							index + 1,
-							operations[index].Tool.ToString(),
-							LineWindow.CountLines(prefix),
-							LineWindow.CountLines(body),
-							pinnedModel.Id.ToString("N"));
-						bodyChars = Budget.MaxChars - fixedChars - later[index + 1]; // a cut spends the rest
-					}
-				}
-				else
-				{
-					bodyChars += body.Length;
-				}
-			}
-
-			// The frame's cut variant (with truncated=Y) is what fixedChars reserved; a non-cut slot renders
-			// narrower, so the rendered envelope never exceeds the reserved ceiling.
-			envelope.Append(SlotFrame(effectiveBoundary, index, operations[index].Tool, cut));
-			envelope.Append(body);
 		}
 
-		if (truncatedCount > 0)
-			envelope.Append("truncatedSlots=").Append(truncatedCount).Append('\n');
+		// Every operation runs, against the one pinned snapshot. Results land by index; an operation whose
+		// core fails carries its own error block, so one bad query never aborts the batch.
+		var bodies = new string[operations.Count];
+		await Parallel.ForEachAsync(
+			Enumerable.Range(0, operations.Count),
+			async (index, _) =>
+				bodies[index] = await ExecuteOperationAsync(pinnedModel, pinnedInstance, catalog, operations[index]).ConfigureAwait(false))
+			.ConfigureAwait(false);
+
+		// Costs: frame + body for a delivered slot, one small header entry for a dropped one.
+		int[] cost = new int[operations.Count];
+		for (int index = 0; index < operations.Count; index++)
+			cost[index] = SlotFrame(effectiveBoundary, index, operations[index].Tool).Length + bodies[index].Length;
+
+		// Smallest-first selection. total(k) is exact - including the retry line the complement needs - and
+		// strictly increasing in k (delivering an operation costs far more than its retry entry), so the
+		// first k that exceeds the budget bounds every larger selection too.
+		int[] order = Enumerable.Range(0, operations.Count).OrderBy(index => cost[index]).ThenBy(index => index).ToArray();
+		string RetryFor(IEnumerable<int> dropped) => RetryLine(dropped.OrderBy(index => index).Select(index => RetryEntry(index, cost[index], net)).ToArray());
+		int Total(int taken) =>
+			header.Length + terminatorChars
+			+ (taken == operations.Count ? 0 : RetryFor(order[taken..]).Length)
+			+ order.Take(taken).Sum(index => cost[index]);
+
+		if (Total(0) > Budget.MaxChars)
+		{
+			return OutlineError.Format(
+				Error.Invalid(
+					$"{operations.Count} operations cannot be framed within the {Budget.MaxChars}-character response budget: the retry line alone would not fit. Send fewer operations."),
+				pinnedModel.Status);
+		}
+
+		int delivered = 0;
+		while (delivered < operations.Count && Total(delivered + 1) <= Budget.MaxChars)
+			delivered++;
+
+		var envelope = new StringBuilder();
+		envelope.Append(header);
+		if (delivered < operations.Count)
+			envelope.Append(RetryFor(order[delivered..]));
+		foreach (int index in order[..delivered].OrderBy(index => index))
+		{
+			envelope.Append(SlotFrame(effectiveBoundary, index, operations[index].Tool));
+			envelope.Append(bodies[index]);
+		}
 		envelope.Append(Terminator(effectiveBoundary));
 
 		string rendered = envelope.ToString();
 
-		// Framing integrity (Decision 2, belt-and-braces): the delimiter-line prefix must occur exactly
-		// n+1 times - n slot delimiters plus the terminator, which starts with the same prefix. Counting the
-		// bare hex would also hit the boundary= header (n+2); counting the prefix does not. A mismatch is an
-		// envelope bug and must fault loudly rather than ship a silently desynced response.
+		// Framing integrity, belt-and-braces: the delimiter-line prefix must occur exactly once per
+		// delivered slot plus the terminator, which starts with the same prefix. A mismatch is an envelope
+		// bug and must fault loudly rather than ship a silently desynced response.
 		string delimiterToken = "\n--" + effectiveBoundary;
 		int occurrences = 0;
 		int at = 0;
@@ -263,37 +230,38 @@ public sealed class MultiQueryTool
 			occurrences++;
 			at += delimiterToken.Length;
 		}
-		if (occurrences != operations.Count + 1)
+		if (occurrences != delivered + 1)
 			throw new InvalidOperationException(
-				$"multi_query envelope integrity check failed: expected {operations.Count + 1} delimiter lines, found {occurrences}.");
+				$"multi_query envelope integrity check failed: expected {delivered + 1} delimiter lines, found {occurrences}.");
 
 		return rendered;
 	}
 
-	/// <summary>
-	/// The longest prefix of <paramref name="body"/> that ends exactly after a '\n' and is at most
-	/// <paramref name="limit"/> characters - empty when not even one line break fits, which refuses the slot
-	/// rather than tearing the body.
-	/// </summary>
-	private static string LongestWholeLinePrefix(string body, int limit)
-	{
-		if (limit < 1)
-			return "";
+	/// <summary>The four header lines every envelope carries; budget= echoes the net per-operation allowance.</summary>
+	private static string BaseHeader(int operationCount, Guid snapshotId, string boundary, int netBudget) =>
+		$"operations={operationCount}\n" +
+		$"snapshot={snapshotId.ToString("N")}\n" +
+		$"boundary={boundary}\n" +
+		$"budget={netBudget}\n";
 
-		int searchFrom = Math.Min(limit, body.Length) - 1;
-		int lastBreak = searchFrom >= 0 ? body.LastIndexOf('\n', searchFrom) : -1;
-		return lastBreak < 0 ? "" : body[..(lastBreak + 1)];
+	/// <summary>A dropped operation's retry entry: request index and result cost as a ratio of the net
+	/// budget, rounded up to 0.1 - 0.1 is the floor, so nothing ever reads as free.</summary>
+	private static string RetryEntry(int index, int cost, int netBudget)
+	{
+		double ratio = Math.Ceiling(cost * 10d / netBudget) / 10d;
+		if (ratio < 0.1)
+			ratio = 0.1;
+		return $"{index + 1}:{ratio.ToString("0.0", CultureInfo.InvariantCulture)}";
 	}
 
-	/// <summary>
-	/// The bracketed continuation note a cut slot's body ends with. Bracketed so it cannot read as tool
-	/// output; the machine signal is the slot meta line's truncated=Y. Bound by BudgetTrailerBound.
-	/// </summary>
-	private static string CutTrailer(int slot, string tool, int shownLines, int totalLines, string snapshotId) =>
-		$"[response budget exhausted: slot {slot} ({tool}) was cut at a line boundary; {shownLines} of {totalLines} lines of its output shown. Re-send this operation (with its original arguments) in a new multi_query, or call the tool directly, to get the rest; pass expectSnapshot={snapshotId} to pin the same solution generation.]";
+	/// <summary>The narrowest entry an index can produce ('<index>:0.1'), for the pre-flight batch limit.</summary>
+	private static string MinimumRetryEntry(int index) => $"{index + 1}:0.1";
 
-	private static string SlotFrame(string boundary, int index, MultiQueryOp tool, bool cut) =>
-		$"\n--{boundary}\nslot={index + 1} tool={tool}{(cut ? " truncated=Y" : "")}\n\n";
+	private static string RetryLine(string[] entries) =>
+		entries.Length == 0 ? "" : $"retry={string.Join(",", entries)}\n";
+
+	private static string SlotFrame(string boundary, int index, MultiQueryOp tool) =>
+		$"\n--{boundary}\nslot={index + 1} tool={tool}\n\n";
 
 	private static string Terminator(string boundary) => $"\n--{boundary}--\n";
 
@@ -301,8 +269,7 @@ public sealed class MultiQueryTool
 		SolutionModel pinnedModel,
 		RoslynInstance pinnedInstance,
 		IReadOnlyDictionary<string, MultiQueryCatalog.OpEntry> catalog,
-		MultiQueryOperation operation,
-		ResponseBudget? allowance)
+		MultiQueryOperation operation)
 	{
 		if (!catalog.TryGetValue(operation.Tool.ToString(), out MultiQueryCatalog.OpEntry? entry))
 		{
@@ -315,12 +282,15 @@ public sealed class MultiQueryTool
 
 		try
 		{
+			// No allowance: a batch slot is whole or absent, so the core renders its complete result and the
+			// batch either delivers it or names it in retry=. Explicit paging arguments (startItem,
+			// maxSize) still page - a continuation re-sending one oversized operation relies on that.
 			return await MultiQueryCatalog.InvokeCoreAsync(
 				Provider,
 				entry,
 				pinnedModel,
 				pinnedInstance,
-				allowance,
+				allowance: null,
 				operation.Arguments ?? NoArguments,
 				CancellationToken.None).ConfigureAwait(false);
 		}

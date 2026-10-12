@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Features.MultiQuery;
+using Morris.Roslynk.Features.References.FindReferences;
 using Morris.Roslynk.Features.Symbols.GetSymbolBody;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
@@ -147,13 +148,13 @@ public class MultiQueryCatalogTests
 	}
 
 	[Fact]
-	public async Task WhenMaxLinesIsPassedAsAString_ThenTheBinderCoercesIt()
+	public async Task WhenMaxSizeIsPassedAsAString_ThenTheBinderCoercesIt()
 	{
 		var entry = MultiQueryCatalog.Entries[GetSymbolBodyTool.GetSymbolBodyName];
 		var arguments = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
 		{
 			["symbolName"] = MultiQueryTestHelpers.Json("Repro.Big"),
-			["maxLines"] = MultiQueryTestHelpers.Json("3"),
+			["maxSize"] = MultiQueryTestHelpers.Json("3"),
 		};
 
 		// The coercion succeeds: the core resolves and runs (failing on the null model afterwards), which
@@ -167,6 +168,32 @@ public class MultiQueryCatalogTests
 			arguments,
 			CancellationToken.None));
 	}
+
+	[Fact]
+	public async Task WhenMaxResultsIsNull_ThenTheBinderCoercesItToUncapped()
+	{
+		// find_references's maxResults is int? - null means uncapped. The binder must map a JSON null to
+		// a genuine null (not 0, which would cap the set to nothing).
+		var entry = MultiQueryCatalog.Entries[FindReferencesTool.FindReferencesName];
+		var arguments = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+		{
+			["symbolName"] = MultiQueryTestHelpers.Json("RefSpace.IThing"),
+			["maxResults"] = JsonNull(),
+		};
+
+		// The coercion succeeds: the core resolves and runs (failing on the null model afterwards),
+		// which proves null reached the int? parameter rather than being rejected at binding.
+		await Assert.ThrowsAsync<NullReferenceException>(() => MultiQueryCatalog.InvokeCoreAsync(
+			CreateBinderProvider(),
+			entry,
+			model: null!,
+			instance: null!,
+			allowance: null,
+			arguments,
+			CancellationToken.None));
+	}
+
+	private static JsonElement JsonNull() => JsonDocument.Parse("null").RootElement.Clone();
 
 	private static IServiceProvider CreateBinderProvider()
 	{

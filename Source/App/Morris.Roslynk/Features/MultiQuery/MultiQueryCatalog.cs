@@ -182,7 +182,7 @@ internal static class MultiQueryCatalog
 	/// scalars, so string forms are accepted for bool/int; anything the target type cannot take is a caller
 	/// error (ArgumentException → slot Invalid), never a silent fallback.
 	/// </summary>
-	private static object Coerce(Type type, JsonElement value, string toolName, string parameterName)
+	private static object? Coerce(Type type, JsonElement value, string toolName, string parameterName)
 	{
 		string Context() => $"Parameter '{parameterName}' of '{toolName}'";
 		try
@@ -206,6 +206,13 @@ internal static class MultiQueryCatalog
 				if (value.ValueKind == JsonValueKind.String)
 					return int.Parse(value.GetString()!, System.Globalization.CultureInfo.InvariantCulture);
 				throw new FormatException($"{Context()} expects a number.");
+			}
+
+			if (type == typeof(int?))
+			{
+				if (value.ValueKind == JsonValueKind.Null)
+					return null;
+				return (int?)Coerce(typeof(int), value, toolName, parameterName);
 			}
 
 			throw new NotSupportedException(

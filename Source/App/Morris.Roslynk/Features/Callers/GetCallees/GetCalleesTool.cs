@@ -19,12 +19,14 @@ public sealed class GetCalleesTool
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly SymbolResolver SymbolResolver;
 	private readonly ProjectionService ProjectionService;
+	private readonly ResponseBudget Budget;
 
-	public GetCalleesTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService)
+	public GetCalleesTool(InstanceRegistry instanceRegistry, SymbolResolver symbolResolver, ProjectionService projectionService, ResponseBudget? responseBudget = null)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		SymbolResolver = symbolResolver ?? throw new ArgumentNullException(nameof(symbolResolver));
 		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
+		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
 	[McpServerTool(
@@ -70,21 +72,31 @@ public sealed class GetCalleesTool
 		accessors, a field its initializer. Lambdas and local functions declared inside the member belong to
 		it. A member with no code in the solution (an abstract or interface declaration, an auto-property)
 		calls nothing.
-		{OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading the body and tracing each
+		{OutlineDescriptions.Paging} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over reading the body and tracing each
 		call by eye: the compiler's operation model binds every call to the overload that actually runs.
 		"""
 	)]
 	public async Task<string> GetCallees(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description($"Fully-qualified name of the member whose calls are listed, e.g. 'MyNamespace.MyType.MyMethod'. {OutlineDescriptions.SymbolNameGrammar}")] string memberName,
-		[Description("Leave out callees declared in referenced assemblies (BCL, NuGet), listing only the solution's own members.")] bool excludeExternal = false)
+		[Description("Leave out callees declared in referenced assemblies (BCL, NuGet), listing only the solution's own members.")] bool excludeExternal = false,
+		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
+		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await GetCalleesCoreAsync(model, instance, memberName, excludeExternal, CancellationToken.None);
+		return await GetCalleesCoreAsync(model, instance, memberName, excludeExternal, startItem, maxSize, Budget, CancellationToken.None);
 	}
 
-	internal async Task<string> GetCalleesCoreAsync(SolutionModel model, RoslynInstance instance, string memberName, bool excludeExternal = false, CancellationToken token = default)
+	internal async Task<string> GetCalleesCoreAsync(
+		SolutionModel model,
+		RoslynInstance instance,
+		string memberName,
+		bool excludeExternal = false,
+		int startItem = 1,
+		int maxSize = 0,
+		ResponseBudget? budget = null,
+		CancellationToken token = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
@@ -126,11 +138,20 @@ public sealed class GetCalleesTool
 		foreach ((ISymbol callee, Solution calleeSolution) in callees.Items)
 			CalleePlacement.Place(root, callee, calleeSolution, solutionDirectory);
 
-		var builder = new OutlineBuilder();
-		builder.Header("resolvedSymbol", SymbolResolver.SignatureName(resolved[0].Symbol));
-		builder.Status(model.Status);
-		builder.BeginBody();
-		root.Render(builder);
-		return builder.ToString();
+		PagedRender render = ItemPaging.Render(
+			model.Status,
+			builder => builder.Header("resolvedSymbol", SymbolResolver.SignatureName(resolved[0].Symbol)),
+			builder => root.Render(builder),
+			root.Items(),
+			startItem,
+			maxSize,
+			budget);
+		return render switch
+		{
+			PagedRender.Complete complete => complete.Output,
+			PagedRender.Page paged => paged.Output,
+			PagedRender.Invalid invalid => Failure(Error.Invalid(invalid.Message)),
+			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
+		};
 	}
 }

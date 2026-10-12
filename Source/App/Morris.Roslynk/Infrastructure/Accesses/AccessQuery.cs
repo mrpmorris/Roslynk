@@ -27,9 +27,12 @@ public static class AccessQuery
 		SymbolResolver symbolResolver,
 		ProjectionService projectionService,
 		string symbolName,
-		int maxResults,
 		Func<AccessKind, bool> include,
-		CancellationToken cancellationToken)
+		int? maxResults = null,
+		int startItem = 1,
+		int maxSize = 0,
+		ResponseBudget? budget = null,
+		CancellationToken cancellationToken = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
@@ -135,8 +138,13 @@ public static class AccessQuery
 			.OrderBy(hit => hit.Location.GetDisplaySpan().Path, StringComparer.Ordinal)
 			.ThenBy(hit => hit.Location.GetDisplaySpan().StartLinePosition)
 			.ToList();
-		List<(Location Location, Solution Solution, AccessKind Kind)> page = hits.Take(Math.Max(0, maxResults)).ToList();
-		bool truncated = hits.Count > page.Count;
+
+		// The result set: capped only when the caller asked for a cap, so omitting maxResults pages through
+		// everything. count= names the size of this set.
+		IReadOnlyList<(Location Location, Solution Solution, AccessKind Kind)> page = maxResults is int cap
+			? hits.Take(Math.Max(0, cap)).ToList()
+			: hits;
+		bool capped = hits.Count > page.Count;
 
 		var outline = new SymbolNode();
 		foreach ((Location location, Solution locationSolution, AccessKind kind) in page)
@@ -163,17 +171,28 @@ public static class AccessQuery
 				AccessKindText.Of(kind));
 		}
 
-		var builder = new OutlineBuilder();
-		builder.Header("resolvedSymbol", resolvedName);
-		if (truncated)
+		PagedRender render = ItemPaging.Render(
+			model.Status,
+			builder => builder.Header("resolvedSymbol", resolvedName),
+			capHeaders: capped
+				? builder =>
+				{
+					builder.Header("count", page.Count);
+					builder.Header("truncated", true);
+				}
+				: null,
+			renderBody: builder => outline.Render(builder),
+			items: outline.Items(),
+			startItem: startItem,
+			maxSize: maxSize,
+			budget: budget);
+		return render switch
 		{
-			builder.Header("count", hits.Count);
-			builder.Header("truncated", true);
-		}
-		builder.Status(model.Status);
-		builder.BeginBody();
-		outline.Render(builder);
-		return builder.ToString();
+			PagedRender.Complete complete => complete.Output,
+			PagedRender.Page paged => paged.Output,
+			PagedRender.Invalid invalid => Failure(Error.Invalid(invalid.Message)),
+			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
+		};
 	}
 
 	/// <summary>Splits 'N.T.M:param' at the last single ':' outside any bracket; '::' (global::) is not a separator.</summary>

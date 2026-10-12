@@ -18,11 +18,13 @@ public sealed class SearchSymbolsTool
 
 	private readonly InstanceRegistry InstanceRegistry;
 	private readonly ProjectionService ProjectionService;
+	private readonly ResponseBudget Budget;
 
-	public SearchSymbolsTool(InstanceRegistry instanceRegistry, ProjectionService projectionService)
+	public SearchSymbolsTool(InstanceRegistry instanceRegistry, ProjectionService projectionService, ResponseBudget? responseBudget = null)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
+		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
 	[McpServerTool(
@@ -49,20 +51,30 @@ public sealed class SearchSymbolsTool
 		  \t\t\t\t<typeKind>,<typeName>,<loc>
 		  \t\t\t\t\t<memberKind>,<memberName>,<loc>
 		where kind is one of {OutlineDescriptions.KindList}, {OutlineDescriptions.Loc}, and a type's location
-		is present only when the type itself matched; {OutlineDescriptions.ListFieldQuoting}. {OutlineDescriptions.Truncation} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over grepping
+		is present only when the type itself matched; {OutlineDescriptions.ListFieldQuoting}. {OutlineDescriptions.Paging} {OutlineDescriptions.Project} {OutlineDescriptions.GeneratedLocations} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock} Prefer this over grepping
 		to locate where something is declared; it searches the compiler's declared symbols.
 		""")]
 	public async Task<string> SearchSymbols(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Substring to match against symbol names (case-insensitive).")] string query,
-		[Description("Maximum results to return.")] int maxResults = 50)
+		[Description("Maximum results to return. Omit for every result (paging walks the result with startItem).")] int? maxResults = null,
+		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
+		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await SearchSymbolsCoreAsync(model, instance, query, maxResults, CancellationToken.None);
+		return await SearchSymbolsCoreAsync(model, instance, query, maxResults, startItem, maxSize, Budget, CancellationToken.None);
 	}
 
-	internal async Task<string> SearchSymbolsCoreAsync(SolutionModel model, RoslynInstance instance, string query, int maxResults = 50, CancellationToken token = default)
+	internal async Task<string> SearchSymbolsCoreAsync(
+		SolutionModel model,
+		RoslynInstance instance,
+		string query,
+		int? maxResults = null,
+		int startItem = 1,
+		int maxSize = 0,
+		ResponseBudget? budget = null,
+		CancellationToken token = default)
 	{
 		if (model.Solution is null)
 			return OutlineError.Format(Error.Indexing(), model.Status);
@@ -97,21 +109,38 @@ public sealed class SearchSymbolsTool
 			}
 		}
 
-		List<(ISymbol Symbol, Solution Solution)> results = matched.Items.Take(Math.Max(0, maxResults)).ToList();
+		// The result set: capped only when the caller asked for a cap, so omitting maxResults pages through
+		// everything. count= names the size of this set.
+		IReadOnlyList<(ISymbol Symbol, Solution Solution)> page = maxResults is int cap
+			? matched.Items.Take(Math.Max(0, cap)).ToList()
+			: matched.Items.ToList();
+		bool capped = matched.Count > page.Count;
 
 		var root = new SymbolNode();
-		foreach ((ISymbol symbol, Solution symbolSolution) in results)
+		foreach ((ISymbol symbol, Solution symbolSolution) in page)
 			SymbolPlacement.Place(root, symbol, symbolSolution, solutionDirectory);
 
-		var builder = new OutlineBuilder();
-		if (matched.Count > results.Count)
+		PagedRender render = ItemPaging.Render(
+			model.Status,
+			builder => { },
+			capHeaders: capped
+				? builder =>
+				{
+					builder.Header("count", page.Count);
+					builder.Header("truncated", true);
+				}
+				: null,
+			renderBody: builder => root.Render(builder),
+			items: root.Items(),
+			startItem: startItem,
+			maxSize: maxSize,
+			budget: budget);
+		return render switch
 		{
-			builder.Header("count", matched.Count);
-			builder.Header("truncated", true);
-		}
-		builder.Status(model.Status);
-		builder.BeginBody();
-		root.Render(builder);
-		return builder.ToString();
+			PagedRender.Complete complete => complete.Output,
+			PagedRender.Page paged => paged.Output,
+			PagedRender.Invalid invalid => OutlineError.Format(Error.Invalid(invalid.Message), model.Status),
+			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
+		};
 	}
 }

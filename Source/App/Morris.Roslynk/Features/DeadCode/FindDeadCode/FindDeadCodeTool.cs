@@ -43,10 +43,12 @@ public sealed class FindDeadCodeTool
 	];
 
 	private readonly InstanceRegistry InstanceRegistry;
+	private readonly ResponseBudget Budget;
 
-	public FindDeadCodeTool(InstanceRegistry instanceRegistry)
+	public FindDeadCodeTool(InstanceRegistry instanceRegistry, ResponseBudget? responseBudget = null)
 	{
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
+		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
 	[McpServerTool(
@@ -76,20 +78,32 @@ public sealed class FindDeadCodeTool
 		the full declaration span, ready to pass to apply_patch to remove the member. Each unused overload of a
 		member is reported as its own leaf, distinguished by its loc; the leaf name carries no parameter
 		list, so pass the member name to get_symbol_body and pick from the candidates it offers. The host decides whether to remove a candidate. Scan is per-symbol, so narrow large
-		solutions with scope. {OutlineDescriptions.TruncationFlag} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock}
+		solutions with scope. maxResults bounds an expensive scan; omit it to scan everything (the result
+		then pages). {OutlineDescriptions.TruncationFlag} {OutlineDescriptions.Paging} {OutlineDescriptions.Project} {OutlineDescriptions.FilePathSplit} {OutlineDescriptions.ErrorBlock}
 		""")]
 	public async Task<string> FindDeadCode(
 		[Description("Solution handle returned by open_solution.")] string solutionId,
 		[Description("Optional fully-qualified-name prefix to limit the scan, e.g. MyApp.Services. Omit for the whole solution.")] string? scope = null,
 		[Description("Include unreferenced public/protected members (the API surface).")] bool includePublic = false,
-		[Description("Maximum candidates to return.")] int maxResults = 50)
+		[Description("Maximum candidates to return. Omit for every candidate (paging walks the result with startItem); maxResults bounds an expensive scan.")] int? maxResults = null,
+		[Description("1-based first item of the page; only pass it to continue from nextStartItem=. Default 1.")] int startItem = 1,
+		[Description("Page size in characters; an oversized result is returned as a page with count=/truncated=Y/nextStartItem=. Default: the response budget.")] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await FindDeadCodeCoreAsync(model, instance, scope, includePublic, maxResults, CancellationToken.None);
+		return await FindDeadCodeCoreAsync(model, instance, scope, includePublic, maxResults, startItem, maxSize, Budget, CancellationToken.None);
 	}
 
-	internal async Task<string> FindDeadCodeCoreAsync(SolutionModel model, RoslynInstance instance, string? scope = null, bool includePublic = false, int maxResults = 50, CancellationToken token = default)
+	internal async Task<string> FindDeadCodeCoreAsync(
+		SolutionModel model,
+		RoslynInstance instance,
+		string? scope = null,
+		bool includePublic = false,
+		int? maxResults = null,
+		int startItem = 1,
+		int maxSize = 0,
+		ResponseBudget? budget = null,
+		CancellationToken token = default)
 	{
 		if (model.Solution is null)
 			return OutlineError.Format(Error.Indexing(), model.Status);
@@ -127,6 +141,7 @@ public sealed class FindDeadCodeTool
 		candidates.Sort((left, right) => string.Compare(
 			SymbolResolver.SignatureName(left), SymbolResolver.SignatureName(right), StringComparison.Ordinal));
 
+		int cap = Math.Max(0, maxResults ?? int.MaxValue);
 		var results = new List<Candidate>();
 		bool truncated = false;
 		foreach (ISymbol symbol in candidates)
@@ -136,18 +151,14 @@ public sealed class FindDeadCodeTool
 				continue;
 
 			results.Add(candidate);
-			if (results.Count >= maxResults)
+			if (results.Count >= cap)
 			{
 				truncated = true;
 				break;
 			}
 		}
 
-		var builder = new OutlineBuilder();
-		if (truncated)
-			builder.Header("truncated", true);
-		builder.Status(model.Status);
-		builder.BeginBody();
+		bool capped = truncated;
 
 		var root = new SymbolNode();
 		foreach (Candidate candidate in results)
@@ -160,8 +171,28 @@ public sealed class FindDeadCodeTool
 			node.Child(candidate.Leaf);
 		}
 
-		root.Render(builder);
-		return builder.ToString();
+		PagedRender render = ItemPaging.Render(
+			model.Status,
+			builder => { },
+			capHeaders: capped
+				? builder =>
+				{
+					builder.Header("count", results.Count);
+					builder.Header("truncated", true);
+				}
+				: null,
+			renderBody: builder => root.Render(builder),
+			items: root.Items(),
+			startItem: startItem,
+			maxSize: maxSize,
+			budget: budget);
+		return render switch
+		{
+			PagedRender.Complete complete => complete.Output,
+			PagedRender.Page paged => paged.Output,
+			PagedRender.Invalid invalid => OutlineError.Format(Error.Invalid(invalid.Message), model.Status),
+			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
+		};
 	}
 
 	private static async Task<Candidate?> EvaluateAsync(Solution solution, ISymbol symbol, HashSet<ProjectId> testProjects, string? solutionDirectory)
