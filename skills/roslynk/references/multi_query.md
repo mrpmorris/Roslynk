@@ -3,15 +3,13 @@
 Runs independent read-only operations against one solution snapshot; delivered results are in
 request order. Operations cannot reference each other's output. Batch several facts needed before
 a change rather than making sequential calls.
-For usage/impact questions, batch find_references, get_callers, get_callees,
-find_implementations and get_type_hierarchy in one call.
+Batch only the independent queries needed to answer the question.
 
 ## Operations
 
 Supports get_symbol, get_symbol_body, get_members, find_definition, find_implementations,
 find_references, get_callers, get_callees, search_symbols, get_type_hierarchy, find_dead_code,
-find_dead_conditionals and get_expression_info. Write tools, get_diagnostics and
-get_solution_status are excluded; call the latter two separately.
+find_dead_conditionals and get_expression_info.
 
 Use each tool's single-call parameter names. Unknown/misspelled parameters are rejected;
 omitted parameters use that tool's defaults.
