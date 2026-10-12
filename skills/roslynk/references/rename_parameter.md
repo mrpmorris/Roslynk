@@ -24,9 +24,3 @@ error=NotSupported (naming the generator in the last case); a file edited on dis
 loaded is error=Stale. Nothing is written in any failure case.
 
 Annotations: read-only no, idempotent no, destructive yes, open-world no (published MCP title: "Rename a method parameter").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

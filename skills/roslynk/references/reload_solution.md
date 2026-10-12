@@ -11,9 +11,3 @@ effect on files. A failed reload is returned as a Faulted error. Never call this
 initiative; suggest it to the user when the model may be stale.
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Reload a solution").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

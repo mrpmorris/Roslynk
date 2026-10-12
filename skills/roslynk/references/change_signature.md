@@ -19,9 +19,3 @@ matches several overloads is error=Ambiguous with one candidate per match; a fil
 since it was loaded is error=Stale.
 
 Annotations: read-only no, idempotent no, destructive yes, open-world no (published MCP title: "Add a parameter to a method").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

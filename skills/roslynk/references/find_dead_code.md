@@ -24,9 +24,3 @@ nextStartItem=<k> appears only when a page of the result does not show all of th
 scan everything (the result then pages).
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Find unused code").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

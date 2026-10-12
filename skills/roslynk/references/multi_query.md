@@ -33,9 +33,3 @@ Trust rule: a delivered slot is always a complete result, so only a slot body's 
 tool-level paging (nextStartItem=); nothing in a multi_query response is ever cut mid-body.
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Run several read-only queries in one call").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

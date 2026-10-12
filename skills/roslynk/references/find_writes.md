@@ -20,9 +20,3 @@ or local variable).
 Coverage: every loaded target framework, plus derived compilations each toggling ONE preprocessor symbol
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Find writes to a field, property or parameter").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

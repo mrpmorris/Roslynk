@@ -35,9 +35,3 @@ member with no code in the solution (an abstract or interface declaration, an au
 calls nothing.
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get the members a member calls").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

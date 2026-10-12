@@ -11,9 +11,3 @@ Returns 'applied', 'removedCount', 'status' header, a blank line, then one solut
 changed-file path per line.
 
 Annotations: read-only no, idempotent yes, destructive yes, open-world no (published MCP title: "Remove unused usings").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

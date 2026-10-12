@@ -21,9 +21,3 @@ Returns 'applied', 'action', 'status' header, a blank line, then one solution-re
 changed-file path per line.
 
 Annotations: read-only no, idempotent no, destructive yes, open-world no (published MCP title: "Apply a diagnostic's fix").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

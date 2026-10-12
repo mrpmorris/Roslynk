@@ -29,9 +29,3 @@ keyword, punctuation), or a file not in the solution, is error=NotFound. Works i
 files, with positions in the Razor source.
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get compiler facts about an expression").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

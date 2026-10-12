@@ -13,9 +13,3 @@ refused by apply_code_action. Analyzers do not run on Razor-generated code, so a
 compiler-diagnostic fixes and refactorings only.
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "List code actions").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

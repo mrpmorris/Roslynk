@@ -23,9 +23,3 @@ as a method inserted outside the @code block) is error=NotSupported, mismatched 
 error=Conflict; an out-of-range or empty selection, or an invalid methodName, is error=Invalid.
 
 Annotations: read-only no, idempotent no, destructive yes, open-world no (published MCP title: "Extract a selection into a method").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

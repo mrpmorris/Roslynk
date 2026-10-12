@@ -17,9 +17,3 @@ baseVersions (the documentVersion each file was read at) to be told if a file mo
 the file and reason; a patch with no file sections is error=Invalid.
 
 Annotations: read-only no, idempotent no, destructive yes, open-world no (published MCP title: "Apply a patch").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

@@ -7,9 +7,3 @@ included for a method or indexer, so it can be passed straight to the name-based
 metadata symbol. A position that binds to no symbol in any projection is error=NotFound.
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Find a symbol's definition").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

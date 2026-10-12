@@ -15,9 +15,3 @@ namespace -> type -> member, a matched member nesting under its (parent-only) ty
 A type's location is present only when the type itself matched.
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Search symbols by name").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

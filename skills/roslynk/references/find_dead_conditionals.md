@@ -17,9 +17,3 @@ workload is missing, or a CI-injected define) may be a false positive, so treat 
 'possible' dead code.
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Find never-compiled #if branches").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

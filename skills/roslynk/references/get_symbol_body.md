@@ -24,9 +24,3 @@ candidate names; a symbol with no source declaration (a namespace, or a referenc
 source returns that source) returns error=NotSupported.
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get symbol source text").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

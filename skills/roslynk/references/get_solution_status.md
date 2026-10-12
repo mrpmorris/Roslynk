@@ -12,9 +12,3 @@ errors) is, once it is Ready (never while Building, Updating or Faulted), follow
 message.
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get loaded-solution status").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.

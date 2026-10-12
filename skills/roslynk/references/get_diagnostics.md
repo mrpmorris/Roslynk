@@ -35,9 +35,3 @@ compiler's own diagnostics (RZxxxx, e.g. an unclosed @code block) are reported a
 and accompany a public rule, as IDE0005's does) are not listed - fix the public id instead.
 
 Annotations: read-only yes, idempotent yes, destructive no, open-world no (published MCP title: "Get compiler diagnostics").
-
----
-
-Shared guidance - result grammar, name matching, paging, freshness, failure codes, the
-edit/diagnostic workflow and Razor handling - is in [SKILL.md](../SKILL.md). Load it once,
-not per tool.
