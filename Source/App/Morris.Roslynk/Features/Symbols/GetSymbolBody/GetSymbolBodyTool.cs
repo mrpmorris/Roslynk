@@ -38,30 +38,22 @@ public sealed class GetSymbolBodyTool
 		SupportsPaging=Y
 
 		Returns verbatim declarations of methods, constructors, properties, indexers, events, fields,
-		local functions or types. Preserves indentation, line endings and spacing; Razor bodies are
+		local functions or types, preserving indentation, line endings and spacing; Razor bodies are
 		generated C#.
 
-		## Result
-
-		One declaration: project, path and loc headers, a blank line, then source text.
-		Partial types/methods: parts=<n>, then blocks headed
-		part=<n>,project=...,path=...,loc=...,lines=<count>. Includes generated implementations
-		(e.g. GeneratedRegex, LoggerMessage, LibraryImport).
-
-		## Errors
+		One declaration: project, path and loc headers, a blank line, then the source text. Partial
+		types/methods: parts=<n>, then blocks headed part=<n>,project=...,path=...,loc=...,lines=<count>.
+		Generated implementations (GeneratedRegex, LoggerMessage, LibraryImport) are included.
 
 		Ambiguous names/overloads return candidates. Symbols without source (namespaces or metadata-only
 		symbols) return NotSupported. Metadata spellings of source types (Ns.Box`1, N.Outer+Inner)
 		return their source.
 
-		## Paging exceptions
-
-		startItem counts returned source lines, including leading trivia when requested; count is total
-		lines. Keep includeLeadingTrivia and part unchanged. startItem past the end returns Invalid with
-		count. It pages one part; using it with multiple parts without part returns Invalid.
-
-		Parts exceeding the budget are listed without text as omitted=Y; headers include truncated=Y
-		and omittedParts=<k>. Fetch omitted parts with part=<n>, then page normally.
+		Paging exceptions: startItem counts returned source lines - its first comment line with
+		includeLeadingTrivia - not file lines, so keep includeLeadingTrivia and part unchanged across
+		pages. startItem past the end returns Invalid with count. It pages one part: with several parts
+		and no part=, Invalid. Parts exceeding the budget are listed without text as omitted=Y with
+		truncated=Y and omittedParts=<k>; fetch omitted parts with part=<n>, then page normally.
 		""")]
 	[McpServerTool(
 		Name = GetSymbolBodyName,

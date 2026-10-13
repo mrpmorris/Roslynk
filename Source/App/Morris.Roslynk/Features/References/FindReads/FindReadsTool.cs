@@ -30,31 +30,21 @@ public sealed class FindReadsTool
 	[Description("""
 		SupportsPaging=Y
 
-		Finds the reads of a field, property or parameter - including the read half of compound, increment
-		and ref - across the solution, resolved semantically.
-		The body has the find_references shape with one location per leaf and the access kind appended:
-		```
-		  resolvedSymbol=<name; a parameter is written Member:parameter>
+		Finds the reads of a field, property or parameter - including the read half of compound,
+		increment and ref - across the solution, resolved semantically. The body has the
+		find_references shape with one location per leaf and the access kind appended:
+		<memberKind>,<memberName>,<loc>,<accessKind>; resolvedSymbol= writes a parameter target as
+		Member:parameter.
 
-		  <project>
-		  \t<relative/forward-slash/folder>
-		  \t\t<file.cs|file.razor>
-		  \t\t\t<namespace, or "<global>">
-		  \t\t\t\t<typeKind>,<typeName>
-		  \t\t\t\t\t<memberKind>,<memberName>,<loc>,<accessKind>
-		```
-		Access kinds:
+		accessKind is read, assign (simple '='), compound ('+=', '??=', ...), increment ('++'/'--'), ref
+		(passed by ref, 'ref x', '&x'), out (passed as out), or init (a declaration, object/with
+		initializer, attribute named argument, or assignment to a constructor's own field/property in
+		that constructor). compound, increment and ref appear in BOTH find_reads and find_writes with
+		the same accessKind; do not sum the two tools' counts. nameof, documentation crefs and named call
+		arguments ('M(value: 1)') are excluded.
 
-		- read; assign: simple '='.
-		- compound: '+=', '??=', etc.; increment: '++'/'--'.
-		- ref: passed by ref, 'ref x', '&x'; out: passed as out.
-		- init: declaration, object/with initializer, attribute named argument, or assignment to
-		  a constructor's own field/property in that constructor.
-
-		compound, increment and ref appear in both find_reads and find_writes; do not sum their counts.
-		nameof, documentation crefs and named call arguments ('M(value: 1)') are excluded.
-		error=NotSupported is returned for a symbol that cannot be read or written (a method, type, event
-		or local variable).
+		error=NotSupported for a symbol that cannot be read or written (a method, type, event or local
+		variable).
 		""")]
 	[McpServerTool(
 		Name = FindReadsName,

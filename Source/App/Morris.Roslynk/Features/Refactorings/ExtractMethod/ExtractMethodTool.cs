@@ -42,21 +42,16 @@ public sealed class ExtractMethodTool
 	}
 
 	[Description("""
-		Extracts contiguous C# statements or one expression into a method/local function and replaces
-		the selection with a call. Uses Roslyn's Extract Method and data-flow analysis for parameters,
-		ref/out, return value, static/async and call-site code. Ignores surrounding selection whitespace.
+		Extracts contiguous C# statements or one expression into a method/local function and replaces the
+		selection with a call, using Roslyn's Extract Method and data-flow analysis for parameters,
+		ref/out, return value, static/async and call-site code. Selection start is inclusive, end
+		exclusive; surrounding whitespace is ignored.
 
-		## Result
-
-		Headers, then a blank line and solution-relative changed paths:
-
-		- applied; method: final name.
-		- symbolName: extracted member's full name, usable in name-based tools,
-		  e.g. N.T.M(int).NewMethod(string) for a local function.
-		- kind: Method|LocalFunction; signature: new declaration header.
-		- call: statement containing the call; status follows the shared protocol.
-
-		## Validation and errors
+		Headers, then a blank line and solution-relative changed paths: applied; method (final name);
+		symbolName (the extracted member's full name, usable in name-based tools, e.g.
+		N.T.M(int).NewMethod(string) for a local function); kind (Method|LocalFunction); signature (the
+		new declaration header); call (the statement containing the call); status follows the shared
+		protocol.
 
 		- NotSupported: Roslyn cannot extract, warns of possible behavior changes, or extraction adds
 		  compile errors (listed). Also generated .g.cs targets, including Razor output.
@@ -65,8 +60,8 @@ public sealed class ExtractMethodTool
 		- NotFound: documentPath is not a solution-compiled .cs/.razor/.cshtml file.
 		- Invalid: empty/out-of-range selection or invalid methodName.
 
-		Razor selections outside C# (@code or expressions) return NotSupported. Shared mapping rules apply;
-		inserting a method outside @code may be unmappable (NotSupported). Validation occurs before saving.
+		Razor selections outside C# (@code or expressions) return NotSupported; shared mapping rules
+		apply, and inserting a method outside @code may be unmappable. Validation occurs before saving.
 		""")]
 	[McpServerTool(
 		Name = ExtractMethodName,

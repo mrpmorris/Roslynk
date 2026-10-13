@@ -33,40 +33,23 @@ public sealed class GetDiagnosticsTool
 	[Description("""
 		SupportsPaging=Y
 
-		Returns compiler and analyzer diagnostics. Use summaryOnly=true for an overview; request details
-		when individual locations are needed. Analyzers run by default; includeAnalyzers=false is a
-		faster compiler-only pass. Scheduling/caching guidance is in the server instructions.
+		Returns compiler and analyzer diagnostics. Analyzers run by default; includeAnalyzers=false is a
+		faster compiler-only pass. Use summaryOnly=true for an overview and request details when
+		individual locations are needed.
 
-		## Result
+		Header counts errors/warnings/infos/hidden always describe the content-filtered set across every
+		severity, independent of the include flags. The body lists only severities whose include flag is
+		true; summaryOnly summarizes every severity when no flag is set, otherwise only the flagged ones.
+		Details nest project -> folder -> file -> severity, each leaf <id>,<line:col>,<message>.
+		summaryOnly returns one <id>,<count>,<project>,<path>,<line:col>,<message> line per id, ordered
+		by descending count then id.
 
-		Severity counts are always included. Details nest by project, folder, file and severity:
-		```
-		  errors=<n>
-		  warnings=<n>
-		  infos=<n>
-		  hidden=<n>
-
-		  <project>
-		  \t<relative/forward-slash/folder>
-		  \t\t<file.cs|file.razor>
-		  \t\t\t<errors|warnings|infos|hidden>
-		  \t\t\t\t<id>,<line:col>,<message>
-		```
-		message is the trailing free-text field.
-
-		summaryOnly=true returns one <id>,<count>,<project>,<path>,<line:col>,<message> line per id,
-		ordered by descending count then id. Includes all severities unless an include flag is set.
-
-		## Filters and coverage
-
-		Filters combine after compilation and reuse cached results. Counts describe the filtered set;
-		active filters appear as filter=<parameter>:<value>. An empty filtered result does not establish
-		that the whole solution is clean.
-
-		Unknown projectName/filePath returns NotFound with candidates. Known projects/files without
-		diagnostics return zero counts. Multi-targeted projects cover loaded frameworks.
-		RZxxxx diagnostics point to Razor source. Private fixer-trigger IDs accompanying public rules
-		are omitted; fix the public ID instead (e.g. IDE0005).
+		Filters (projectName/filePath/ids) apply after compilation and reuse cached results; active
+		filters are echoed as filter=<parameter>:<value>. An empty filtered result does not establish
+		that the whole solution is clean. Unknown projectName/filePath returns NotFound with candidates;
+		known ones without diagnostics return zero counts. Multi-targeted projects cover loaded
+		frameworks. RZxxxx diagnostics point to Razor source. Private fixer-trigger IDs accompanying
+		public rules are omitted; fix the public ID instead (e.g. IDE0005).
 		""")]
 	[McpServerTool(
 		Name = GetDiagnosticsName,
@@ -77,16 +60,16 @@ public sealed class GetDiagnosticsTool
 		OpenWorld = false)]
 	public async Task<string> GetDiagnostics(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Include error-severity diagnostics.")] bool includeErrors = false,
-		[Description("Include warning-severity diagnostics.")] bool includeWarnings = false,
-		[Description("Include info-severity diagnostics.")] bool includeInfo = false,
-		[Description("Include hidden-severity diagnostics.")] bool includeHidden = false,
+		[Description("Include error-severity diagnostics in the body.")] bool includeErrors = false,
+		[Description("Include warning-severity diagnostics in the body.")] bool includeWarnings = false,
+		[Description("Include info-severity diagnostics in the body.")] bool includeInfo = false,
+		[Description("Include hidden-severity diagnostics in the body.")] bool includeHidden = false,
 		[Description("Run the project's analyzers (NetAnalyzers / IDE rules) for a richer result; set false for a faster compiler-only pass.")] bool includeAnalyzers = true,
 		[Description("Only diagnostics from this project: the name as the outline prints it, with or without its extension. Case-insensitive; a multi-targeted project is matched across every loaded target framework.")] string? projectName = null,
 		[Description("Only diagnostics located in this file: absolute, or relative to the solution folder. A .razor/.cshtml path also matches the diagnostics reported against it. Case-insensitive.")] string? filePath = null,
 		[Description("Only these diagnostic ids, e.g. [\"CS0246\",\"CS0103\"]; case-insensitive. Omit, or pass an empty list, for every id.")] string[]? ids = null,
-		[Description("Optional cap on the entries listed in the body (id lines when summaryOnly is set); the per-severity header counts stay complete. Omit it to page through everything with startItem. When the set was capped, count=<items in the capped set> and truncated=Y precede the body; when the result also pages, nextStartItem=<k> names the continuation.")] int? maxResults = null,
-		[Description("true lists one line per diagnostic id instead of every diagnostic (the shape is in the tool description).")] bool summaryOnly = false,
+		[Description("Optional cap on the entries listed in the body (id lines when summaryOnly is set); header counts stay complete. When capped, count=<listed> and truncated=Y precede the body; nextStartItem=<k> then names the continuation. Omit to page through everything.")] int? maxResults = null,
+		[Description("true lists one line per diagnostic id instead of every diagnostic.")] bool summaryOnly = false,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{

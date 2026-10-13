@@ -21,12 +21,12 @@ public sealed class OpenSolutionTool
 	}
 
 	[Description("""
-		Loads a C# solution (.sln or .slnx) into Roslynk so its projects and code can be queried. Returns
-		'solutionId', 'status', 'projects', 'loadDiagnostics' headers, a blank line, then one
-		'<projectPath>,<documentCount>' line per project. Returns immediately: the solution loads in the
-		background, so status is Building (and the body empty) until it is Ready. Idempotent: opening the
-		same solution again returns the same instance. A solution file that does not exist returns
-		immediately as a NotFound error; a failed load is returned as a Faulted error.
+		Loads a C# solution (.sln or .slnx) so its projects and code can be queried. Returns solutionId,
+		status, projects and loadDiagnostics headers, a blank line, then one <projectPath>,<documentCount>
+		line per project. Returns immediately: the solution loads in the background, so status is
+		Building (and the body empty) until it is Ready. Idempotent: opening the same solution again
+		returns the same instance. A solution file that does not exist returns immediately as a NotFound
+		error; a failed load is returned as a Faulted error.
 		""")]
 	[McpServerTool(
 		Name = OpenSolutionName,

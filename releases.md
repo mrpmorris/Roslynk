@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Published tool prose and shared server instructions are ~10% smaller overall (shared instructions -19%; no tool description longer than before except `apply_patch`'s corrected `documentVersion` contract), with no contract, schema, parameter, default or annotation changes (Fixes #100)
+- Obsolete `#`-prefixed header examples in `get_symbol`, `find_definition`, `find_dead_conditionals` and the shared output wording now match the unprefixed keys `OutlineBuilder` emits; `get_members`/`get_type_hierarchy` type-name guidance no longer suggests parameter lists; `get_diagnostics` documents its exact severity-flag interaction; `apply_patch` documents its SHA-256 `documentVersion` contract (no read tool emits it yet) (Fixes #100)
+- `multi_query` no longer hand-enumerates its supported operations (the schema enum is authoritative; the prose list had drifted to 13 names while the catalog has 15), and its `ceil(size)` page estimate and `Roslynk:MaxResponseChars` note are gone, keeping omitted-result retries distinct from slot-body paging (Fixes #100)
 - Server instructions add a discovery-first workflow (names → relationships → member bodies) and a batching decision rule for `multi_query`; the roslynk skill mirrors both routing habits — measured ~16–24% fewer agent calls and 3.5× less tool output in A/B runs (Fixes #101)
 - Current tool guidance is published from C# method `[Description]` attributes; per-tool Markdown copies are removed, while the skill retains minimal routing guidance (Fixes #99, Fixes #100)
 - Shared workflows (scope, lifecycle, output, names, paging, freshness, editing, diagnostics and Razor) are returned in MCP server instructions from `McpServerRegistration.Configure`; the skill is reduced to routing guidance (Fixes #100)

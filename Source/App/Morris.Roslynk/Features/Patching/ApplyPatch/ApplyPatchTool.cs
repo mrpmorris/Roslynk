@@ -29,18 +29,20 @@ public sealed class ApplyPatchTool
 		Applies a git unified diff to text files, located by content (not line numbers) and written
 		atomically. Targets: solution-compiled .cs files and .razor/.cshtml documents (kept in sync with
 		the in-memory model), plus any other existing text file under the solution folder (e.g. .csproj,
-		.json, .md), written to disk. Returns header-only 'applied=<Y|N>' (and 'status' only when not
-		Ready) on success (applied is N for a checkOnly preview).
-		Hunk headers may omit line numbers (a bare '@@'); a content-anchored hunk must match exactly one
-		place, so include enough surrounding context that it is unambiguous. Paths are relative to the
-		solution folder; a path that is a unique suffix of a solution file (e.g. relative to the
-		repository root) also resolves. Edits existing files only: creation/deletion, binary files and
-		paths outside the solution folder are error=NotSupported; a file that does not exist is
-		error=NotFound; a path matching several distinct files is error=Ambiguous with
-		'candidate=<solution-relative path>' lines. Rejections list 'rejected=<path>' lines. Pass
-		baseVersions (the documentVersion each file was read at) to be told if a file moved since
-		(error=Stale with 'stale=<path>' lines). An unmatched or ambiguous hunk is error=Conflict naming
-		the file and reason; a patch with no file sections is error=Invalid.
+		.json, .md). Edits existing files only: creation/deletion, binary files and paths outside the
+		solution folder are error=NotSupported; a missing file is error=NotFound.
+
+		Returns header-only applied=<Y|N> ('status' only when not Ready; applied is N for a checkOnly
+		preview). Hunk headers may omit line numbers (a bare '@@'); a content-anchored hunk must match
+		exactly one place - include enough context to be unambiguous. Paths are relative to the solution
+		folder; a unique-suffix path also resolves. Several distinct matches are error=Ambiguous with
+		candidate=<solution-relative path> lines; rejections list rejected=<path> lines; an unmatched or
+		ambiguous hunk is error=Conflict naming file and reason; no file sections is error=Invalid.
+
+		baseVersions optionally guards against external edits: each entry pairs a patch path with the
+		documentVersion that file was read at - the SHA-256 hex of its text as Roslynk loads it (UTF-8
+		bytes, BOM excluded). No read tool reports documentVersion today, so supply it only when you can
+		compute that exact hash. A mismatch is error=Stale with stale=<path> lines.
 		""")]
 	[McpServerTool(
 		Name = ApplyPatchName,
@@ -52,7 +54,7 @@ public sealed class ApplyPatchTool
 	public async Task<string> ApplyPatch(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("A git unified diff (--- / +++ / @@ hunks) targeting one or more text files.")] string patch,
-		[Description("Optional: the documentVersion each touched file was based on, to detect external edits.")] IReadOnlyList<FileVersion>? baseVersions = null,
+		[Description("Optional: pairs each touched file's patch path with the documentVersion (the SHA-256 hex of its text as Roslynk loads it) it was read at, to detect external edits.")] IReadOnlyList<FileVersion>? baseVersions = null,
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{

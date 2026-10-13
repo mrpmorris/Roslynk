@@ -37,24 +37,15 @@ public sealed class GetCallersTool
 		SupportsPaging=Y
 
 		Finds the methods that call the named method. Calls the compiler inserts count too: foreach/await
-		plumbing (GetEnumerator, MoveNext, Current, an enumerator's Dispose, await foreach and await using
-		equivalents, GetAwaiter, IsCompleted, GetResult), the Dispose/DisposeAsync a using or await using
-		runs, deconstruction and positional patterns, collection-initializer Add, user-defined operators
-		and conversions (including +=, ++, implicit conversions and true/false in a condition),
+		plumbing (GetEnumerator, MoveNext, Current, an enumerator's Dispose, the await foreach and await
+		using equivalents, GetAwaiter, IsCompleted, GetResult), the Dispose/DisposeAsync a using or await
+		using runs, deconstruction and positional patterns, collection-initializer Add, user-defined
+		operators and conversions (including +=, ++, implicit conversions and true/false in a condition),
 		query-expression methods, interpolated-string handler members, implicit base() calls, and the
-		Length/Count behind ^ and ...
-		Callers are grouped file -> namespace -> containing type -> calling member, each leaf showing the
-		caller's declaration location:
-		```
-		  resolvedSymbol=<name, parameter types included for a method or indexer>
+		Length/Count behind ^ and ... - get_callees excludes that plumbing.
 
-		  <project>
-		  \t<relative/forward-slash/folder>
-		  \t\t<file.cs|file.razor>
-		  \t\t\t<namespace>
-		  \t\t\t\t<typeKind>,<typeName>
-		  \t\t\t\t\t<memberKind>,<memberName>,<loc>
-		```
+		Callers are grouped project -> folder -> file -> namespace -> containing type, each leaf showing
+		the calling member and its declaration location.
 		""")]
 	[McpServerTool(
 		Name = GetCallersName,
