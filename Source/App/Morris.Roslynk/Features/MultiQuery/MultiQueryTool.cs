@@ -71,8 +71,8 @@ public sealed class MultiQueryTool
 		OpenWorld = false)]
 		public async Task<string> MultiQuery(
 			[Description("Solution handle returned by open_solution; every operation runs against this one solution's snapshot.")] string solutionId,
-		[Description("The operations to run, in order. Each names a read-only tool and carries that tool's arguments.")] IReadOnlyList<MultiQueryOperation> operations,
-		[Description("Optional: the snapshot=<id> from a previous multi_query response, checked before anything runs; a mismatch is error=Stale naming both ids - re-run the whole batch. Omit for a one-shot batch.")] string? expectSnapshot = null)
+			[Description("The operations to run, in order. Each names a read-only tool and carries that tool's arguments.")] IReadOnlyList<MultiQueryOperation> operations,
+			[Description("Optional: the snapshot=<id> from a previous multi_query response, checked before anything runs; a mismatch is error=Stale naming both ids - re-run the whole batch. Omit for a one-shot batch.")] string? expectSnapshot = null)
 	{
 		// Structural validation first: an uninterpretable batch cannot produce slots. (An op naming a tool
 		// outside the enum never reaches here - the SDK's binding layer refuses it and RoslynkTool renders
