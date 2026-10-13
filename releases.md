@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Server instructions add a discovery-first workflow (names → relationships → member bodies) and a batching decision rule for `multi_query`; the roslynk skill mirrors both routing habits — measured ~16–24% fewer agent calls and 3.5× less tool output in A/B runs (Fixes #101)
 - Current tool guidance is published from C# method `[Description]` attributes; per-tool Markdown copies are removed, while the skill retains minimal routing guidance (Fixes #99, Fixes #100)
 - Shared workflows (scope, lifecycle, output, names, paging, freshness, editing, diagnostics and Razor) are returned in MCP server instructions from `McpServerRegistration.Configure`; the skill is reduced to routing guidance (Fixes #100)
 - The roslynk skill is reduced to routing guidance; the duplicated tool-reference file is removed (Fixes #99)

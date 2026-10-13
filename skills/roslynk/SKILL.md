@@ -13,3 +13,6 @@ Follow the MCP server instructions for shared workflows and conventions.
 Read each tool's description and schema for its contract.
 
 Use standard tools for diffs, non-code files, unavailable documents, for reading specific line ranges of a symbol's body, and runtime tests.
+
+Batch independent read-only questions with multi_query; do dependent discovery first.
+Discover symbol names, then query relationships and member bodies — avoid whole-type reads.

@@ -66,6 +66,12 @@ internal static class McpServerRegistration
 			metadata Ns.Outer`1+Inner. Local functions nest under their declaring member:
 			Ns.T.M.local, Ns.T.M.outer.inner. Any segment may carry parameter types.
 
+			## Workflow
+
+			Discover exact symbol names before asking about relationships; then inspect references/callers
+			and the relevant member bodies. To understand a method, start with its body: prefer member
+			bodies over reading whole containing types.
+
 			## Conditional coverage
 
 			Covers loaded target frameworks plus variants toggling one symbol uniformly defined or undefined
@@ -93,8 +99,10 @@ internal static class McpServerRegistration
 
 			## Batching
 
-			Batch independent read-only queries with multi_query for one consistent snapshot.
-			See the multi_query tool description for supported operations and continuation.
+			Whenever you need two or more independent facts whose names or arguments are already known,
+			send them as one multi_query batch; do dependent discovery first, then batch the follow-ups.
+			Do not re-query results you already hold. See the multi_query tool description for supported
+			operations and continuation.
 
 			## Editing and diagnostics
 
