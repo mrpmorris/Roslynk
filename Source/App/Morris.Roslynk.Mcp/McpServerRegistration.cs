@@ -15,7 +15,7 @@ internal static class McpServerRegistration
 		{
 			Name = "Roslynk",
 			Title = "Roslynk; C# semantic intelligence",
-			Version = "1.0.0"
+			Version = typeof(McpServerRegistration).Assembly.GetName().Version?.ToString() ?? "1.0.0"
 		};
 
 		// Shared guidance has one home here; tool attributes carry only their own contracts.
