@@ -31,11 +31,9 @@ public sealed class GetSymbolTool
 	}
 
 	[Description("""
-		Returns a symbol's declaration without its implementation, resolved by fully-qualified name; its
-		metadata signature when no source is available. A single source match returns project, path and
-		loc headers, a blank line, then the verbatim declaration cut before its body (the opening brace
-		or '=>'). A metadata symbol instead returns source=metadata, kind, signature and assembly
-		headers.
+		Returns a symbol's declaration without implementation. Source results: project, path and loc
+		headers, then the verbatim declaration before its opening brace or '=>'.
+		Without source: source=metadata, kind, signature and assembly headers.
 		""")]
 	[McpServerTool(
 		Name = GetSymbolName,
@@ -46,7 +44,7 @@ public sealed class GetSymbolTool
 		OpenWorld = false)]
 	public async Task<string> GetSymbol(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Fully-qualified symbol name; reuse names returned by discovery. Include parameter types to select one overload.")] string symbolName,
+		[Description("Symbol name.")] string symbolName,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);

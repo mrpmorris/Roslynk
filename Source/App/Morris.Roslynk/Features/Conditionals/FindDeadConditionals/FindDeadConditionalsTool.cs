@@ -28,16 +28,13 @@ public sealed class FindDeadConditionalsTool
 	[Description("""
 		SupportsPaging=Y
 
-		Flags #if / #elif / #else branches whose region is never compiled in any known configuration - a
-		likely typo'd or stale symbol, or intentionally-disabled code. Each condition is evaluated
-		against the configurations the solution actually builds (each project's symbols, and the same
-		set minus DEBUG), across all target frameworks; a branch taken by none is reported, grouped by
-		file under a deadConditionals=<n> header, each leaf <line:col>,<directive>,<condition> where
-		directive is if|elif|else and condition is the raw #if expression ('(else)' for #else).
+		Finds #if/#elif/#else branches absent from every checked configuration: each project's symbols
+		and those symbols without DEBUG, across loaded frameworks. Results are possible dead code;
+		missing workloads or CI-only defines can cause false positives.
 
-		A branch defined only in a configuration not loaded here (for example a target framework whose
-		workload is missing, or a CI-injected define) may be a false positive, so treat the result as
-		possible dead code. Also use find_dead_code to find unreferenced symbols.
+		Header: deadConditionals=<n>. Body grouped by file; leaves: <line:col>,<directive>,<condition>.
+		directive=if|elif|else; condition is the raw expression or '(else)'.
+		Use find_dead_code for unreferenced symbols.
 		""")]
 	[McpServerTool(
 		Name = FindDeadConditionalsName,

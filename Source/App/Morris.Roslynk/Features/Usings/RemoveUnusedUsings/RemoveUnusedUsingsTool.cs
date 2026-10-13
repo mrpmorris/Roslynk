@@ -50,14 +50,10 @@ public sealed class RemoveUnusedUsingsTool
 	}
 
 	[Description("""
-		Removes unnecessary using directives (CS8019) solution-wide or in documentPath.
-		Includes .razor/.cshtml @using lines; preserves shared _Imports.razor/_ViewImports.cshtml usings.
-
-		Returns applied, removedCount and status headers, then a blank line and solution-relative
-		changed paths. With nothing to remove: applied=N, removedCount=0; safe to rerun.
-
-		NotFound: documentPath is not a solution-compiled .cs/.razor/.cshtml file.
-		Stale: a target file changed on disk since loading.
+		Removes unnecessary using directives (CS8019), solution-wide or in documentPath, including
+		Razor @using lines. Additional header: removedCount.
+		No changes: applied=N, removedCount=0; safe to rerun.
+		NotFound: unloaded source file.
 		""")]
 	[McpServerTool(
 		Name = RemoveUnusedUsingsName,
@@ -68,7 +64,7 @@ public sealed class RemoveUnusedUsingsTool
 		OpenWorld = false)]
 	public async Task<string> RemoveUnusedUsings(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Optional path of a single .cs, .razor or .cshtml file to clean (absolute or relative to the solution folder). Omit to clean the whole solution.")] string? documentPath = null,
+		[Description("Source file to clean; omit for the whole solution.")] string? documentPath = null,
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{

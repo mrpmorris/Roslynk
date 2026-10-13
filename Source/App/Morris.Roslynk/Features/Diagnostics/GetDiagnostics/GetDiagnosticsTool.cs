@@ -33,23 +33,17 @@ public sealed class GetDiagnosticsTool
 	[Description("""
 		SupportsPaging=Y
 
-		Returns compiler and analyzer diagnostics. Analyzers run by default; includeAnalyzers=false is a
-		faster compiler-only pass. Use summaryOnly=true for an overview and request details when
-		individual locations are needed.
+		Returns compiler/analyzer diagnostics.
 
-		Header counts errors/warnings/infos/hidden always describe the content-filtered set across every
-		severity, independent of the include flags. The body lists only severities whose include flag is
-		true; summaryOnly summarizes every severity when no flag is set, otherwise only the flagged ones.
-		Details nest project -> folder -> file -> severity, each leaf <id>,<line:col>,<message>.
-		summaryOnly returns one <id>,<count>,<project>,<path>,<line:col>,<message> line per id, ordered
-		by descending count then id.
+		errors/warnings/infos/hidden count all content-filtered severities regardless of include flags.
+		The body lists flagged severities; summaryOnly summarizes all if none are flagged, otherwise
+		only flagged ones. Details: project > folder > file > severity; leaves: <id>,<line:col>,<message>.
+		Summary: <id>,<count>,<project>,<path>,<line:col>,<message> per id, ordered by count descending then id.
 
-		Filters (projectName/filePath/ids) apply after compilation and reuse cached results; active
-		filters are echoed as filter=<parameter>:<value>. An empty filtered result does not establish
-		that the whole solution is clean. Unknown projectName/filePath returns NotFound with candidates;
-		known ones without diagnostics return zero counts. Multi-targeted projects cover loaded
-		frameworks. RZxxxx diagnostics point to Razor source. Private fixer-trigger IDs accompanying
-		public rules are omitted; fix the public ID instead (e.g. IDE0005).
+		projectName/filePath/ids filter after compilation, reusing cached results; active filters echo
+		filter=<parameter>:<value>. Empty filtered results do not prove the solution clean.
+		Unknown project/file returns NotFound with candidates. Known matches without diagnostics return zeros.
+		Private fixer-trigger IDs are omitted; fix the public rule instead (e.g. IDE0005).
 		""")]
 	[McpServerTool(
 		Name = GetDiagnosticsName,
@@ -60,16 +54,16 @@ public sealed class GetDiagnosticsTool
 		OpenWorld = false)]
 	public async Task<string> GetDiagnostics(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Include error-severity diagnostics in the body.")] bool includeErrors = false,
-		[Description("Include warning-severity diagnostics in the body.")] bool includeWarnings = false,
-		[Description("Include info-severity diagnostics in the body.")] bool includeInfo = false,
-		[Description("Include hidden-severity diagnostics in the body.")] bool includeHidden = false,
-		[Description("Run the project's analyzers (NetAnalyzers / IDE rules) for a richer result; set false for a faster compiler-only pass.")] bool includeAnalyzers = true,
-		[Description("Only diagnostics from this project: the name as the outline prints it, with or without its extension. Case-insensitive; a multi-targeted project is matched across every loaded target framework.")] string? projectName = null,
-		[Description("Only diagnostics located in this file: absolute, or relative to the solution folder. A .razor/.cshtml path also matches the diagnostics reported against it. Case-insensitive.")] string? filePath = null,
-		[Description("Only these diagnostic ids, e.g. [\"CS0246\",\"CS0103\"]; case-insensitive. Omit, or pass an empty list, for every id.")] string[]? ids = null,
-		[Description("Optional cap on the entries listed in the body (id lines when summaryOnly is set); header counts stay complete. When capped, count=<listed> and truncated=Y precede the body; nextStartItem=<k> then names the continuation. Omit to page through everything.")] int? maxResults = null,
-		[Description("true lists one line per diagnostic id instead of every diagnostic.")] bool summaryOnly = false,
+		[Description("List errors.")] bool includeErrors = false,
+		[Description("List warnings.")] bool includeWarnings = false,
+		[Description("List info diagnostics.")] bool includeInfo = false,
+		[Description("List hidden diagnostics.")] bool includeHidden = false,
+		[Description("Run analyzers; false is faster, compiler-only.")] bool includeAnalyzers = true,
+		[Description("Project filter: outline name with optional extension, case-insensitive; all loaded target frameworks.")] string? projectName = null,
+		[Description("File filter (case-insensitive), including diagnostics mapped to Razor source.")] string? filePath = null,
+		[Description("Diagnostic ids (case-insensitive), e.g. [\"CS0246\"]; null/empty matches all.")] string[]? ids = null,
+		[Description("Body-entry cap (ids with summaryOnly). Capped bodies report count=<listed>, truncated=Y.")] int? maxResults = null,
+		[Description("Summarize by diagnostic id.")] bool summaryOnly = false,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{

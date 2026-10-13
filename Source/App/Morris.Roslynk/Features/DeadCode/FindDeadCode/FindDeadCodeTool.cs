@@ -55,23 +55,18 @@ public sealed class FindDeadCodeTool
 	[Description("""
 		SupportsPaging=Y
 
-		Finds symbols (types, methods, properties, fields, events) with no references, conservatively
-		filtered to avoid false positives: it excludes interface implementations, virtual/override
-		chains, test members, generated code, and DI/reflection-activated members, and (unless
-		includePublic is true) the public API surface. Also use find_dead_conditionals for unreachable
-		#if branches.
+		Finds unreferenced types/methods/properties/fields/events, conservatively excluding interface
+		implementations, virtual/override chains, tests, generated and DI/reflection-activated members.
+		Excludes public APIs unless includePublic. find_dead_conditionals finds unreachable #if branches.
 
-		Candidates nest project -> folder -> file -> namespace -> type, each leaf
-		<memberKind>,<memberName>,<loc>,<confidence>,<reason> with confidence High|Medium; a dead type is
-		its own leaf carrying its own loc. loc is the full declaration span, ready to pass to
-		apply_patch to remove the member. Each unused overload of a member is its own leaf, distinguished
-		by loc; the leaf name carries no parameter list, so pass the member name to get_symbol_body and
-		pick from the candidates it offers. The host decides whether to remove a candidate. The scan is
-		per-symbol, so narrow large solutions with scope.
+		Body: project > folder > file > namespace > type; leaves:
+		<memberKind>,<memberName>,<loc>,<confidence>,<reason>, confidence=High|Medium.
+		Dead types have their own leaf/location. loc spans the declaration for apply_patch removal.
+		Unused overloads have separate locations, without parameter lists: get_symbol_body offers
+		candidates. The host decides removals. Scan is per-symbol; narrow large solutions with scope.
 
-		maxResults caps the scan itself: count is candidates found, and truncated=Y can also mean
-		maxResults stopped the scan. Only nextStartItem indicates another result page. Omit maxResults
-		for a complete scan.
+		maxResults caps the scan: count is candidates found; truncated=Y may mean the cap stopped scanning.
+		Omit maxResults for a complete scan.
 		""")]
 	[McpServerTool(
 		Name = FindDeadCodeName,
@@ -82,9 +77,9 @@ public sealed class FindDeadCodeTool
 		OpenWorld = false)]
 	public async Task<string> FindDeadCode(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Optional fully-qualified-name prefix to limit the scan, e.g. MyApp.Services. Omit for the whole solution.")] string? scope = null,
+		[Description("Name prefix, e.g. MyApp.Services; omit for the whole solution.")] string? scope = null,
 		[Description("Include unreferenced public/protected members (the API surface).")] bool includePublic = false,
-		[Description("Maximum candidates to scan for; omit to scan everything (the result then pages).")] int? maxResults = null,
+		[Description("Scan cap; omit for a complete scan.")] int? maxResults = null,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{

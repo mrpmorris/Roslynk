@@ -37,31 +37,24 @@ public sealed class RenameParameterTool
 	}
 
 	[Description("""
-		Renames a parameter of one method, local function, constructor or indexer overload, updating its
-		declaration, body uses, named call arguments and <paramref> documentation; strings, comments and
-		unrelated same-named text are unchanged.
+		Renames one method/local function/constructor/indexer overload's parameter, updating declaration,
+		body uses, named call arguments and <paramref> docs. Strings/comments/unrelated text are unchanged.
 
-		Cascades through overridden/overriding members, interfaces/implementations and both
-		partial-method parts when a source parameter at the same position has the same old name.
-		Different names, metadata declarations and generated-only declarations remain unchanged and
-		appear in unchangedRelated.
+		Cascades through overrides, interfaces/implementations and partial-method parts when a source
+		parameter at the same position has the old name. Other names, metadata and generated-only
+		related declarations remain unchanged, listed in unchangedRelated.
 
-		Headers, then a blank line and one solution-relative changed-file path per line: applied (N for
-		checkOnly previews); resolvedMethod (the member before rename); parameter (the old name);
-		renamedMembers (renamed declaration count, including the target); unchangedRelated
-		(semicolon-separated, omitted when empty); status follows the shared output protocol.
+		Additional headers: resolvedMethod (pre-rename member), parameter (old name), renamedMembers
+		(declaration count including target), unchangedRelated (semicolon-separated; omitted if empty).
 
-		- Invalid: invalid identifier, or newName equals parameterName.
-		- Ambiguous methodId: one candidate per overload; with no match, fuzzy suggestions - copy a
-		  candidate back verbatim.
-		- NotFound: parameterName is absent; lists the member's parameters.
+		Errors:
+		- Invalid: invalid identifier or newName=parameterName.
+		- Ambiguous methodId: overload candidates; no match gives fuzzy suggestions.
+		- NotFound: absent parameterName; lists parameters.
 		- Conflict: newName clashes with a parameter, local, local function, lambda/query variable or
-		  type parameter inside a renamed declaration.
-		- NotSupported: the target is not a method/local function/constructor/indexer, is a positional
-		  record parameter, or is declared only in metadata or generated source (names the generator).
-		- Stale: a file changed on disk since loading.
-
-		Validation failures occur before saving.
+		  type parameter in a renamed declaration.
+		- NotSupported: unsupported target kind, positional record parameter, metadata-only or
+		  generated-only target (names generator).
 		""")]
 	[McpServerTool(
 		Name = RenameParameterName,
@@ -72,9 +65,9 @@ public sealed class RenameParameterTool
 		OpenWorld = false)]
 	public async Task<string> RenameParameter(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Fully-qualified name of the method, local function, constructor or indexer that declares the parameter; reuse names returned by discovery. Include parameter types to select one overload.")] string methodId,
-		[Description("The parameter's current name.")] string parameterName,
-		[Description("The new name (must be a valid C# identifier).")] string newName,
+		[Description("Declaring method/local function/constructor/indexer name.")] string methodId,
+		[Description("Current parameter name.")] string parameterName,
+		[Description("New C# identifier.")] string newName,
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{

@@ -24,14 +24,12 @@ public sealed class GetSolutionStatusTool
 	}
 
 	[Description("""
-		Lists loaded solutions after a blank line, one <solutionId>,<status>,<loaded>/<total> line each;
-		loaded is live project progress while Building and total is '?' until known after initial
-		loading.
+		Lists loaded solutions: <solutionId>,<status>,<loaded>/<total>.
+		loaded tracks Building progress; total='?' until known after initial loading.
 
-		Ready solutions include indented loadDiagnostic=<message> lines for load problems such as
-		unloadable analyzers/generators, project evaluation failures or missing SDKs - these can explain
-		unexpected compiler errors. Messages are omitted while Building, Updating or Faulted. At most 20
-		messages per solution, then loadDiagnosticsTruncated=<n>; set allLoadDiagnostics=true for all.
+		Ready solutions add indented loadDiagnostic=<message> for analyzer/generator load failures,
+		project evaluation failures or missing SDKs, which may explain compiler errors.
+		Other states omit messages. Up to 20 per solution, then loadDiagnosticsTruncated=<n>.
 		""")]
 	[McpServerTool(
 		Name = GetSolutionStatusName,
@@ -41,7 +39,7 @@ public sealed class GetSolutionStatusTool
 		Destructive = false,
 		OpenWorld = false)]
 	public string GetSolutionStatus(
-		[Description("true lists every load diagnostic message of every solution instead of the first " + MaxLoadDiagnosticsText + " per solution.")] bool allLoadDiagnostics = false)
+		[Description("Include all load diagnostics.")] bool allLoadDiagnostics = false)
 	{
 		List<RoslynInstance> instances = InstanceRegistry.LoadedInstances().ToList();
 		int? messageLimit = allLoadDiagnostics ? null : MaxLoadDiagnostics;

@@ -33,26 +33,20 @@ public sealed class GetCalleesTool
 	[Description("""
 		SupportsPaging=Y
 
-		Finds the methods, constructors, property/event accessors and operators that the named member's
-		code calls. A property read or write names the accessor that runs (a compound assignment or
-		increment reports both), 'e += h' names the event's add accessor, a property is its accessors and
-		a field its initializer, and a constructor also reports the calls in the field/property
-		initializers it runs. User-defined operators and conversions, the Dispose a using runs, and a
-		method group passed as a delegate are included. Lambdas and local functions declared inside the
-		member belong to it. A member with no code in the solution (an abstract or interface declaration,
-		an auto-property) calls nothing.
+		Lists methods, constructors, property/event accessors and operators called by a member.
+		Property reads/writes name their accessors (compound/increment reports both); e += h names
+		the add accessor. A property includes its accessors; a field includes its initializer;
+		constructors include initializers they run. Includes user-defined operators/conversions,
+		using's Dispose, delegate method groups, nested lambdas and local functions. Abstract/interface
+		declarations and auto-properties without code call nothing.
 
-		The compiler-inserted plumbing for foreach (GetEnumerator, MoveNext, Current) and await
-		(GetAwaiter, IsCompleted, GetResult) is not included - get_callers does include it. An explicit
-		.GetAwaiter() call is.
+		Implicit foreach (GetEnumerator, MoveNext, Current) and await (GetAwaiter, IsCompleted, GetResult)
+		calls are excluded; get_callers includes them. Explicit calls remain included.
 
-		Solution callees group project -> folder -> file -> namespace -> type; callees from referenced
-		assemblies (BCL, NuGet) appear under one <external:AssemblyName> line per assembly with an empty
-		loc. Each leaf is <memberKind>,<memberName>,<loc> plus a parameterTypes field only when the
-		callee's own type declares more than one method of that name (inherited overloads do not count;
-		the parameterless overload is '()'). Callees are reported as declared: generic instantiations
-		(List<int>.Add) collapse to the generic definition, and an extension method lists its 'this'
-		parameter.
+		Solution callees nest project > folder > file > namespace > type; metadata callees appear
+		under <external:AssemblyName> with empty loc. Leaves: <memberKind>,<memberName>,<loc>, plus
+		parameterTypes only for overloads declared in the callee's type (parameterless overload: '()'). Constructed generics collapse to their definitions; extension
+		methods include their 'this' parameter.
 		""")]
 	[McpServerTool(
 		Name = GetCalleesName,
@@ -63,8 +57,8 @@ public sealed class GetCalleesTool
 		OpenWorld = false)]
 	public async Task<string> GetCallees(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Fully-qualified member name; reuse names returned by discovery. Include parameter types to select one overload.")] string memberName,
-		[Description("Leave out callees declared in referenced assemblies (BCL, NuGet), listing only the solution's own members.")] bool excludeExternal = false,
+		[Description("Member name.")] string memberName,
+		[Description("Exclude metadata callees (BCL/NuGet).")] bool excludeExternal = false,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{

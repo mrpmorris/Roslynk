@@ -31,11 +31,10 @@ public sealed class SearchSymbolsTool
 	[Description("""
 		SupportsPaging=Y
 
-		Searches source-declared symbols whose name contains the query (case-insensitive) across the
-		solution. Declarations a source generator emits are included, as are local functions nesting
-		under the member (and any outer local functions) that declares them. Matches are grouped project
-		-> folder -> file -> namespace -> type -> member; a matched member nests under its (parent-only)
-		type, and a type's location appears only when the type itself matched.
+		Searches source symbol names, including generated declarations
+		and local functions nested under their declaring member/outer local functions.
+		Body: project > folder > file > namespace > type > member. Members nest under parent types;
+		type locations appear only when the type itself matches.
 		""")]
 	[McpServerTool(
 		Name = SearchSymbolsName,
@@ -46,8 +45,8 @@ public sealed class SearchSymbolsTool
 		OpenWorld = false)]
 	public async Task<string> SearchSymbols(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Substring to match against symbol names (case-insensitive).")] string query,
-		[Description("Maximum results to return; omit for every result.")] int? maxResults = null,
+		[Description("Case-insensitive name substring.")] string query,
+		[Description("Result cap.")] int? maxResults = null,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{

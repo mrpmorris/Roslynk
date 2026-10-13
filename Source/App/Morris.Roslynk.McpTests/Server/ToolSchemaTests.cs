@@ -153,8 +153,8 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 		Assert.False(string.IsNullOrWhiteSpace(options.ServerInstructions));
 		foreach (string section in new[]
 		{
-			"Scope", "Lifecycle", "Output protocol", "Name grammar", "Conditional coverage",
-			"Failures and freshness", "Paging", "Batching", "Editing and diagnostics", "Razor"
+			"Scope", "Lifecycle", "Output protocol", "Parameters", "Name grammar", "Conditional coverage",
+			"Failures and freshness", "Paging", "Reads and writes", "Batching", "Editing and diagnostics", "Razor"
 		})
 			Assert.Contains("## " + section, options.ServerInstructions, StringComparison.Ordinal);
 
@@ -218,9 +218,9 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 			Assert.DoesNotContain(name, required);
 		}
 
-		Assert.Contains("(Default value: 0)", properties["maxSize"].GetProperty("description").GetString(), StringComparison.Ordinal);
-		Assert.Contains("(Default value: 1)", properties["startItem"].GetProperty("description").GetString(), StringComparison.Ordinal);
-		Assert.Contains("(Default value: 0)", properties["part"].GetProperty("description").GetString(), StringComparison.Ordinal);
+		Assert.Contains("Default: 0", properties["maxSize"].GetProperty("description").GetString(), StringComparison.Ordinal);
+		Assert.Contains("Default: 1", properties["startItem"].GetProperty("description").GetString(), StringComparison.Ordinal);
+		Assert.Contains("Default: 0", properties["part"].GetProperty("description").GetString(), StringComparison.Ordinal);
 	}
 
 	[Fact]

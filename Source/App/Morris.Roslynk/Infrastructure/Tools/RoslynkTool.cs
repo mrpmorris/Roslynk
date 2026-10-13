@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.Extensions.AI;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
@@ -93,9 +94,43 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 		string json = JsonSerializer.Serialize(tool, McpJsonUtilities.DefaultOptions);
 		Tool copy = JsonSerializer.Deserialize<Tool>(json, McpJsonUtilities.DefaultOptions)
 			?? throw new InvalidOperationException($"Could not copy the protocol definition of tool '{tool.Name}'.");
-		copy.InputSchema = AIJsonUtilities.TransformSchema(tool.InputSchema, SchemaTransformOptions);
+		JsonNode schema = JsonNode.Parse(AIJsonUtilities.TransformSchema(tool.InputSchema, SchemaTransformOptions).GetRawText())!;
+		ShortenDefaults(tool.InputSchema, schema);
+		copy.InputSchema = JsonSerializer.SerializeToElement(schema);
 		copy.Description = string.IsNullOrEmpty(copy.Description) ? null : copy.Description;
 		return copy;
+	}
+
+	// Only shorten SDK-generated suffixes on nodes that originally carried a default.
+	// Preserve authored descriptions and the SDK's representation of the default value.
+	private static void ShortenDefaults(JsonElement original, JsonNode? transformed)
+	{
+		if (original.ValueKind == JsonValueKind.Object && transformed is JsonObject obj)
+		{
+			if (original.TryGetProperty("default", out _) &&
+				obj["description"] is JsonValue value && value.TryGetValue(out string? description) &&
+				description is not null)
+			{
+				const string marker = "(Default value: ";
+				int authoredLength = original.TryGetProperty("description", out JsonElement authored)
+					? authored.GetString()?.Length ?? 0 : 0;
+				int start = description.IndexOf(marker, authoredLength, StringComparison.Ordinal);
+				if (authoredLength == 0 && description.StartsWith("Default value: ", StringComparison.Ordinal))
+					obj["description"] = "Default: " + description["Default value: ".Length..];
+				else if (start >= 0 && description.EndsWith(')'))
+					obj["description"] = description[..start] + "Default: " + description[(start + marker.Length)..^1];
+			}
+
+			foreach (JsonProperty property in original.EnumerateObject())
+				if (obj.TryGetPropertyValue(property.Name, out JsonNode? child))
+					ShortenDefaults(property.Value, child);
+		}
+		else if (original.ValueKind == JsonValueKind.Array && transformed is JsonArray array)
+		{
+			int index = 0;
+			foreach (JsonElement item in original.EnumerateArray())
+				ShortenDefaults(item, array[index++]);
+		}
 	}
 
 	/// <summary>

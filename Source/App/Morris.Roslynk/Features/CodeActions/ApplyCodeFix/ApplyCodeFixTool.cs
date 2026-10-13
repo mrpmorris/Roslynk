@@ -41,21 +41,16 @@ public sealed class ApplyCodeFixTool
 	}
 
 	[Description("""
-		Fixes a diagnostic by id (e.g. CS0219, IDE0005) and its 1-based line/column from get_diagnostics,
-		selecting the diagnostic whose span contains the position without first listing actions.
+		Fixes the diagnostic containing the supplied position, using its id and location from get_diagnostics.
 
-		Distinct fixes return Conflict with candidate=<actionId>,Fix,<diagnosticId> <title> per fix:
+		Multiple fixes return Conflict with candidate=<actionId>,Fix,<diagnosticId> <title>:
 		choose by title and pass actionId to apply_code_action; do not repeat apply_code_fix.
 
-		Errors: NotFound - documentPath is not a solution-compiled .cs/.razor/.cshtml file, or no
-		diagnostic matches the position; Invalid - line or column below 1; NotSupported - no registered
-		fix, or an unmappable Razor edit; Conflict - the fix produced no changes (no candidates), or
-		Razor text mismatches; Stale - a target file changed on disk since loading.
+		Errors: NotFound for an unloaded document or no diagnostic at the position; Invalid for
+		line/column below 1; NotSupported for no registered fix; Conflict for no changes (without candidates).
+		CS8019/IDE0005 fixes remove the @using on that line.
 
-		Razor positions/mapping follow the shared rules. Compiler fixes and CS8019/IDE0005 are supported;
-		the latter remove the @using on that line. Ambiguity and mapping failures occur before saving.
-
-		Returns applied, action and status headers, then a blank line and solution-relative changed paths.
+		Additional header: action.
 		""")]
 	[McpServerTool(
 		Name = ApplyCodeFixName,
@@ -67,9 +62,9 @@ public sealed class ApplyCodeFixTool
 	public async Task<string> ApplyCodeFix(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description(ParameterDescriptions.DocumentPath)] string documentPath,
-		[Description("The diagnostic id to fix, e.g. CS0219 or IDE0005.")] string diagnosticId,
-		[Description("1-based line of the diagnostic, as get_diagnostics reports it.")] int line,
-		[Description("1-based column of the diagnostic, as get_diagnostics reports it.")] int column,
+		[Description("Diagnostic id, e.g. CS0219/IDE0005.")] string diagnosticId,
+		[Description("Diagnostic line from get_diagnostics.")] int line,
+		[Description("Diagnostic column from get_diagnostics.")] int column,
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{

@@ -34,11 +34,10 @@ public sealed class FindReferencesTool
 	[Description("""
 		SupportsPaging=Y
 
-		Finds semantic references across the solution, including partial classes and code-behind. The
-		body groups every reference under project -> folder -> file -> namespace -> type -> member, so a
-		shared declaration is printed once; the type line carries locations only when the type
-		declaration itself references the symbol, and a leaf carries a pipe-delimited loc list when
-		several collapse there.
+		Finds semantic references, including partial classes/code-behind.
+		Body: project > folder > file > namespace > type > member. Shared declarations appear once;
+		type locations appear only when the declaration references the target; collapsed references
+		use pipe-delimited loc lists.
 
 		Combine with get_callers/get_callees/find_implementations/get_type_hierarchy via multi_query for
 		usage/impact analysis.
@@ -52,8 +51,8 @@ public sealed class FindReferencesTool
 		OpenWorld = false)]
 	public async Task<string> FindReferences(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Fully-qualified symbol name; reuse names returned by discovery. Include parameter types to select one overload.")] string symbolName,
-		[Description("Maximum reference locations to return; omit for every reference.")] int? maxResults = null,
+		[Description("Symbol name.")] string symbolName,
+		[Description("Reference-location cap.")] int? maxResults = null,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
 		CancellationToken cancellationToken = default)

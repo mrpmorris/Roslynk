@@ -38,22 +38,18 @@ public sealed class GetSymbolBodyTool
 		SupportsPaging=Y
 
 		Returns verbatim declarations of methods, constructors, properties, indexers, events, fields,
-		local functions or types, preserving indentation, line endings and spacing; Razor bodies are
-		generated C#.
+		local functions or types. Razor returns generated C#.
+		Single declaration: project/path/loc headers, then source.
+		Partial types/methods: parts=<n>, then blocks headed part=<n>,project=...,path=...,loc=...,lines=<count>.
+		Includes generated implementations (GeneratedRegex, LoggerMessage, LibraryImport).
 
-		One declaration: project, path and loc headers, a blank line, then the source text. Partial
-		types/methods: parts=<n>, then blocks headed part=<n>,project=...,path=...,loc=...,lines=<count>.
-		Generated implementations (GeneratedRegex, LoggerMessage, LibraryImport) are included.
+		Ambiguous names/overloads return candidates. Namespaces/metadata-only symbols: NotSupported.
+		Metadata spellings of source types (Ns.Box`1, N.Outer+Inner) return source.
 
-		Ambiguous names/overloads return candidates. Symbols without source (namespaces or metadata-only
-		symbols) return NotSupported. Metadata spellings of source types (Ns.Box`1, N.Outer+Inner)
-		return their source.
-
-		Paging exceptions: startItem counts returned source lines - its first comment line with
-		includeLeadingTrivia - not file lines, so keep includeLeadingTrivia and part unchanged across
-		pages. startItem past the end returns Invalid with count. It pages one part: with several parts
-		and no part=, Invalid. Parts exceeding the budget are listed without text as omitted=Y with
-		truncated=Y and omittedParts=<k>; fetch omitted parts with part=<n>, then page normally.
+		Paging: startItem counts returned lines (including requested leading trivia), not file lines.
+		Past-end startItem returns Invalid with count.
+		Paging requires one part; multiple parts without part= returns Invalid.
+		Oversized parts omit text with omitted=Y, truncated=Y, omittedParts=<k>; fetch with part=<n>, then page.
 		""")]
 	[McpServerTool(
 		Name = GetSymbolBodyName,
@@ -64,11 +60,11 @@ public sealed class GetSymbolBodyTool
 		OpenWorld = false)]
 	public async Task<string> GetSymbolBody(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Fully-qualified symbol name; reuse names returned by discovery. Include parameter types to select one overload.")] string symbolName,
-		[Description("Include the declaration's leading comments, XML documentation and preceding directives.")] bool includeLeadingTrivia = false,
-		[Description("1-based first line of the page, counted in the returned text (its first comment line with includeLeadingTrivia), not in the file. Only pass it to continue from nextStartItem=.")] int startItem = 1,
+		[Description("Symbol name.")] string symbolName,
+		[Description("Include leading comments, XML docs and directives.")] bool includeLeadingTrivia = false,
+		[Description("First returned-text line (1-based).")] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
-		[Description("1-based part to return when the symbol has several declarations; 0 returns every part (omitting the oversized ones).")] int part = 0,
+		[Description("Declaration part (1-based); 0 returns all, omitting oversized parts.")] int part = 0,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);

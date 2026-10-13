@@ -26,23 +26,19 @@ public sealed class ApplyPatchTool
 	}
 
 	[Description("""
-		Applies a git unified diff to text files, located by content (not line numbers) and written
-		atomically. Targets: solution-compiled .cs files and .razor/.cshtml documents (kept in sync with
-		the in-memory model), plus any other existing text file under the solution folder (e.g. .csproj,
-		.json, .md). Edits existing files only: creation/deletion, binary files and paths outside the
-		solution folder are error=NotSupported; a missing file is error=NotFound.
+		Applies content-anchored git unified diffs to existing text files. Targets: solution-compiled
+		.cs/.razor/.cshtml (model synchronized), plus other text files under the solution folder
+		(e.g. .csproj/.json/.md). Creation/deletion, binary files and paths outside that folder:
+		NotSupported; missing files: NotFound.
 
-		Returns header-only applied=<Y|N> ('status' only when not Ready; applied is N for a checkOnly
-		preview). Hunk headers may omit line numbers (a bare '@@'); a content-anchored hunk must match
-		exactly one place - include enough context to be unambiguous. Paths are relative to the solution
-		folder; a unique-suffix path also resolves. Several distinct matches are error=Ambiguous with
-		candidate=<solution-relative path> lines; rejections list rejected=<path> lines; an unmatched or
-		ambiguous hunk is error=Conflict naming file and reason; no file sections is error=Invalid.
+		Header-only result: applied=<Y|N>. Hunk headers may omit line numbers (bare '@@'); each hunk
+		must match exactly once, so provide unique context. Unique-suffix paths also resolve.
+		Ambiguous paths return candidate=<path>; rejections list rejected=<path>.
+		Unmatched/ambiguous hunks: Conflict with file/reason; no file sections: Invalid.
 
-		baseVersions optionally guards against external edits: each entry pairs a patch path with the
-		documentVersion that file was read at - the SHA-256 hex of its text as Roslynk loads it (UTF-8
-		bytes, BOM excluded). No read tool reports documentVersion today, so supply it only when you can
-		compute that exact hash. A mismatch is error=Stale with stale=<path> lines.
+		baseVersions pairs patch paths with documentVersion: SHA-256 hex of loaded text encoded as
+		UTF-8 without BOM. No read tool reports this hash; supply only if you can compute it exactly.
+		Mismatches return Stale with stale=<path>.
 		""")]
 	[McpServerTool(
 		Name = ApplyPatchName,
@@ -53,8 +49,8 @@ public sealed class ApplyPatchTool
 		OpenWorld = false)]
 	public async Task<string> ApplyPatch(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("A git unified diff (--- / +++ / @@ hunks) targeting one or more text files.")] string patch,
-		[Description("Optional: pairs each touched file's patch path with the documentVersion (the SHA-256 hex of its text as Roslynk loads it) it was read at, to detect external edits.")] IReadOnlyList<FileVersion>? baseVersions = null,
+		[Description("Git unified diff (---/+++/@@).")] string patch,
+		[Description("Patch paths and expected documentVersion hashes.")] IReadOnlyList<FileVersion>? baseVersions = null,
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{

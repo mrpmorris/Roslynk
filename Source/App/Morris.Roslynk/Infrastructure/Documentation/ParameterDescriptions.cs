@@ -9,16 +9,16 @@ namespace Morris.Roslynk.Infrastructure.Documentation;
 /// </summary>
 internal static class ParameterDescriptions
 {
-	public const string SolutionId = "Solution handle returned by open_solution.";
+	public const string SolutionId = "Solution handle.";
 
 	public const string StartItem =
-		"1-based first item of the page; only pass it to continue from nextStartItem=.";
+		"First item (1-based).";
 
-	public const string MaxSize = "Maximum page size in characters; 0 uses the response budget.";
+	public const string MaxSize = "Page character limit.";
 
 	public const string CheckOnly =
-		"If true, returns the files that would change without writing anything.";
+		"Preview only.";
 
 	public const string DocumentPath =
-		"Path of the .cs, .razor or .cshtml file; absolute, or relative to the solution folder.";
+		"Source file path.";
 }

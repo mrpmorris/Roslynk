@@ -30,21 +30,8 @@ public sealed class FindWritesTool
 	[Description("""
 		SupportsPaging=Y
 
-		Finds the writes (assign, compound, increment, ref, out and init) of a field, property or
-		parameter across the solution, resolved semantically. The body has the find_references shape
-		with one location per leaf and the access kind appended:
-		<memberKind>,<memberName>,<loc>,<accessKind>; resolvedSymbol= writes a parameter target as
-		Member:parameter.
-
-		accessKind is read, assign (simple '='), compound ('+=', '??=', ...), increment ('++'/'--'), ref
-		(passed by ref, 'ref x', '&x'), out (passed as out), or init (a declaration, object/with
-		initializer, attribute named argument, or assignment to a constructor's own field/property in
-		that constructor). compound, increment and ref appear in BOTH find_reads and find_writes with
-		the same accessKind; do not sum the two tools' counts. nameof, documentation crefs and named call
-		arguments ('M(value: 1)') are excluded.
-
-		error=NotSupported for a symbol that cannot be read or written (a method, type, event or local
-		variable).
+		Finds writes (assign/compound/increment/ref/out/init) using the shared access contract.
+		Body follows find_references with one location per leaf.
 		""")]
 	[McpServerTool(
 		Name = FindWritesName,
@@ -56,7 +43,7 @@ public sealed class FindWritesTool
 	public async Task<string> FindWrites(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description(OutlineDescriptions.AccessSymbolName)] string symbolName,
-		[Description("Maximum locations to return; omit for every location.")] int? maxResults = null,
+		[Description("Location cap.")] int? maxResults = null,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
 		CancellationToken cancellationToken = default)

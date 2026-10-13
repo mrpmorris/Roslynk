@@ -42,26 +42,22 @@ public sealed class ExtractMethodTool
 	}
 
 	[Description("""
-		Extracts contiguous C# statements or one expression into a method/local function and replaces the
-		selection with a call, using Roslyn's Extract Method and data-flow analysis for parameters,
-		ref/out, return value, static/async and call-site code. Selection start is inclusive, end
-		exclusive; surrounding whitespace is ignored.
+		Extracts contiguous C# statements or one expression into a method/local function, replacing the
+		selection with a call. Roslyn data-flow determines parameters, ref/out, return value, static/async
+		and call-site code. Surrounding whitespace is ignored.
 
-		Headers, then a blank line and solution-relative changed paths: applied; method (final name);
-		symbolName (the extracted member's full name, usable in name-based tools, e.g.
-		N.T.M(int).NewMethod(string) for a local function); kind (Method|LocalFunction); signature (the
-		new declaration header); call (the statement containing the call); status follows the shared
-		protocol.
+		Additional headers: method (final name), symbolName (usable in name-based tools, e.g.
+		N.T.M(int).NewMethod(string) for a local function), kind (Method|LocalFunction), signature
+		(declaration header), call (statement containing the call).
 
-		- NotSupported: Roslyn cannot extract, warns of possible behavior changes, or extraction adds
-		  compile errors (listed). Also generated .g.cs targets, including Razor output.
-		- Conflict: methodName would bind a call to a different member, or Razor text mismatches.
-		- Stale: a target file changed since computation.
-		- NotFound: documentPath is not a solution-compiled .cs/.razor/.cshtml file.
+		Errors:
+		- NotSupported: extraction unavailable, behavior-change warnings, new compile errors (listed),
+		  or generated .g.cs targets (including Razor output).
+		- Conflict: methodName would bind a call to another member.
+		- NotFound: unloaded source file.
 		- Invalid: empty/out-of-range selection or invalid methodName.
 
-		Razor selections outside C# (@code or expressions) return NotSupported; shared mapping rules
-		apply, and inserting a method outside @code may be unmappable. Validation occurs before saving.
+		Razor selections outside C# return NotSupported; inserting a method outside @code may be unmappable.
 		""")]
 	[McpServerTool(
 		Name = ExtractMethodName,
@@ -73,13 +69,13 @@ public sealed class ExtractMethodTool
 	public async Task<string> ExtractMethod(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description(ParameterDescriptions.DocumentPath)] string documentPath,
-		[Description("1-based line where the selection starts.")] int startLine,
-		[Description("1-based column where the selection starts.")] int startColumn,
-		[Description("1-based line where the selection ends.")] int endLine,
-		[Description("1-based column just past the last selected character (exclusive).")] int endColumn,
-		[Description("Name for the extracted method. If omitted, Roslyn's own name (e.g. NewMethod, or one derived from the code) is kept.")] string? methodName = null,
-		[Description("If true, extracts into a local function inside the containing member instead of a new method.")] bool asLocalFunction = false,
-		[Description("If true, returns the preview and the files that would change without writing anything.")] bool checkOnly = false,
+		[Description("Selection start line.")] int startLine,
+		[Description("Selection start column.")] int startColumn,
+		[Description("Selection end line.")] int endLine,
+		[Description("Selection end column.")] int endColumn,
+		[Description("Extracted method name; omit to keep Roslyn's chosen name.")] string? methodName = null,
+		[Description("Extract as a local function.")] bool asLocalFunction = false,
+		[Description("Preview code and changed paths without writing.")] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);

@@ -34,23 +34,17 @@ public sealed class RenameSymbolTool
 	}
 
 	[Description("""
-		Renames a symbol and its references across partial classes, code-behind and loaded frameworks,
-		subject to the shared conditional-coverage limits. Strings and comments are unchanged.
+		Renames a symbol and references across partial classes, code-behind and loaded frameworks under
+		shared conditional coverage. Strings/comments are unchanged. Razor supports @code, markup
+		expressions and component attributes.
 
-		Shared Razor mapping rules cover @code, markup expressions and component attributes;
-		unverified/unmappable edits abort before saving (Conflict or NotSupported). Generated-only
-		declarations return NotSupported naming the generator - change the generator or its input
-		instead; partial members/types with handwritten declarations are renamable because the generator
-		follows their names.
+		Generated-only targets return NotSupported naming the generator; edit its input/generator.
+		Partial members/types with handwritten declarations are renamable; generators follow their names.
 
-		Returns applied (N for checkOnly), resolvedSymbol (the pre-rename name) and status headers, then
-		a blank line and solution-relative changed paths.
-
-		- Invalid: invalid identifier.
-		- Ambiguous: one candidate per match; with no match, fuzzy suggestions. Reuse candidates
-		  verbatim.
-		- Stale: a target changed on disk or in the model since computation, naming the file;
-		  intervening edits to other files are preserved. Stale detection occurs before saving.
+		Additional header: resolvedSymbol (pre-rename name).
+		Errors: Invalid for invalid identifiers; Ambiguous with match candidates or fuzzy suggestions
+		when no match; Stale naming the target changed on disk/in the model since computation.
+		Intervening edits to other files are preserved.
 		""")]
 	[McpServerTool(
 		Name = RenameSymbolName,
@@ -61,8 +55,8 @@ public sealed class RenameSymbolTool
 		OpenWorld = false)]
 	public async Task<string> RenameSymbol(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Fully-qualified symbol name; reuse names returned by discovery. Include parameter types to select one overload.")] string symbolName,
-		[Description("The new name (must be a valid C# identifier).")] string newName,
+		[Description("Symbol name.")] string symbolName,
+		[Description("New C# identifier.")] string newName,
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{

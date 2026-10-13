@@ -58,7 +58,27 @@ public class RoslynkToolTests
 
 		// The default is generated from the C# default value, so the text cannot drift from the signature.
 		Assert.Contains("Maximum results to return.", description, StringComparison.Ordinal);
-		Assert.Contains("50", description, StringComparison.Ordinal);
+		Assert.Equal("Maximum results to return. Default: 50", description);
+	}
+
+	[Fact]
+	public void WhenDefaultsContainSuffixText_ThenValuesAndAuthoredDescriptionsArePreserved()
+	{
+		McpServerTool inner = McpServerTool.Create(
+			([Description("(Default value: untouched)")] string required,
+				string label = "(Default value: example)", bool enabled = false, string? optional = null) => required,
+			new McpServerToolCreateOptions { Name = "sample" });
+		var tool = new RoslynkTool(inner);
+		JsonElement properties = tool.ProtocolTool.InputSchema.GetProperty("properties");
+
+		Assert.Equal("(Default value: untouched)", properties.GetProperty("required").GetProperty("description").GetString());
+		string label = properties.GetProperty("label").GetProperty("description").GetString()!;
+		Assert.StartsWith("Default: ", label, StringComparison.Ordinal);
+		Assert.Contains("(Default value: example)", label, StringComparison.Ordinal);
+		Assert.Equal("Default: false", properties.GetProperty("enabled").GetProperty("description").GetString());
+		Assert.Equal("Default: null", properties.GetProperty("optional").GetProperty("description").GetString());
+		Assert.DoesNotContain("\"default\"", tool.ProtocolTool.InputSchema.GetRawText(), StringComparison.Ordinal);
+		Assert.Contains("\"default\"", inner.ProtocolTool.InputSchema.GetRawText(), StringComparison.Ordinal);
 	}
 
 	[Fact]

@@ -39,7 +39,7 @@ public enum MultiQueryOp
 /// argument: the batch carries it once, and every operation runs against the snapshot pinned from it.
 /// </summary>
 public sealed record MultiQueryOperation(
-	[Description("Which read-only tool to run; that tool's own schema documents its parameter names.")]
+	[Description("Read-only tool to run.")]
 	MultiQueryOp Tool,
-	[Description("The tool's parameters, named exactly as its single-call parameters.")]
+	[Description("Tool's single-call arguments.")]
 	IReadOnlyDictionary<string, JsonElement>? Arguments = null);

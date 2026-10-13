@@ -41,31 +41,31 @@ public sealed partial class GetExpressionInfoTool
 	}
 
 	[Description("""
-		Returns compiler facts at a 1-based source position: type, bound symbol/overload, nullability,
-		constant value and conversion. Use for var, overloads, implicit conversions, target-typed new and
-		nullable flow. Positions in .razor/.cshtml refer to the Razor source. A member name or called
-		method reports the whole access/invocation: its type is the return type, its symbol the overload.
+		Returns compiler facts at a source position. Member/method names report the whole access/invocation: return type and
+		bound overload.
 
-		Header-only result. Identity and location: expr (the expression text, cut at 200 characters with
-		'...'), exprKind, path, loc. Types: type and convertedType, '?' marking nullable annotations;
-		nullability is annotation/flowState (NotAnnotated/NotNull, Annotated/MaybeNull; None/None when
-		nullable analysis is disabled). conversion is e.g. 'implicit numeric', 'implicit user-defined
-		<method>', 'identity'. constant is the C# literal or 'null'. symbol and symbolKind name the bound
-		symbol: type and member names work in name-based tools; locals, parameters and range variables
-		use bare names. instantiation appears for constructed generics or reduced extension methods.
-		origin is source|metadata: source has symbolPath/symbolLoc, metadata has assembly. doc is the
-		XML summary when available.
+		Header-only fields:
+		- expr: expression text, truncated at 200 characters with '...'; exprKind, path, loc.
+		- type, convertedType: '?' marks nullable annotations.
+		- nullability: annotation/flowState (NotAnnotated/NotNull, Annotated/MaybeNull;
+		  None/None when analysis is disabled).
+		- conversion: e.g. 'implicit numeric', 'implicit user-defined <method>', 'identity'.
+		- constant: C# literal or 'null'.
+		- symbol, symbolKind: bound symbol; type/member names work in name-based tools;
+		  locals/parameters/range variables use bare names.
+		- instantiation: constructed generics/reduced extension methods.
+		- origin: source|metadata; source adds symbolPath/symbolLoc, metadata adds assembly.
+		- doc: XML summary when available.
 
 		Unavailable facts use '{Unavailable}': type for method groups/namespaces, constant for
-		non-constants, symbol for unbound expressions. With binding candidates, candidateReason (e.g.
-		OverloadResolutionFailure) and pipe-delimited candidates are included.
+		non-constants, symbol for unbound expressions. Binding candidates add candidateReason
+		and pipe-delimited candidates.
 
-		A declared name (local, parameter, field, property, method, type, foreach or pattern variable)
-		reports declaration=Y: expr is the name, exprKind the declaring syntax kind, type the declared
-		type (return type for methods), and nullability the declared annotation plus initializer flow
-		state (None without an initializer).
+		Declared names (locals, parameters, fields, properties, methods, types, foreach/pattern variables)
+		add declaration=Y: expr=name, exprKind=declaration syntax, type=declared type (method return type),
+		nullability=declared annotation/initializer flow (None without initializer).
 
-		Whitespace, comments, keywords, punctuation or a file outside the solution return error=NotFound.
+		Whitespace/comments/keywords/punctuation or files outside the solution return NotFound.
 		""")]
 	[McpServerTool(
 		Name = GetExpressionInfoName,
@@ -77,8 +77,8 @@ public sealed partial class GetExpressionInfoTool
 	public async Task<string> GetExpressionInfo(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description(ParameterDescriptions.DocumentPath)] string filePath,
-		[Description("1-based line of a position inside the expression.")] int line,
-		[Description("1-based column of a position inside the expression.")] int column)
+		[Description("Expression/declaration line.")] int line,
+		[Description("Expression/declaration column.")] int column)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();

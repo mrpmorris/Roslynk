@@ -26,15 +26,12 @@ public sealed class GetCodeActionsTool
 	}
 
 	[Description("""
-		Lists fixes/refactorings at a position or selection in a solution-compiled .cs/.razor/.cshtml
-		file. Fixes use compiler/analyzer diagnostics at the span; refactorings use the span itself.
+		Lists fixes/refactorings at a source position or selection. Fixes use compiler/analyzer
+		diagnostics at the span; refactorings use the span itself.
 
-		Returns at most 50 <actionId>,<kind>,<diagnosticId> <title> lines; diagnosticId is '-' for
-		refactorings and title is trailing free text. Pass opaque actionIds verbatim to apply_code_action.
-
-		Unknown documentPath returns NotFound. Razor positions must be in C# (@code, expressions or
-		directives), otherwise NotSupported. Razor offers compiler fixes/refactorings, not analyzer
-		fixes; apply_code_action rejects edits that cannot map back to source.
+		Returns up to 50 <actionId>,<kind>,<diagnosticId> <title> lines; diagnosticId='-' for refactorings.
+		Unknown documentPath returns NotFound.
+		Razor offers compiler fixes/refactorings; positions outside C# return NotSupported.
 		""")]
 	[McpServerTool(
 		Name = GetCodeActionsName,
@@ -46,10 +43,10 @@ public sealed class GetCodeActionsTool
 	public async Task<string> GetCodeActions(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description(ParameterDescriptions.DocumentPath)] string documentPath,
-		[Description("1-based line of the position.")] int line,
-		[Description("1-based column of the position.")] int column,
-		[Description("Optional 1-based end line for a selection.")] int? endLine = null,
-		[Description("Optional 1-based end column for a selection.")] int? endColumn = null,
+		[Description("Position line.")] int line,
+		[Description("Position column.")] int column,
+		[Description("Selection end line.")] int? endLine = null,
+		[Description("Selection end column.")] int? endColumn = null,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);

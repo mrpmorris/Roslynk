@@ -33,21 +33,15 @@ public sealed class ChangeSignatureTool
 	}
 
 	[Description("""
-		Adds an optional parameter to one ordinary method/local function; a default value is required.
-		If supplied, the call-site value is threaded through invocations as a named argument. Method
-		groups, nameof and cref references remain unchanged.
+		Adds an optional parameter to one ordinary method/local function.
+		Method groups, nameof and cref references remain unchanged. Supports Razor @code declarations
+		and markup calls.
 
-		- NotSupported: virtual/override/abstract methods, interface members/implementations, partial
-		  methods, params methods, constructors or generated-only declarations (names the generator).
-		- Invalid: invalid parameter name, type or default value.
-		- Ambiguous: multiple overloads; one candidate per match.
-		- Stale: a target file changed on disk since loading.
+		Errors: NotSupported for virtual/override/abstract, interface members/implementations, partial
+		methods, params methods, constructors or generated-only declarations (names the generator);
+		Invalid for invalid parameter name/type/default; Ambiguous for multiple overloads (candidates).
 
-		Supports declarations in Razor @code and calls in markup under the shared mapping rules:
-		NotSupported for unmappable edits, Conflict for mismatched source, before saving.
-
-		Returns applied, resolvedMethod (the pre-edit overload with parameter types), updatedCallSites
-		and status headers, then a blank line and solution-relative changed paths.
+		Additional headers: resolvedMethod (pre-edit overload with parameter types), updatedCallSites.
 		""")]
 	[McpServerTool(
 		Name = ChangeSignatureName,
@@ -58,11 +52,11 @@ public sealed class ChangeSignatureTool
 		OpenWorld = false)]
 	public async Task<string> ChangeSignature(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Fully-qualified method name; reuse names returned by discovery. Include parameter types to select one overload.")] string methodId,
-		[Description("The new parameter's type, e.g. System.Threading.CancellationToken.")] string parameterType,
-		[Description("The new parameter's name (a valid C# identifier).")] string parameterName,
-		[Description("The parameter's default value expression, e.g. default, null, 0. Required (the parameter is optional).")] string defaultValue,
-		[Description("Optional expression to pass at every call site as a named argument. If omitted, calls use the default.")] string? callSiteArgument = null,
+		[Description("Method name.")] string methodId,
+		[Description("New parameter type.")] string parameterType,
+		[Description("New parameter's C# identifier.")] string parameterName,
+		[Description("Required default expression, e.g. default, null, 0.")] string defaultValue,
+		[Description("Named argument expression for all call sites; omit to use the default.")] string? callSiteArgument = null,
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);

@@ -32,11 +32,9 @@ public sealed class GetTypeHierarchyTool
 	[Description("""
 		SupportsPaging=Y
 
-		Returns a type's base-type chain, implemented interfaces and known derived types, straight from
-		the compiler - including base types defined in referenced assemblies. The body has up to three
-		sections (base, interfaces, derived); an empty section is omitted. Under a resolvedType=<type>
-		header, each entry is <typeKind>,<fully-qualified name> where typeKind is
-		class|struct|interface|enum|delegate.
+		Returns base types (including metadata), implemented interfaces and known derived types.
+		Header: resolvedType. Body sections: base, interfaces, derived (empty sections omitted).
+		Entries: <typeKind>,<fully-qualified name>; typeKind=class|struct|interface|enum|delegate.
 		""")]
 	[McpServerTool(
 		Name = GetTypeHierarchyName,
@@ -47,7 +45,7 @@ public sealed class GetTypeHierarchyTool
 		OpenWorld = false)]
 	public async Task<string> GetTypeHierarchy(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Fully-qualified type name; reuse names returned by discovery.")] string typeName,
+		[Description("Type name.")] string typeName,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{

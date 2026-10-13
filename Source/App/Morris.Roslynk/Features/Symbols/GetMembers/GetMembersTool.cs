@@ -35,16 +35,12 @@ public sealed class GetMembersTool
 	[Description("""
 		SupportsPaging=Y
 
-		Lists a type's members (methods, properties, fields, events, nested types), grouped by the file
-		that declares them ('<metadata>' for a referenced assembly). Each leaf is
-		<memberKind>,<name>,<loc> plus a pipe-delimited parameter-type list for methods that take
-		parameters; the loc is empty for a metadata member. A member's local functions are listed beneath
-		it in declaration order, one level deeper per nesting.
+		Lists methods/properties/fields/events/nested types grouped by declaring file ('<metadata>' for
+		referenced assemblies). Leaves: <memberKind>,<name>,<loc>, plus pipe-delimited parameter types
+		for methods with parameters. Metadata loc is empty. Local functions nest under their member
+		in declaration order, one level per nesting.
 
-		All accessibilities including private are listed; inherited members are excluded unless
-		includeInherited. Narrow a large type with nameFilter (a trailing '*' matches by prefix,
-		otherwise a case-insensitive substring) and the include* kind toggles. Use get_symbol_body to
-		read a member's body.
+		Includes all accessibilities. Filter with nameFilter/include*; use get_symbol_body for bodies.
 		""")]
 	[McpServerTool(
 		Name = GetMembersName,
@@ -55,14 +51,14 @@ public sealed class GetMembersTool
 		OpenWorld = false)]
 	public async Task<string> GetMembers(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Fully-qualified type name; reuse names returned by discovery.")] string typeName,
-		[Description("Include members inherited from base types.")] bool includeInherited = false,
-		[Description("Optional case-insensitive filter on member name: a trailing '*' matches by prefix (e.g. 'Search*'), otherwise it is a substring match; null applies no name filtering.")] string? nameFilter = null,
-		[Description("Include method members.")] bool includeMethods = true,
-		[Description("Include field members.")] bool includeFields = true,
-		[Description("Include property members.")] bool includeProperties = true,
-		[Description("Include event members.")] bool includeEvents = true,
-		[Description("Include nested type members.")] bool includeNestedTypes = true,
+		[Description("Type name.")] string typeName,
+		[Description("Include inherited members.")] bool includeInherited = false,
+		[Description("Case-insensitive name filter: trailing '*' means prefix; otherwise substring. Null matches all.")] string? nameFilter = null,
+		[Description("Include methods.")] bool includeMethods = true,
+		[Description("Include fields.")] bool includeFields = true,
+		[Description("Include properties.")] bool includeProperties = true,
+		[Description("Include events.")] bool includeEvents = true,
+		[Description("Include nested types.")] bool includeNestedTypes = true,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{

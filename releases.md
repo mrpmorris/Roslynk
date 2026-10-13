@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Server instructions route diffs and line-range reads, including PR diff locations, to standard file tools (Fixes #100)
+- Published parameter default suffixes use `Default: ...`, preserving values and optionality (Fixes #100)
+- Tool and parameter descriptions are shortened; shared parameter, write-result and access-kind contracts live in server instructions, with explicit startItem continuation syntax (Fixes #100)
 - Published tool prose and shared server instructions are ~10% smaller overall (shared instructions -19%; no tool description longer than before except `apply_patch`'s corrected `documentVersion` contract), with no contract, schema, parameter, default or annotation changes (Fixes #100)
 - Obsolete `#`-prefixed header examples in `get_symbol`, `find_definition`, `find_dead_conditionals` and the shared output wording now match the unprefixed keys `OutlineBuilder` emits; `get_members`/`get_type_hierarchy` type-name guidance no longer suggests parameter lists; `get_diagnostics` documents its exact severity-flag interaction; `apply_patch` documents its SHA-256 `documentVersion` contract (no read tool emits it yet) (Fixes #100)
 - `multi_query` no longer hand-enumerates its supported operations (the schema enum is authoritative; the prose list had drifted to 13 names while the catalog has 15), and its `ceil(size)` page estimate and `Roslynk:MaxResponseChars` note are gone, keeping omitted-result retries distinct from slot-body paging (Fixes #100)

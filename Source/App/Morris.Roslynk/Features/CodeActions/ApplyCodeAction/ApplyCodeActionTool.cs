@@ -29,17 +29,13 @@ public sealed class ApplyCodeActionTool
 	}
 
 	[Description("""
-		Applies an actionId from get_code_actions. Re-resolves the action at its original position; no
-		action state is retained between calls.
+		Applies actionId from get_code_actions, re-resolving at its original position; retains no action state.
 
-		- Conflict: the action no longer resolves; rerun get_code_actions.
-		- Invalid: malformed actionId.
-		- Stale: a target file changed on disk since loading.
+		Errors: Conflict if the action no longer resolves (rerun get_code_actions); Invalid for a
+		malformed actionId. Adding usings/members to Razor-generated
+		scaffolding may be unmappable.
 
-		Razor actions use the shared mapping rules; adding usings/members to generated scaffolding may be
-		unmappable (NotSupported), and mismatched Razor text returns Conflict, before saving.
-
-		Returns applied, action and status headers, then a blank line and solution-relative changed paths.
+		Additional header: action.
 		""")]
 	[McpServerTool(
 		Name = ApplyCodeActionName,
@@ -50,7 +46,7 @@ public sealed class ApplyCodeActionTool
 		OpenWorld = false)]
 	public async Task<string> ApplyCodeAction(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("The actionId from get_code_actions.")] string actionId,
+		[Description("actionId from get_code_actions.")] string actionId,
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{

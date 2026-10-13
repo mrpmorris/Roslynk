@@ -29,11 +29,9 @@ public sealed class FindDefinitionTool
 	}
 
 	[Description("""
-		Resolves the symbol used at a source position (file, 1-based line and column) and returns where
-		it is declared: fullName (parameter types included for a method or indexer, so it can be passed
-		straight to the name-based tools) and kind, plus project, path and loc for a source symbol - or
-		assembly=<name> for a metadata symbol. A position that binds to no symbol in any projection is
-		error=NotFound.
+		Resolves the symbol at a source position. Returns fullName (including method/indexer parameter
+		types) and kind; source symbols add project, path and loc, metadata symbols add assembly.
+		No binding in any projection returns NotFound.
 		""")]
 	[McpServerTool(
 		Name = FindDefinitionName,
@@ -44,9 +42,9 @@ public sealed class FindDefinitionTool
 		OpenWorld = false)]
 	public async Task<string> FindDefinition(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Path to the .cs file containing the usage; absolute, or relative to the solution folder.")] string filePath,
-		[Description("1-based line of the usage.")] int line,
-		[Description("1-based column of the usage.")] int column)
+		[Description("Usage's .cs file path.")] string filePath,
+		[Description("Usage line.")] int line,
+		[Description("Usage column.")] int column)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();

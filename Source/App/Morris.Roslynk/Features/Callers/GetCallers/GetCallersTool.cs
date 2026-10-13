@@ -36,16 +36,13 @@ public sealed class GetCallersTool
 	[Description("""
 		SupportsPaging=Y
 
-		Finds the methods that call the named method. Calls the compiler inserts count too: foreach/await
-		plumbing (GetEnumerator, MoveNext, Current, an enumerator's Dispose, the await foreach and await
-		using equivalents, GetAwaiter, IsCompleted, GetResult), the Dispose/DisposeAsync a using or await
-		using runs, deconstruction and positional patterns, collection-initializer Add, user-defined
-		operators and conversions (including +=, ++, implicit conversions and true/false in a condition),
-		query-expression methods, interpolated-string handler members, implicit base() calls, and the
-		Length/Count behind ^ and ... - get_callees excludes that plumbing.
+		Finds callers, including implicit calls: foreach/await enumeration and awaiter members
+		(GetEnumerator/MoveNext/Current/Dispose, GetAwaiter/IsCompleted/GetResult, async equivalents),
+		using/await using Dispose/DisposeAsync, deconstruction/positional patterns, collection Add,
+		operators/conversions (+=/++/implicit/conditional true/false), query methods, interpolated-string
+		handlers, implicit base(), and Length/Count for ^/.. . See get_callees for its narrower coverage.
 
-		Callers are grouped project -> folder -> file -> namespace -> containing type, each leaf showing
-		the calling member and its declaration location.
+		Body: project > folder > file > namespace > containing type; leaves name callers and declaration locations.
 		""")]
 	[McpServerTool(
 		Name = GetCallersName,
@@ -56,7 +53,7 @@ public sealed class GetCallersTool
 		OpenWorld = false)]
 	public async Task<string> GetCallers(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Fully-qualified method name; reuse names returned by discovery. Include parameter types to select one overload.")] string methodName,
+		[Description("Method name.")] string methodName,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{

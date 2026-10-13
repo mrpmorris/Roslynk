@@ -37,30 +37,23 @@ public sealed class MultiQueryTool
 	}
 
 	[Description("""
-		Runs independent read-only operations against one solution snapshot; delivered results are in
-		request order. Operations cannot reference each other's output. Batch only queries needed for
-		the question.
+		Runs independent read-only operations against one snapshot, returning results in request order.
+		Operations cannot reference each other's output. Batch only queries needed for the question.
 
-		Each operation names a tool from the operations schema's enum and carries that tool's
-		single-call parameter names; unknown or misspelled parameters are rejected, and omitted
-		parameters use that tool's defaults.
+		operations.tool uses the schema enum; arguments use that tool's single-call names/defaults.
+		Unknown/misspelled arguments are rejected.
 
-		The envelope reports the per-operation allowance as budget=<n>. All operations run; whole
-		results are selected smallest-first until the budget is filled, and a slot is complete or
-		absent, never cut. Missing results appear once as retry=<index>:<size> in request order, size
-		being the result's cost as a ratio of the budget, rounded up to 0.1.
+		All operations run. budget=<n> is the per-operation allowance; whole results are selected
+		smallest-first until the response budget fills. Slots are complete or absent. Missing results
+		report retry=<index>:<size> in request order; size is result cost/budget, rounded up to 0.1.
+		- size >= 1.0: resend alone.
+		- Sizes totaling <= 1.0: fit one continuation batch.
+		- Sizes below 0.1: about ten per continuation batch is safe.
 
-		- size >= 1.0: resend the operation alone.
-		- Sizes totaling <= 1.0: fit in one continuation batch.
-		- Sizes below 0.1 are indistinguishable; about ten per continuation batch is safe.
-
-		Resend exactly the retry operations with their original arguments from your request copy; slot
-		frames contain only index and tool name. Pass snapshot=<id> as expectSnapshot: a changed
-		generation (write or user save) returns error=Stale naming both ids - rerun the whole batch.
-		Ratios apply only to that snapshot; rerunning remeasures and reselects.
-
-		Delivered slots are complete; only each slot body's own nextStartItem drives tool-level paging.
-		A retry is an omitted result to resend, not a page.
+		Resend retry operations with original arguments from your request copy; frames contain only
+		index/tool. Pass snapshot=<id> as expectSnapshot; changed generations return Stale with both ids:
+		rerun the whole batch. Ratios are snapshot-specific; reruns remeasure/reselect.
+		Only slot-body nextStartItem drives paging; retry means an omitted result, not a page.
 		""")]
 	[McpServerTool(
 		Name = MultiQueryName,
@@ -70,9 +63,9 @@ public sealed class MultiQueryTool
 		Destructive = false,
 		OpenWorld = false)]
 		public async Task<string> MultiQuery(
-			[Description("Solution handle returned by open_solution; every operation runs against this one solution's snapshot.")] string solutionId,
-			[Description("The operations to run, in order. Each names a read-only tool and carries that tool's arguments.")] IReadOnlyList<MultiQueryOperation> operations,
-			[Description("Optional: the snapshot=<id> from a previous multi_query response, checked before anything runs; a mismatch is error=Stale naming both ids - re-run the whole batch. Omit for a one-shot batch.")] string? expectSnapshot = null)
+			[Description("Solution handle.")] string solutionId,
+			[Description("Read-only tools and arguments, in request order.")] IReadOnlyList<MultiQueryOperation> operations,
+			[Description("Previous snapshot id; mismatch returns Stale before execution.")] string? expectSnapshot = null)
 	{
 		// Structural validation first: an uninterpretable batch cannot produce slots. (An op naming a tool
 		// outside the enum never reaches here - the SDK's binding layer refuses it and RoslynkTool renders
