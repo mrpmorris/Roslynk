@@ -23,6 +23,7 @@ public sealed class SolutionFileWatcher : IDisposable
 		Sync = sync ?? throw new ArgumentNullException(nameof(sync));
 		Debounce = new Timer(_ => Flush(), state: null, Timeout.Infinite, Timeout.Infinite);
 
+		Sync.OnWatcherStarting();
 		foreach (WatchTarget target in sync.WatchTargets())
 			TryWatch(target);
 	}
@@ -44,6 +45,9 @@ public sealed class SolutionFileWatcher : IDisposable
 		watcher.Created += OnChanged;
 		watcher.Deleted += OnChanged;
 		watcher.Renamed += OnRenamed;
+		// Subscribed before raising starts: on Linux a watch that cannot be added (e.g. the inotify watch limit)
+		// is reported synchronously from EnableRaisingEvents, and only through this event.
+		watcher.Error += OnError;
 		watcher.EnableRaisingEvents = true;
 
 		Watchers.Add(watcher);
@@ -62,6 +66,17 @@ public sealed class SolutionFileWatcher : IDisposable
 	{
 		Queue(e.OldFullPath);
 		Queue(e.FullPath);
+	}
+
+	private void OnError(object sender, ErrorEventArgs e)
+	{
+		lock (Gate)
+		{
+			if (Disposed)
+				return;
+		}
+
+		Sync.OnWatcherError(((FileSystemWatcher)sender).Path, e.GetException());
 	}
 
 	private void Queue(string path)

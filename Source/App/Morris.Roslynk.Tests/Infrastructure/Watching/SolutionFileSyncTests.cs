@@ -13,6 +13,62 @@ namespace Morris.Roslynk.Tests.Infrastructure.Watching;
 public class SolutionFileSyncTests
 {
 	[Fact]
+	public async Task WhenAWatcherReportsAnOverflow_ThenTheInstanceIsMarkedDirty()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
+		var subject = new SolutionFileSync(instance);
+
+		subject.OnWatcherError("/watched", new InternalBufferOverflowException("Too many changes at once."));
+
+		Assert.True(instance.IsDirty);
+		Assert.Empty(instance.WatchDiagnostics);
+	}
+
+	[Fact]
+	public async Task WhenAWatcherReportsAWatchLimitError_ThenItIsRecordedAndTheInstanceIsNotMarkedDirty()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
+		var subject = new SolutionFileSync(instance);
+		var limitReached = new IOException("The configured user limit (524288) on the number of inotify watches has been reached.");
+
+		subject.OnWatcherError("/watched/a", limitReached);
+		subject.OnWatcherError("/watched/b", limitReached);
+
+		Assert.False(instance.IsDirty);
+		string message = Assert.Single(instance.WatchDiagnostics);
+		Assert.Contains("inotify watches", message);
+		Assert.Contains("/watched/a", message);
+	}
+
+	[Fact]
+	public async Task WhenAWatcherReportsManyDistinctErrors_ThenAtMostTheCapIsKept()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
+		var subject = new SolutionFileSync(instance);
+
+		for (int i = 0; i < RoslynInstance.MaxWatchDiagnostics + 5; i++)
+			subject.OnWatcherError($"/watched/{i}", new IOException($"failure {i}"));
+
+		Assert.Equal(RoslynInstance.MaxWatchDiagnostics, instance.WatchDiagnostics.Count);
+	}
+
+	[Fact]
+	public async Task WhenANewWatcherStarts_ThenEarlierWatchDiagnosticsAreCleared()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
+		var subject = new SolutionFileSync(instance);
+		subject.OnWatcherError("/watched", new IOException("watch limit"));
+
+		using var watcher = new SolutionFileWatcher(new SolutionFileSync(instance));
+
+		Assert.Empty(instance.WatchDiagnostics);
+	}
+
+	[Fact]
 	public async Task WhenASourceFileChangesOnDisk_ThenTheLoadedSnapshotPicksItUp()
 	{
 		string solutionPath = TestSolutions.CreateScratchSimpleSolution();

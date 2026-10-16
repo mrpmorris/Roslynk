@@ -30,6 +30,9 @@ public sealed class GetSolutionStatusTool
 		Ready solutions add indented loadDiagnostic=<message> for analyzer/generator load failures,
 		project evaluation failures or missing SDKs, which may explain compiler errors.
 		Other states omit messages. Up to 20 per solution, then loadDiagnosticsTruncated=<n>.
+
+		Any state adds indented watchDiagnostic=<message> when the file watcher failed in a way a
+		reload would not fix (e.g. the OS watch limit): changes on disk may then not be picked up.
 		""")]
 	[McpServerTool(
 		Name = GetSolutionStatusName,
@@ -61,6 +64,9 @@ public sealed class GetSolutionStatusTool
 			// Messages are final only once the load is done; a Building/Updating/Faulted solution may still be adding them.
 			if (model.Status == SolutionStatus.Ready)
 				AppendLoadDiagnostics(builder, instance.Workspace?.LoadDiagnostics ?? [], messageLimit);
+
+			foreach (string message in instance.WatchDiagnostics)
+				builder.Line(1, $"watchDiagnostic={OutlineBuilder.Sanitize(message)}");
 		}
 
 		return builder.ToString();

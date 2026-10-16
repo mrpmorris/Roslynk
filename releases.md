@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- File watcher errors are no longer ignored: an event overflow reloads the solution on next use, and failures a reload would not fix (such as the Linux inotify watch limit) are listed in `get_solution_status` as `watchDiagnostic=` (Fixes #105)
 - Server instructions route diffs and line-range reads, including PR diff locations, to standard file tools (Fixes #100)
 - Published parameter default suffixes use `Default: ...`, preserving values and optionality (Fixes #100)
 - Tool and parameter descriptions are shortened; shared parameter, write-result and access-kind contracts live in server instructions, with explicit startItem continuation syntax (Fixes #100)

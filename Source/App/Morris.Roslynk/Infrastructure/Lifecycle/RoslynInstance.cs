@@ -87,6 +87,46 @@ public sealed class RoslynInstance : IDisposable
 
 	public void MarkDirty() => DirtyField = true;
 
+	/// <summary>How many distinct file-watcher error messages are kept per instance.</summary>
+	public const int MaxWatchDiagnostics = 20;
+
+	private readonly object WatchDiagnosticsGate = new();
+	private readonly Dictionary<string, string> WatchDiagnosticsByError = new(StringComparer.Ordinal);
+
+	/// <summary>
+	/// Errors the current file watcher reported that a reload would not fix, such as an exhausted inotify watch
+	/// limit: while any are listed, changes on disk may not reach the snapshot. Cleared when a watcher starts.
+	/// </summary>
+	public IReadOnlyList<string> WatchDiagnostics
+	{
+		get
+		{
+			lock (WatchDiagnosticsGate)
+				return WatchDiagnosticsByError.Values.ToArray();
+		}
+	}
+
+	/// <summary>
+	/// Records a watcher error once per distinct <paramref name="error"/> message, naming the first directory it
+	/// was reported for (one failure such as the watch limit hits every directory), keeping at most
+	/// <see cref="MaxWatchDiagnostics"/>.
+	/// </summary>
+	public void RecordWatchDiagnostic(string error, string directory)
+	{
+		lock (WatchDiagnosticsGate)
+		{
+			if (WatchDiagnosticsByError.Count < MaxWatchDiagnostics)
+				WatchDiagnosticsByError.TryAdd(error, $"{error} ({directory})");
+		}
+	}
+
+	/// <summary>Forgets the previous watcher's errors; called as a new watcher starts.</summary>
+	public void ClearWatchDiagnostics()
+	{
+		lock (WatchDiagnosticsGate)
+			WatchDiagnosticsByError.Clear();
+	}
+
 	/// <summary>Whether the snapshot changed since the last diagnostics build, so the next build must recompile.</summary>
 	public bool BuildNeeded => BuildNeededField;
 
