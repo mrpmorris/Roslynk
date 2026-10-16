@@ -7,6 +7,19 @@ namespace Morris.Roslynk.Tests.Features.Solutions.GetSolutionStatusTests;
 public class GetSolutionStatusTests
 {
 	[Fact]
+	public async Task WhenTheFileWatcherReportedAnError_ThenGetSolutionStatusListsIt()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
+		instance.RecordWatchDiagnostic("The configured user limit (524288) on the number of inotify watches has been reached.", "/src");
+		var subject = new GetSolutionStatusTool(registry);
+
+		string result = subject.GetSolutionStatus();
+
+		Assert.Contains("\twatchDiagnostic=The configured user limit (524288)", result);
+	}
+
+	[Fact]
 	public async Task WhenASolutionIsLoaded_ThenItIsReadyWithLoadedMatchingTotal()
 	{
 		using var registry = new InstanceRegistry();
