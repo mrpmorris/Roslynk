@@ -89,6 +89,25 @@ public SolutionFileSync(RoslynInstance instance)
 			ProjectDirectories = CaptureProjectDirectories(instance.CurrentSolution);
 		}
 
+	/// <summary>A new watcher is starting: the previous watcher's errors no longer apply.</summary>
+	public void OnWatcherStarting() => Instance.ClearWatchDiagnostics();
+
+	/// <summary>
+	/// A watcher reported an error. An overflow means the OS dropped events, so the changes are unknown: mark the
+	/// instance dirty and the next use reloads it from disk. Any other failure, such as an exhausted inotify watch
+	/// limit, would recur on a reload, so it is recorded for get_solution_status instead.
+	/// </summary>
+	public void OnWatcherError(string directory, Exception error)
+	{
+		if (error is InternalBufferOverflowException)
+		{
+			Instance.MarkDirty();
+			return;
+		}
+
+		Instance.RecordWatchDiagnostic(error.Message, directory);
+	}
+
 		/// <summary>
 		/// The directories to watch: every project directory recursively (for new globbed files), plus the
 		/// distinct out-of-tree directories that host a linked document or an ancestor build file, watched
