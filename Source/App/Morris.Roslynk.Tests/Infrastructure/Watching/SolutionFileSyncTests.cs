@@ -19,7 +19,7 @@ public class SolutionFileSyncTests
 		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
-		subject.OnWatcherError("/watched", new InternalBufferOverflowException("Too many changes at once."));
+		subject.OnWatcherError("/watched", new InternalBufferOverflowException("Too many changes at once."), whileStarting: false);
 
 		Assert.True(instance.IsDirty);
 		Assert.Empty(instance.WatchDiagnostics);
@@ -33,13 +33,50 @@ public class SolutionFileSyncTests
 		var subject = new SolutionFileSync(instance);
 		var limitReached = new IOException("The configured user limit (524288) on the number of inotify watches has been reached.");
 
-		subject.OnWatcherError("/watched/a", limitReached);
-		subject.OnWatcherError("/watched/b", limitReached);
+		string watched = Path.GetDirectoryName(instance.Key.FilePath)!;
+
+		subject.OnWatcherError(watched, limitReached, whileStarting: true);
+		subject.OnWatcherError("/watched/b", limitReached, whileStarting: true);
 
 		Assert.False(instance.IsDirty);
 		string message = Assert.Single(instance.WatchDiagnostics);
 		Assert.Contains("inotify watches", message);
-		Assert.Contains("/watched/a", message);
+		Assert.Contains(watched, message);
+	}
+
+	[Fact]
+	public async Task WhenAWatcherReportsAnErrorAfterStarting_ThenTheInstanceIsMarkedDirtyAndNothingIsRecorded()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
+		var subject = new SolutionFileSync(instance);
+
+		subject.OnWatcherError("/watched", new IOException("The watched directory was deleted or moved."), whileStarting: false);
+
+		Assert.True(instance.IsDirty);
+		Assert.Empty(instance.WatchDiagnostics);
+	}
+
+	[Fact]
+	public async Task WhenAWatcherIsReplaced_ThenTheOldOneIsDisposedBeforeTheNewOneStarts()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
+		var events = new List<string>();
+		instance.AttachWatcher(() => new RecordingDisposable("old", events));
+
+		instance.AttachWatcher(() =>
+		{
+			events.Add("new started");
+			return new RecordingDisposable("new", events);
+		});
+
+		Assert.Equal(["old disposed", "new started"], events);
+	}
+
+	private sealed class RecordingDisposable(string name, List<string> events) : IDisposable
+	{
+		public void Dispose() => events.Add($"{name} disposed");
 	}
 
 	[Fact]
@@ -50,7 +87,7 @@ public class SolutionFileSyncTests
 		var subject = new SolutionFileSync(instance);
 
 		for (int i = 0; i < RoslynInstance.MaxWatchDiagnostics + 5; i++)
-			subject.OnWatcherError($"/watched/{i}", new IOException($"failure {i}"));
+			subject.OnWatcherError($"/watched/{i}", new IOException($"failure {i}"), whileStarting: true);
 
 		Assert.Equal(RoslynInstance.MaxWatchDiagnostics, instance.WatchDiagnostics.Count);
 	}
@@ -61,7 +98,8 @@ public class SolutionFileSyncTests
 		using var registry = new InstanceRegistry();
 		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
-		subject.OnWatcherError("/watched", new IOException("watch limit"));
+		subject.OnWatcherError("/watched", new IOException("watch limit"), whileStarting: true);
+		Assert.NotEmpty(instance.WatchDiagnostics);
 
 		using var watcher = new SolutionFileWatcher(new SolutionFileSync(instance));
 

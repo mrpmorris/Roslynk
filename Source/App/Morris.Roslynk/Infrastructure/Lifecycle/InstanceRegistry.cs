@@ -28,8 +28,8 @@ public sealed class InstanceRegistry : IDisposable
 
 	/// <summary>
 	/// Returns the instance for <paramref name="solutionPath"/>, creating it (and starting its background
-	/// load) if needed, and awaits its first load so the caller sees a ready snapshot. A dirty instance,
-	/// one a build-file edit invalidated, is reloaded here on its next use.
+	/// load) if needed, and awaits its first load so the caller sees a ready snapshot. A dirty instance, one a
+	/// build-file edit or a watcher failure invalidated, is reloaded here on its next use.
 	/// </summary>
 	public async Task<RoslynInstance> GetOrAddAsync(string solutionPath)
 	{
@@ -55,9 +55,10 @@ public sealed class InstanceRegistry : IDisposable
 	/// Returns the instance for <paramref name="solutionPath"/>, creating it and starting its background
 	/// load if needed, but without awaiting anything; the caller reads <see cref="RoslynInstance.CurrentModel"/>
 	/// and gets <see cref="SolutionStatus.Building"/> until the first snapshot is ready. A dirty instance, one a
-	/// build-file or additional-document edit invalidated, is rebuilt in the background here: the stale snapshot
-	/// keeps being served as <see cref="SolutionStatus.Building"/> until the fresh one swaps in. Used for the
-	/// non-blocking open path; data tools use <see cref="GetOrBeginAsync"/> so a single read sees fresh data.
+	/// build-file or additional-document edit or a watcher failure invalidated, is rebuilt in the background
+	/// here: the stale snapshot keeps being served as <see cref="SolutionStatus.Building"/> until the fresh one
+	/// swaps in. Used for the non-blocking open path; data tools use <see cref="GetOrBeginAsync"/> so a single
+	/// read sees fresh data.
 	/// </summary>
 	public RoslynInstance GetOrBegin(string solutionPath)
 	{
@@ -78,9 +79,9 @@ public sealed class InstanceRegistry : IDisposable
 	/// <summary>
 	/// Returns the instance for <paramref name="solutionPath"/>, creating it if needed, and waits up to the
 	/// configured <see cref="LoadWaitTimeout"/> for its in-flight initial load (joining that one load, never
-	/// starting another). When a build-file or additional-document edit has left the instance dirty it is
-	/// rebuilt from disk and awaited, so the caller sees the reloaded snapshot in a single read (a
-	/// <c>.mixin</c> or other source-generator input edit is reflected without a second call). If the initial
+	/// starting another). When a build-file or additional-document edit or a watcher failure has left the
+	/// instance dirty it is rebuilt from disk and awaited, so the caller sees the reloaded snapshot in a single
+	/// read (a <c>.mixin</c> or other source-generator input edit is reflected without a second call). If the initial
 	/// load is still running when the timeout elapses it returns the instance with
 	/// <see cref="SolutionStatus.Building"/> and no snapshot; the tool then reports <c>Indexing</c> with the
 	/// live project count. <paramref name="cancellationToken"/> cancels the wait, not the shared load.
@@ -144,11 +145,8 @@ public sealed class InstanceRegistry : IDisposable
 		return instance;
 	}
 
-	private static void AttachWatcher(RoslynInstance instance)
-	{
-		var sync = new SolutionFileSync(instance);
-		instance.AttachWatcher(new SolutionFileWatcher(sync));
-	}
+	private static void AttachWatcher(RoslynInstance instance) =>
+		instance.AttachWatcher(() => new SolutionFileWatcher(new SolutionFileSync(instance)));
 
 	/// <summary>Removes a loaded solution and disposes it. Returns false if it was not loaded.</summary>
 	public bool TryClose(string solutionPath)

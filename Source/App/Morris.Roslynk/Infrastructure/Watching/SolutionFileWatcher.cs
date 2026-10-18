@@ -17,6 +17,7 @@ public sealed class SolutionFileWatcher : IDisposable
 	private readonly Lock StateGate = new();
 	private readonly Timer Debounce;
 	private bool Disposed;
+	private bool Started;
 
 	public SolutionFileWatcher(SolutionFileSync sync)
 	{
@@ -26,6 +27,9 @@ public sealed class SolutionFileWatcher : IDisposable
 		Sync.OnWatcherStarting();
 		foreach (WatchTarget target in sync.WatchTargets())
 			TryWatch(target);
+
+		lock (Gate)
+			Started = true;
 	}
 
 	private void TryWatch(WatchTarget target)
@@ -70,13 +74,14 @@ public sealed class SolutionFileWatcher : IDisposable
 
 	private void OnError(object sender, ErrorEventArgs e)
 	{
+		// Recorded under the gate so that once Dispose has returned no error of this watcher is still being
+		// recorded: the replacement watcher clears the diagnostics as it starts, and nothing stale lands after.
 		lock (Gate)
 		{
 			if (Disposed)
 				return;
+			Sync.OnWatcherError(((FileSystemWatcher)sender).Path, e.GetException(), whileStarting: !Started);
 		}
-
-		Sync.OnWatcherError(((FileSystemWatcher)sender).Path, e.GetException());
 	}
 
 	private void Queue(string path)

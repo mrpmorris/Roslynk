@@ -93,13 +93,16 @@ public SolutionFileSync(RoslynInstance instance)
 	public void OnWatcherStarting() => Instance.ClearWatchDiagnostics();
 
 	/// <summary>
-	/// A watcher reported an error. An overflow means the OS dropped events, so the changes are unknown: mark the
-	/// instance dirty and the next use reloads it from disk. Any other failure, such as an exhausted inotify watch
-	/// limit, would recur on a reload, so it is recorded for get_solution_status instead.
+	/// A watcher reported an error. An overflow means the OS dropped events, so the changes are unknown; any other
+	/// error after the watcher started (a watched directory deleted, or moved on Linux, even if it has since been
+	/// recreated) leaves that watcher dead. Either way the instance is marked dirty, and the next use reloads it
+	/// from disk and attaches a fresh watcher over the directories that exist then. An error while the watcher
+	/// is starting, such as an exhausted inotify watch limit, is one a reload would meet again, so it is recorded
+	/// for get_solution_status instead; a failure that persists therefore costs one reload, then is recorded.
 	/// </summary>
-	public void OnWatcherError(string directory, Exception error)
+	public void OnWatcherError(string directory, Exception error, bool whileStarting)
 	{
-		if (error is InternalBufferOverflowException)
+		if (error is InternalBufferOverflowException || !whileStarting)
 		{
 			Instance.MarkDirty();
 			return;

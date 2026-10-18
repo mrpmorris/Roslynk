@@ -80,8 +80,10 @@ public sealed class RoslynInstance : IDisposable
 	public void Touch() => Interlocked.Exchange(ref LastAccessedTicks, DateTime.UtcNow.Ticks);
 
 	/// <summary>
-	/// Set by the file watcher when a project / props / sln file changed on disk, which the immutable
-	/// snapshot cannot absorb incrementally. The instance rebuilds in the background on its next use.
+	/// Set by the file watcher when a change on disk is one the immutable snapshot cannot absorb incrementally (a
+	/// project / props / sln file edit, or a file that may have joined or left the build), or when the watcher
+	/// itself lost track (dropped events, or a watched directory that went away). The instance rebuilds in the
+	/// background on its next use.
 	/// </summary>
 	public bool IsDirty => DirtyField;
 
@@ -130,12 +132,14 @@ public sealed class RoslynInstance : IDisposable
 	/// <summary>Whether the snapshot changed since the last diagnostics build, so the next build must recompile.</summary>
 	public bool BuildNeeded => BuildNeededField;
 
-	/// <summary>Hands the instance the watcher that keeps it fresh, disposing any previous one (a rebuild
-	/// re-attaches), so the two share a lifetime.</summary>
-	public void AttachWatcher(IDisposable watcher)
+	/// <summary>Starts the watcher that keeps the instance fresh, disposing any previous one first (a rebuild
+	/// re-attaches), so the two share a lifetime and the old watcher can record nothing once the new one has
+	/// started.</summary>
+	public void AttachWatcher(Func<IDisposable> startWatcher)
 	{
 		Watcher?.Dispose();
-		Watcher = watcher;
+		Watcher = null;
+		Watcher = startWatcher();
 	}
 
 	/// <summary>
