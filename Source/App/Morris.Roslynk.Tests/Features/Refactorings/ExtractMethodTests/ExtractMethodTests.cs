@@ -27,9 +27,9 @@ public class ExtractMethodTests
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
-		(int startLine, int endLine) = Lines("int total = a + b;", "total *= 2;");
+		(int line, int endLine) = Lines("int total = a + b;", "total *= 2;");
 
-		string result = await subject.ExtractMethod(solutionPath, greeter, startLine, 1, endLine + 1, 1, methodName: "DoubleSum");
+		string result = await subject.ExtractMethod(solutionPath, greeter, line, 1, endLine + 1, 1, methodName: "DoubleSum");
 
 		Assert.Contains("applied=Y", result);
 		Assert.Contains("method=DoubleSum", result);
@@ -57,9 +57,9 @@ public class ExtractMethodTests
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
-		(int startLine, int endLine) = Lines("int total = a + b;", "total *= 2;");
+		(int line, int endLine) = Lines("int total = a + b;", "total *= 2;");
 
-		string result = await subject.ExtractMethod(solutionPath, greeter, startLine, 1, endLine + 1, 1, checkOnly: true);
+		string result = await subject.ExtractMethod(solutionPath, greeter, line, 1, endLine + 1, 1, checkOnly: true);
 
 		Assert.Contains("applied=N", result);
 		Assert.Contains("method=NewMethod", result);
@@ -89,9 +89,9 @@ public class ExtractMethodTests
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
-		(int startLine, int endLine) = Lines("int total = a + b;", "total *= 2;");
+		(int line, int endLine) = Lines("int total = a + b;", "total *= 2;");
 
-		string result = await subject.ExtractMethod(solutionPath, greeter, startLine, 1, endLine + 1, 1, methodName: "Local", asLocalFunction: true);
+		string result = await subject.ExtractMethod(solutionPath, greeter, line, 1, endLine + 1, 1, methodName: "Local", asLocalFunction: true);
 
 		Assert.Contains("applied=Y", result);
 		Assert.Contains("kind=LocalFunction", result);
@@ -121,10 +121,10 @@ public class ExtractMethodTests
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
-		(int startLine, int endLine) = Lines("return total;", "await System.Threading.Tasks.Task.Delay(value);");
+		(int line, int endLine) = Lines("return total;", "await System.Threading.Tasks.Task.Delay(value);");
 
 		// The selection spans the end of one method and the start of another.
-		string result = await subject.ExtractMethod(solutionPath, greeter, startLine, 1, endLine + 1, 1);
+		string result = await subject.ExtractMethod(solutionPath, greeter, line, 1, endLine + 1, 1);
 
 		Assert.Contains("error=NotSupported", result);
 		Assert.Equal(Content, await File.ReadAllTextAsync(greeter));
@@ -137,10 +137,10 @@ public class ExtractMethodTests
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
-		(int startLine, int endLine) = Lines("int total = a + b;", "total *= 2;");
+		(int line, int endLine) = Lines("int total = a + b;", "total *= 2;");
 
 		// A member cannot share its enclosing type's name (CS0542).
-		string result = await subject.ExtractMethod(solutionPath, greeter, startLine, 1, endLine + 1, 1, methodName: "Greeter");
+		string result = await subject.ExtractMethod(solutionPath, greeter, line, 1, endLine + 1, 1, methodName: "Greeter");
 
 		Assert.Contains("error=NotSupported", result);
 		Assert.Contains("CS0542", result);

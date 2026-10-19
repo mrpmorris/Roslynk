@@ -329,7 +329,7 @@ public class GetCallersCoverageTests : IClassFixture<GetCallersCoverageTests.Scr
 			Subject = new GetCallersTool(Registry, new SymbolResolver(), new ProjectionService());
 		}
 
-		public Task<string> GetCallersAsync(string memberName) => Subject.GetCallers(SolutionPath, memberName);
+		public Task<string> GetCallersAsync(string symbolName) => Subject.GetCallers(SolutionPath, symbolName);
 
 		public Solution? Solution => Model.Solution;
 
@@ -551,7 +551,7 @@ public class GetCallersProjectionTests : IClassFixture<GetCallersProjectionTests
 			Subject = new GetCallersTool(Registry, new SymbolResolver(), new ProjectionService());
 		}
 
-		public Task<string> GetCallersAsync(string memberName) => Subject.GetCallers(SolutionPath, memberName);
+		public Task<string> GetCallersAsync(string symbolName) => Subject.GetCallers(SolutionPath, symbolName);
 
 		public Task DisposeAsync()
 		{

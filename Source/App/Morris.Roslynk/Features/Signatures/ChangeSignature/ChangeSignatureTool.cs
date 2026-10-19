@@ -52,7 +52,7 @@ public sealed class ChangeSignatureTool
 		OpenWorld = false)]
 	public async Task<string> ChangeSignature(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Method name.")] string methodId,
+		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description("New parameter type.")] string parameterType,
 		[Description("New parameter's C# identifier.")] string parameterName,
 		[Description("Required default expression, e.g. default, null, 0.")] string defaultValue,
@@ -77,16 +77,16 @@ public sealed class ChangeSignatureTool
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
-		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, methodId);
+		IReadOnlyList<ISymbol> matches = await SymbolResolver.FindByFullyQualifiedNameAsync(solution, symbolName);
 		if (matches.Count == 0)
 		{
-			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(solution, methodId);
-			return Failure(Error.NotFound($"No symbol matched '{methodId}'.", suggestions.Count > 0 ? suggestions : null));
+			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(solution, symbolName);
+			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", suggestions.Count > 0 ? suggestions : null));
 		}
 		if (matches.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(methodId, matches));
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, matches));
 		if (matches[0] is not IMethodSymbol method)
-			return Failure(Error.NotSupported($"'{methodId}' is not a method."));
+			return Failure(Error.NotSupported($"'{symbolName}' is not a method."));
 
 		string resolved = SymbolResolver.SignatureName(method);
 

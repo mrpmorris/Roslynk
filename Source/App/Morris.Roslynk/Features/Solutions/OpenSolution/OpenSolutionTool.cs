@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
@@ -33,7 +34,7 @@ public sealed class OpenSolutionTool
 		Destructive = false,
 		OpenWorld = false)]
 	public string OpenSolution(
-		[Description("Absolute path to the .sln or .slnx file to open.")] string solutionPath)
+		[Description(ParameterDescriptions.SolutionPath)] string solutionPath)
 	{
 		string fullPath = Path.GetFullPath(solutionPath);
 		if (!File.Exists(fullPath))

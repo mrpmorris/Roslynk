@@ -68,9 +68,9 @@ public sealed class ExtractMethodTool
 		OpenWorld = false)]
 	public async Task<string> ExtractMethod(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description(ParameterDescriptions.DocumentPath)] string documentPath,
-		[Description("Selection start line.")] int startLine,
-		[Description("Selection start column.")] int startColumn,
+		[Description(ParameterDescriptions.FilePath)] string filePath,
+		[Description("Selection start line.")] int line,
+		[Description("Selection start column.")] int column,
 		[Description("Selection end line.")] int endLine,
 		[Description("Selection end column.")] int endColumn,
 		[Description("Extracted method name; omit to keep Roslyn's chosen name.")] string? methodName = null,
@@ -92,9 +92,9 @@ public sealed class ExtractMethodTool
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
-		RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, documentPath, cancellationToken);
+		RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, filePath, cancellationToken);
 		if (source is null)
-			return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs, .razor or .cshtml document."));
+			return Failure(Error.NotFound($"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document."));
 		Document document = source.Document;
 		if (!source.IsRazor && document.FilePath?.EndsWith(".g.cs", StringComparison.OrdinalIgnoreCase) == true)
 			return Failure(Error.NotSupported("Extracting from generated code (.g.cs, including Razor output) is not supported; pass the .razor/.cshtml source it was generated from."));
@@ -102,10 +102,10 @@ public sealed class ExtractMethodTool
 			return Failure(Error.NotSupported("Only C# documents are supported."));
 
 		SourceText text = await source.GetSourceTextAsync(cancellationToken);
-		if (!TryGetSelection(text, startLine, startColumn, endLine, endColumn, out TextSpan sourceSpan, out string? invalid))
+		if (!TryGetSelection(text, line, column, endLine, endColumn, out TextSpan sourceSpan, out string? invalid))
 			return Failure(Error.Invalid(invalid!));
 		if (await source.MapToDocumentAsync(sourceSpan, cancellationToken) is not TextSpan span)
-			return Failure(Error.NotSupported($"The selection {startLine}:{startColumn}-{endLine}:{endColumn} is not inside C# code (an @code block or expression) in '{documentPath}'."));
+			return Failure(Error.NotSupported($"The selection {line}:{column}-{endLine}:{endColumn} is not inside C# code (an @code block or expression) in '{filePath}'."));
 
 		CodeAction? action = await FindActionAsync(document, span, asLocalFunction ? ExtractLocalFunctionKey : ExtractMethodKey, cancellationToken);
 		if (action is null)
@@ -268,14 +268,14 @@ public sealed class ExtractMethodTool
 	/// Converts the 1-based, end-exclusive selection to a span, then trims surrounding whitespace so a
 	/// selection of whole lines (including their indentation and line break) is treated as the code on them.
 	/// </summary>
-	private static bool TryGetSelection(SourceText text, int startLine, int startColumn, int endLine, int endColumn, out TextSpan span, out string? invalid)
+	private static bool TryGetSelection(SourceText text, int line, int column, int endLine, int endColumn, out TextSpan span, out string? invalid)
 	{
 		span = default;
 		invalid = null;
 
-		if (!TryGetOffset(text, startLine, startColumn, out int start) || !TryGetOffset(text, endLine, endColumn, out int end))
+		if (!TryGetOffset(text, line, column, out int start) || !TryGetOffset(text, endLine, endColumn, out int end))
 		{
-			invalid = $"The selection {startLine}:{startColumn}-{endLine}:{endColumn} is outside the document ({text.Lines.Count} lines).";
+			invalid = $"The selection {line}:{column}-{endLine}:{endColumn} is outside the document ({text.Lines.Count} lines).";
 			return false;
 		}
 

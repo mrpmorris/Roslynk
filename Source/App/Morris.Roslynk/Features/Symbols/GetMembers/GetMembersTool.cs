@@ -51,7 +51,7 @@ public sealed class GetMembersTool
 		OpenWorld = false)]
 	public async Task<string> GetMembers(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Type name.")] string typeName,
+		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description("Include inherited members.")] bool includeInherited = false,
 		[Description("Case-insensitive name filter: trailing '*' means prefix; otherwise substring. Null matches all.")] string? nameFilter = null,
 		[Description("Include methods.")] bool includeMethods = true,
@@ -64,13 +64,13 @@ public sealed class GetMembersTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await GetMembersCoreAsync(model, instance, typeName, includeInherited, nameFilter, includeMethods, includeFields, includeProperties, includeEvents, includeNestedTypes, startItem, maxSize, Budget, CancellationToken.None);
+		return await GetMembersCoreAsync(model, instance, symbolName, includeInherited, nameFilter, includeMethods, includeFields, includeProperties, includeEvents, includeNestedTypes, startItem, maxSize, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> GetMembersCoreAsync(
 		SolutionModel model,
 		RoslynInstance instance,
-		string typeName,
+		string symbolName,
 		bool includeInherited = false,
 		string? nameFilter = null,
 		bool includeMethods = true,
@@ -98,14 +98,14 @@ public sealed class GetMembersTool
 		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(
 			SymbolResolver,
 			projections,
-			typeName,
+			symbolName,
 			includeMetadata: true,
 			accept: symbol => symbol is INamedTypeSymbol);
 
 		if (groups.Count == 0)
-			return Failure(Error.NotFound($"No type matched '{typeName}'."));
+			return Failure(Error.NotFound($"No type matched '{symbolName}'."));
 		if (groups.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(typeName, groups.Select(group => group[0].Symbol)));
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		// Holding the symbols, so an ambiguous match can emit candidates that are distinguishable from each
 		// other and accepted back verbatim.

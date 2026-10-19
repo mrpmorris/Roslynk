@@ -50,7 +50,7 @@ public sealed class RemoveUnusedUsingsTool
 	}
 
 	[Description("""
-		Removes unnecessary using directives (CS8019), solution-wide or in documentPath, including
+		Removes unnecessary using directives (CS8019), solution-wide or in filePath, including
 		Razor @using lines. Additional header: removedCount.
 		No changes: applied=N, removedCount=0; safe to rerun.
 		NotFound: unloaded source file.
@@ -64,7 +64,7 @@ public sealed class RemoveUnusedUsingsTool
 		OpenWorld = false)]
 	public async Task<string> RemoveUnusedUsings(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Source file to clean; omit for the whole solution.")] string? documentPath = null,
+		[Description("Source file to clean; omit for the whole solution.")] string? filePath = null,
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
@@ -91,11 +91,11 @@ public sealed class RemoveUnusedUsingsTool
 
 		HashSet<DocumentId>? targetDocuments = null;
 		RazorSourceDocument? targetRazor = null;
-		if (documentPath is not null)
+		if (filePath is not null)
 		{
-			RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, documentPath, cancellationToken);
+			RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, filePath, cancellationToken);
 			if (source is null)
-				return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs, .razor or .cshtml document."));
+				return Failure(Error.NotFound($"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document."));
 			if (source.IsRazor)
 			{
 				targetRazor = source;
@@ -146,7 +146,7 @@ public sealed class RemoveUnusedUsingsTool
 		// Razor-generated code never reports CS8019, so .razor/.cshtml files get their own @using analysis.
 		IEnumerable<RazorSourceDocument> razorSources = targetRazor is not null
 			? [targetRazor]
-			: documentPath is null ? await RazorSourcesAsync(solution, cancellationToken) : [];
+			: filePath is null ? await RazorSourcesAsync(solution, cancellationToken) : [];
 		foreach (RazorSourceDocument razorSource in razorSources)
 		{
 			(updated, int razorRemoved) = await RazorUnusedUsings.RemoveAsync(updated, razorSource, line: null, cancellationToken);

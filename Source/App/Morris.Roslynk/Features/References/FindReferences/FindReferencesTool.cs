@@ -52,21 +52,19 @@ public sealed class FindReferencesTool
 	public async Task<string> FindReferences(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("Symbol name.")] string symbolName,
-		[Description("Reference-location cap.")] int? maxResults = null,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
-		return await FindReferencesCoreAsync(model, instance, symbolName, maxResults, startItem, maxSize, Budget, cancellationToken);
+		return await FindReferencesCoreAsync(model, instance, symbolName, startItem, maxSize, Budget, cancellationToken);
 	}
 
 	internal async Task<string> FindReferencesCoreAsync(
 		SolutionModel model,
 		RoslynInstance instance,
 		string symbolName,
-		int? maxResults = null,
 		int startItem = 1,
 		int maxSize = 0,
 		ResponseBudget? budget = null,
@@ -118,12 +116,9 @@ public sealed class FindReferencesTool
 			}
 		}
 
-		// The result set: capped only when the caller asked for a cap, so omitting maxResults pages through
-		// everything. count= names the size of this set.
-		IReadOnlyList<(Location Location, Solution Solution)> page = maxResults is int cap
-			? hits.Take(Math.Max(0, cap)).ToList()
-			: hits;
-		bool capped = hits.Count > page.Count;
+		// The result set is every hit; the response budget and maxSize bound what one page carries, so a
+		// long result pages with startItem instead of losing hits to a cap. count= names the set's size.
+		IReadOnlyList<(Location Location, Solution Solution)> page = hits;
 
 		var root = new SymbolNode();
 		foreach ((Location location, Solution locationSolution) in page)
@@ -150,13 +145,7 @@ public sealed class FindReferencesTool
 		PagedRender render = ItemPaging.Render(
 			model.Status,
 			builder => builder.Header("resolvedSymbol", SymbolResolver.SignatureName(representative)),
-			capHeaders: capped
-				? builder =>
-				{
-					builder.Header("count", page.Count);
-					builder.Header("truncated", true);
-				}
-				: null,
+			capHeaders: null,
 			renderBody: builder => root.Render(builder),
 			items: root.Items(),
 			startItem: startItem,

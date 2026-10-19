@@ -65,8 +65,8 @@ public sealed class FindDeadCodeTool
 		Unused overloads have separate locations, without parameter lists: get_symbol_body offers
 		candidates. The host decides removals. Scan is per-symbol; narrow large solutions with scope.
 
-		maxResults caps the scan: count is candidates found; truncated=Y may mean the cap stopped scanning.
-		Omit maxResults for a complete scan.
+		maxSize caps the scan: count is candidates found; truncated=Y may mean the cap stopped scanning.
+		Omit maxSize for a complete scan.
 		""")]
 	[McpServerTool(
 		Name = FindDeadCodeName,
@@ -79,13 +79,12 @@ public sealed class FindDeadCodeTool
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("Name prefix, e.g. MyApp.Services; omit for the whole solution.")] string? scope = null,
 		[Description("Include unreferenced public/protected members (the API surface).")] bool includePublic = false,
-		[Description("Scan cap; omit for a complete scan.")] int? maxResults = null,
-		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
-		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
+		[Description("Scan cap; omit for a complete scan.")] int maxSize = 0,
+		[Description(ParameterDescriptions.StartItem)] int startItem = 1)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await FindDeadCodeCoreAsync(model, instance, scope, includePublic, maxResults, startItem, maxSize, Budget, CancellationToken.None);
+		return await FindDeadCodeCoreAsync(model, instance, scope, includePublic, maxSize, startItem, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> FindDeadCodeCoreAsync(
@@ -93,9 +92,8 @@ public sealed class FindDeadCodeTool
 		RoslynInstance instance,
 		string? scope = null,
 		bool includePublic = false,
-		int? maxResults = null,
-		int startItem = 1,
 		int maxSize = 0,
+		int startItem = 1,
 		ResponseBudget? budget = null,
 		CancellationToken token = default)
 	{
@@ -135,7 +133,7 @@ public sealed class FindDeadCodeTool
 		candidates.Sort((left, right) => string.Compare(
 			SymbolResolver.SignatureName(left), SymbolResolver.SignatureName(right), StringComparison.Ordinal));
 
-		int cap = Math.Max(0, maxResults ?? int.MaxValue);
+		int cap = maxSize > 0 ? maxSize : int.MaxValue;
 		var results = new List<Candidate>();
 		bool truncated = false;
 		foreach (ISymbol symbol in candidates)

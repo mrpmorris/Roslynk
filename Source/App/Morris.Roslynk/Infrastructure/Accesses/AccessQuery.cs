@@ -28,7 +28,6 @@ public static class AccessQuery
 		ProjectionService projectionService,
 		string symbolName,
 		Func<AccessKind, bool> include,
-		int? maxResults = null,
 		int startItem = 1,
 		int maxSize = 0,
 		ResponseBudget? budget = null,
@@ -139,12 +138,9 @@ public static class AccessQuery
 			.ThenBy(hit => hit.Location.GetDisplaySpan().StartLinePosition)
 			.ToList();
 
-		// The result set: capped only when the caller asked for a cap, so omitting maxResults pages through
-		// everything. count= names the size of this set.
-		IReadOnlyList<(Location Location, Solution Solution, AccessKind Kind)> page = maxResults is int cap
-			? hits.Take(Math.Max(0, cap)).ToList()
-			: hits;
-		bool capped = hits.Count > page.Count;
+		// The result set is every hit; the response budget and maxSize bound what one page carries, so a
+		// long result pages with startItem instead of losing hits to a cap. count= names the set's size.
+		IReadOnlyList<(Location Location, Solution Solution, AccessKind Kind)> page = hits;
 
 		var outline = new SymbolNode();
 		foreach ((Location location, Solution locationSolution, AccessKind kind) in page)
@@ -174,13 +170,7 @@ public static class AccessQuery
 		PagedRender render = ItemPaging.Render(
 			model.Status,
 			builder => builder.Header("resolvedSymbol", resolvedName),
-			capHeaders: capped
-				? builder =>
-				{
-					builder.Header("count", page.Count);
-					builder.Header("truncated", true);
-				}
-				: null,
+			capHeaders: null,
 			renderBody: builder => outline.Render(builder),
 			items: outline.Items(),
 			startItem: startItem,

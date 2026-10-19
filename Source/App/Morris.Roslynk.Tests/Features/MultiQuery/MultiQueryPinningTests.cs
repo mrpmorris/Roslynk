@@ -44,7 +44,7 @@ public class MultiQueryPinningTests
 			MultiQueryCatalog.Entries,
 			[
 				new MultiQueryOperation(MultiQueryOp.get_symbol_body, MultiQueryTestHelpers.Args(("symbolName", MultiQueryTestHelpers.Json("SimpleLibrary.Widget")))),
-				new MultiQueryOperation(MultiQueryOp.get_members, MultiQueryTestHelpers.Args(("typeName", MultiQueryTestHelpers.Json("SimpleLibrary.Widget")))),
+				new MultiQueryOperation(MultiQueryOp.get_members, MultiQueryTestHelpers.Args(("symbolName", MultiQueryTestHelpers.Json("SimpleLibrary.Widget")))),
 			]);
 
 		// PRE-write state in both slots: the old source (three methods) rather than the emptied class.
@@ -79,7 +79,7 @@ public class MultiQueryPinningTests
 			catalog,
 			[
 				new MultiQueryOperation(MultiQueryOp.get_symbol, MultiQueryTestHelpers.Args(("symbolName", MultiQueryTestHelpers.Json("SimpleLibrary.Widget")))),
-				new MultiQueryOperation(MultiQueryOp.get_members, MultiQueryTestHelpers.Args(("typeName", MultiQueryTestHelpers.Json("SimpleLibrary.Widget")))),
+				new MultiQueryOperation(MultiQueryOp.get_members, MultiQueryTestHelpers.Args(("symbolName", MultiQueryTestHelpers.Json("SimpleLibrary.Widget")))),
 			]);
 
 		Assert.Contains("error=Faulted", envelope);

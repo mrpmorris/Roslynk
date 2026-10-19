@@ -173,15 +173,14 @@ public class MultiQueryCatalogTests
 	}
 
 	[Fact]
-	public async Task WhenMaxResultsIsNull_ThenTheBinderCoercesItToUncapped()
+	public async Task WhenAnIntParameterIsGivenAsAJsonString_ThenTheBinderCoercesIt()
 	{
-		// find_references's maxResults is int? - null means uncapped. The binder must map a JSON null to
-		// a genuine null (not 0, which would cap the set to nothing).
+		// MCP clients vary in how they serialize scalars; a string form of a numeric argument must bind.
 		var entry = MultiQueryCatalog.Entries[FindReferencesTool.FindReferencesName];
 		var arguments = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
 		{
 			["symbolName"] = MultiQueryTestHelpers.Json("RefSpace.IThing"),
-			["maxResults"] = JsonNull(),
+			["maxSize"] = MultiQueryTestHelpers.Json("400"),
 		};
 
 		// The coercion succeeds: the core resolves and runs (failing on the null model afterwards),

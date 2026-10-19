@@ -57,20 +57,20 @@ public sealed class GetCalleesTool
 		OpenWorld = false)]
 	public async Task<string> GetCallees(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Member name.")] string memberName,
+		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description("Exclude metadata callees (BCL/NuGet).")] bool excludeExternal = false,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await GetCalleesCoreAsync(model, instance, memberName, excludeExternal, startItem, maxSize, Budget, CancellationToken.None);
+		return await GetCalleesCoreAsync(model, instance, symbolName, excludeExternal, startItem, maxSize, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> GetCalleesCoreAsync(
 		SolutionModel model,
 		RoslynInstance instance,
-		string memberName,
+		string symbolName,
 		bool excludeExternal = false,
 		int startItem = 1,
 		int maxSize = 0,
@@ -85,16 +85,16 @@ public sealed class GetCalleesTool
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
-		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, memberName);
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName);
 
 		if (groups.Count == 0)
 		{
-			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, memberName);
-			return Failure(Error.NotFound($"No symbol matched '{memberName}'.", candidates.Count > 0 ? candidates : null));
+			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
+			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", candidates.Count > 0 ? candidates : null));
 		}
 
 		if (groups.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(memberName, groups.Select(group => group[0].Symbol)));
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
 

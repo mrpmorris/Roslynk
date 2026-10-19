@@ -11,8 +11,8 @@ namespace Morris.Roslynk.Tests.Features.References.FindReferencesTests;
 /// Issue 96's paging scenarios against find_references on the References fixture (RefSpace.IThing is
 /// referenced across several files, types and members): page 1 of a fitting result is the unpaged
 /// output byte for byte; a continuation page repeats its items' container chain and covers every item;
-/// a maxSize that cannot carry one item beside its chain is Invalid naming the count; and maxResults
-/// bounds the SET that paging then walks, with count= naming the capped size.
+/// a maxSize that cannot carry one item beside its chain is Invalid naming the count; and there is no
+/// result cap - count= always names the whole set, so paging reaches every reference.
 /// </summary>
 public class FindReferencesPagingTests : IClassFixture<FindReferencesPagingTests.ReferencesFixture>
 {
@@ -100,14 +100,20 @@ public class FindReferencesPagingTests : IClassFixture<FindReferencesPagingTests
 	}
 
 	[Fact]
-	public async Task WhenMaxResultsCapsTheSet_ThenCountNamesTheCappedSizeAndNoNextStartItemIsEmitted()
+	public async Task WhenMaxSizeCapsThePage_ThenCountNamesEveryItemAndNoResultIsDropped()
 	{
-		string result = await Subject().FindReferences(TestSolutions.References, SymbolName, maxResults: 1);
+		string whole = await Subject().FindReferences(TestSolutions.References, SymbolName);
+		int total = LeafLines(whole).Length;
+		Assert.True(total > 1, whole);
+
+		// There is no result cap: count= is the whole set, and a page that cannot carry it pages on.
+		string result = await Subject().FindReferences(
+			TestSolutions.References, SymbolName, maxSize: Math.Max(260, whole.Length / 2));
 
 		Assert.Contains("truncated=Y\n", result);
-		Assert.Contains("count=1\n", result);
-		Assert.DoesNotContain("nextStartItem=", result); // nextStartItem= is THE paging discriminator
-		Assert.Single(LeafLines(result)); // the set is capped, not the page
+		Assert.Equal(total.ToString(CultureInfo.InvariantCulture), Header(result, "count"));
+		Assert.Contains("nextStartItem=", result);
+		Assert.True(LeafLines(result).Length < total);
 	}
 
 	[Fact]
@@ -124,7 +130,7 @@ public class FindReferencesPagingTests : IClassFixture<FindReferencesPagingTests
 	}
 
 	[Fact]
-	public async Task WhenMaxResultsBoundsTheSet_ThenPagingWalksOnlyTheCappedSet()
+	public async Task WhenNoCapIsGiven_ThenPagingWalksEveryReference()
 	{
 		var subject = Subject();
 		string whole = await subject.FindReferences(TestSolutions.References, SymbolName);
@@ -134,8 +140,8 @@ public class FindReferencesPagingTests : IClassFixture<FindReferencesPagingTests
 		int startItem = 1;
 		while (true)
 		{
-			string page = await subject.FindReferences(TestSolutions.References, SymbolName, maxResults: 2, startItem: startItem, maxSize: Math.Max(260, whole.Length / 3));
-			Assert.Equal("2", Header(page, "count")); // count= names the CAPPED size, not the total available
+			string page = await subject.FindReferences(TestSolutions.References, SymbolName, startItem: startItem, maxSize: Math.Max(260, whole.Length / 3));
+			Assert.Equal(referenceSet.Count.ToString(CultureInfo.InvariantCulture), Header(page, "count")); // the whole set, on every page
 			seen.AddRange(LeafLines(page));
 
 			string? next = HeaderOrEmpty(page, "nextStartItem");
@@ -145,9 +151,9 @@ public class FindReferencesPagingTests : IClassFixture<FindReferencesPagingTests
 			startItem = int.Parse(next, CultureInfo.InvariantCulture);
 		}
 
-		// The walk covered the capped set exactly: two leaves, every one a real reference of the symbol.
-		Assert.Equal(2, seen.Count);
-		Assert.True(seen.All(referenceSet.Contains), "The walked pages delivered a reference outside the symbol's set.");
+		// Nothing is dropped: the walk reaches every reference exactly once.
+		Assert.Equal(referenceSet.Count, seen.Count);
+		Assert.Equal(referenceSet.Order(StringComparer.Ordinal), seen.Order(StringComparer.Ordinal));
 	}
 
 	private FindReferencesTool Subject() => new(Fixture.Registry, new SymbolResolver(), new ProjectionService());

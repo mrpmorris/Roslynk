@@ -90,17 +90,21 @@ public class GeneratedSearchSymbolsTests
 	}
 
 	[Fact]
-	public async Task WhenMaxResultsCapsTheMatches_ThenCountAndTruncatedAreReported()
+	public async Task WhenMaxSizeCannotCarryEveryMatch_ThenThePageIsTruncatedAndNothingIsCapped()
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Generator);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
-		// Shape matches the partial type and the ShapeSourceGenerator class, so the cap bites.
-		string result = await subject.SearchSymbols(TestSolutions.Generator, "Shape", maxResults: 1);
+		// Shape matches the partial type and the ShapeSourceGenerator class, so a one-item page truncates.
+		string whole = await subject.SearchSymbols(TestSolutions.Generator, "Shape");
+		string result = await subject.SearchSymbols(TestSolutions.Generator, "Shape", maxSize: whole.Length - 1);
 
-		Assert.StartsWith("count=", result);
 		Assert.Contains("truncated=Y", result);
+		Assert.Contains("nextStartItem=", result);
+		// count= names the whole set on a page too, so a continuation reaches the remaining matches.
+		Assert.True(result.Length < whole.Length, "the page should carry less than the whole result");
+		Assert.Contains("Shape", result);
 	}
 
 	private static async Task<string> SearchAsync(string query)

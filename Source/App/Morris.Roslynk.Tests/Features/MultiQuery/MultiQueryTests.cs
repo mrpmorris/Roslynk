@@ -29,7 +29,7 @@ public class MultiQueryTests
 		var operations = new List<MultiQueryOperation>
 		{
 			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("SimpleLibrary.Greeter")))),
-			new(MultiQueryOp.get_members, Args(("typeName", Json("SimpleLibrary.Greeter")))),
+			new(MultiQueryOp.get_members, Args(("symbolName", Json("SimpleLibrary.Greeter")))),
 		};
 
 		string envelope = await subject.MultiQuery(TestSolutions.Simple, operations);

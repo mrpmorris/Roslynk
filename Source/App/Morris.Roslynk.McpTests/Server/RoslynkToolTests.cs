@@ -48,13 +48,13 @@ public class RoslynkToolTests
 	public void WhenADefaultIsMovedIntoTheDescription_ThenTheCallerCanStillSeeIt()
 	{
 		McpServerTool inner = McpServerTool.Create(
-			([Description("Maximum results to return.")] int maxResults = 50) => maxResults,
+			([Description("Maximum results to return.")] int maxSize = 50) => maxSize,
 			new McpServerToolCreateOptions { Name = "sample" });
 
 		var tool = new RoslynkTool(inner);
 
 		string description = tool.ProtocolTool.InputSchema
-			.GetProperty("properties").GetProperty("maxResults").GetProperty("description").GetString()!;
+			.GetProperty("properties").GetProperty("maxSize").GetProperty("description").GetString()!;
 
 		// The default is generated from the C# default value, so the text cannot drift from the signature.
 		Assert.Contains("Maximum results to return.", description, StringComparison.Ordinal);

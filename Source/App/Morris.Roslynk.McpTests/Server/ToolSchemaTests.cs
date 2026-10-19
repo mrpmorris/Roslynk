@@ -175,7 +175,7 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 		IReadOnlyDictionary<string, JsonElement> properties = Properties(schema);
 		IReadOnlyCollection<string> required = Required(schema);
 
-		foreach (string parameter in (string[])["projectName", "filePath", "ids", "maxResults", "summaryOnly"])
+		foreach (string parameter in (string[])["projectName", "filePath", "ids", "maxSize", "summaryOnly"])
 		{
 			Assert.True(properties.ContainsKey(parameter), $"get_diagnostics does not publish '{parameter}'.");
 			Assert.DoesNotContain(parameter, required);

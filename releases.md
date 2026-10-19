@@ -2,8 +2,12 @@
 
 ## Unreleased
 
+- One name per concept across every tool: `symbolName` replaces `typeName`/`memberName`/`methodName`/`methodId`, `filePath` replaces `documentPath`, and `maxResults` merges into `maxSize` so no query drops results (Fixes #121)
 - An argument the tool does not declare is rejected before anything runs with `error=UnknownArgument` naming the valid parameters (and the closest name when it is a plausible typo), so a misspelled argument can no longer silently fall back to defaults; `multi_query` operations get the same check (Fixes #122)
 - The daemon roots its host content at its install directory, so starting `roslynk` from a home directory no longer recursively watches it and exhausts Linux inotify watches (Fixes #103)
+
+## 2.2.0
+
 - Server instructions route diffs and line-range reads, including PR diff locations, to standard file tools (Fixes #100)
 - Published parameter default suffixes use `Default: ...`, preserving values and optionality (Fixes #100)
 - Tool and parameter descriptions are shortened; shared parameter, write-result and access-kind contracts live in server instructions, with explicit startItem continuation syntax (Fixes #100)

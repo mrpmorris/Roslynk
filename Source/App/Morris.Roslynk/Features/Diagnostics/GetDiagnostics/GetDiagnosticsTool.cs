@@ -62,7 +62,6 @@ public sealed class GetDiagnosticsTool
 		[Description("Project filter: outline name with optional extension, case-insensitive; all loaded target frameworks.")] string? projectName = null,
 		[Description("File filter (case-insensitive), including diagnostics mapped to Razor source.")] string? filePath = null,
 		[Description("Diagnostic ids (case-insensitive), e.g. [\"CS0246\"]; null/empty matches all.")] string[]? ids = null,
-		[Description("Body-entry cap (ids with summaryOnly). Capped bodies report count=<listed>, truncated=Y.")] int? maxResults = null,
 		[Description("Summarize by diagnostic id.")] bool summaryOnly = false,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
@@ -137,7 +136,7 @@ public sealed class GetDiagnosticsTool
 		if (includeHidden)
 			wanted.Add(DiagnosticSeverity.Hidden);
 
-		int cap = maxResults is int given ? Math.Max(0, given) : int.MaxValue;
+		int cap = maxSize > 0 ? maxSize : maxSize < 0 ? 0 : int.MaxValue;
 		List<Diagnostic> items;
 		IReadOnlyList<IdSummary> summaries;
 		if (summaryOnly)
@@ -258,7 +257,7 @@ public sealed class GetDiagnosticsTool
 			renderBody: builder => RenderBody(builder, null),
 			items: collected,
 			startItem: startItem,
-			maxSize: maxSize,
+			maxSize: 0,
 			budget: Budget);
 		return render switch
 		{

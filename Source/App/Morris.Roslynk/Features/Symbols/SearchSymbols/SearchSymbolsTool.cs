@@ -46,20 +46,18 @@ public sealed class SearchSymbolsTool
 	public async Task<string> SearchSymbols(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("Case-insensitive name substring.")] string query,
-		[Description("Result cap.")] int? maxResults = null,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await SearchSymbolsCoreAsync(model, instance, query, maxResults, startItem, maxSize, Budget, CancellationToken.None);
+		return await SearchSymbolsCoreAsync(model, instance, query, startItem, maxSize, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> SearchSymbolsCoreAsync(
 		SolutionModel model,
 		RoslynInstance instance,
 		string query,
-		int? maxResults = null,
 		int startItem = 1,
 		int maxSize = 0,
 		ResponseBudget? budget = null,
@@ -98,12 +96,9 @@ public sealed class SearchSymbolsTool
 			}
 		}
 
-		// The result set: capped only when the caller asked for a cap, so omitting maxResults pages through
-		// everything. count= names the size of this set.
-		IReadOnlyList<(ISymbol Symbol, Solution Solution)> page = maxResults is int cap
-			? matched.Items.Take(Math.Max(0, cap)).ToList()
-			: matched.Items.ToList();
-		bool capped = matched.Count > page.Count;
+		// The result set is every match; the response budget and maxSize bound what one page carries, so a
+		// long result pages with startItem instead of losing matches to a cap. count= names the set's size.
+		IReadOnlyList<(ISymbol Symbol, Solution Solution)> page = matched.Items.ToList();
 
 		var root = new SymbolNode();
 		foreach ((ISymbol symbol, Solution symbolSolution) in page)
@@ -112,13 +107,7 @@ public sealed class SearchSymbolsTool
 		PagedRender render = ItemPaging.Render(
 			model.Status,
 			builder => { },
-			capHeaders: capped
-				? builder =>
-				{
-					builder.Header("count", page.Count);
-					builder.Header("truncated", true);
-				}
-				: null,
+			capHeaders: null,
 			renderBody: builder => root.Render(builder),
 			items: root.Items(),
 			startItem: startItem,

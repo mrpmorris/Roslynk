@@ -11,8 +11,8 @@ namespace Morris.Roslynk.Tests.Features.MultiQuery;
 /// Issue #22 acceptance: the documented impact-analysis recipe (get_symbol + find_references +
 /// get_callers + find_implementations + get_type_hierarchy in one multi_query call) runs cleanly
 /// against a sample solution - every slot carries that tool's own output and none is error=Invalid.
-/// The recipe deliberately uses each tool's own argument name (get_callers is methodName,
-/// get_type_hierarchy is typeName): multi_query rejects unknown keys.
+/// Every tool in the recipe takes the symbol under the same argument name (symbolName), so one
+/// recipe shape works for all of them; multi_query rejects unknown keys.
 /// </summary>
 public class MultiQueryImpactRecipeTests
 {
@@ -34,10 +34,10 @@ public class MultiQueryImpactRecipeTests
 			[
 				new(MultiQueryOp.get_symbol, Args(("symbolName", Json("SimpleLibrary.Greeter")))),
 				new(MultiQueryOp.find_references, Args(("symbolName", Json("SimpleLibrary.Greeter.Greet")))),
-				new(MultiQueryOp.get_callers, Args(("methodName", Json("SimpleLibrary.Greeter.Greet")))),
-				new(MultiQueryOp.get_callees, Args(("memberName", Json("SimpleLibrary.Caller.Run")))),
+				new(MultiQueryOp.get_callers, Args(("symbolName", Json("SimpleLibrary.Greeter.Greet")))),
+				new(MultiQueryOp.get_callees, Args(("symbolName", Json("SimpleLibrary.Caller.Run")))),
 				new(MultiQueryOp.find_implementations, Args(("symbolName", Json("SimpleLibrary.IGreeter.Greet")))),
-				new(MultiQueryOp.get_type_hierarchy, Args(("typeName", Json("SimpleLibrary.Greeter")))),
+				new(MultiQueryOp.get_type_hierarchy, Args(("symbolName", Json("SimpleLibrary.Greeter")))),
 			]);
 
 		Assert.Contains("operations=6", envelope);

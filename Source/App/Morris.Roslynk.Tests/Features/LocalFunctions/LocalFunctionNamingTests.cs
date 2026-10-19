@@ -267,7 +267,7 @@ public class LocalFunctionNamingTests
 			[
 				new(MultiQueryOp.get_symbol_body, MultiQueryTestHelpers.Args(("symbolName", Json(Inner)))),
 				new(MultiQueryOp.find_references, MultiQueryTestHelpers.Args(("symbolName", Json(LocalMethodSignature)))),
-				new(MultiQueryOp.get_callers, MultiQueryTestHelpers.Args(("methodName", Json(LocalMethod)))),
+				new(MultiQueryOp.get_callers, MultiQueryTestHelpers.Args(("symbolName", Json(LocalMethod)))),
 			]);
 
 		Assert.DoesNotContain("error=", envelope);

@@ -48,10 +48,12 @@ internal static class McpServerRegistration
 
 			## Parameters
 
-			Paths accept absolute or solution-relative forms. documentPath accepts .cs/.razor/.cshtml
-			unless restricted by the tool. Source lines/columns are 1-based; selections start inclusive, end exclusive.
-			checkOnly=true previews without writing, returning would-change paths (apply_patch: headers only).
-			Omitted optional arguments use defaults.
+			Names are consistent across tools: solutionPath opens a solution, solutionId is the handle every
+			other tool takes, symbolName identifies any symbol (a type, member or Member:parameter), and
+			filePath identifies a source file. Paths accept absolute or solution-relative forms. filePath
+			accepts .cs/.razor/.cshtml unless restricted by the tool. Source lines/columns are 1-based;
+			selections start inclusive, end exclusive. checkOnly=true previews without writing, returning
+			would-change paths (apply_patch: headers only). Omitted optional arguments use defaults.
 
 			## Name grammar
 
@@ -76,10 +78,9 @@ internal static class McpServerRegistration
 			## Paging
 
 			Only SupportsPaging=Y tools page. startItem is 1-based; continue with startItem=<nextStartItem>,
-			keeping other arguments unchanged. Pages repeat enclosing containers. maxSize limits page characters;
-			0 uses the response budget. Omit maxResults for all results; otherwise it caps the result set,
-			count describes that set, and paging cannot recover excluded results.
-			Exceptions: find_dead_code caps the scan; get_diagnostics keeps full header counts.
+			keeping other arguments unchanged. Pages repeat enclosing containers. maxSize limits page characters
+			(0 uses the response budget). get_diagnostics instead counts maxSize listed entries (0 lists all) and
+			find_dead_code caps its scan by it. No tool drops results: everything found is reachable by paging.
 			partialItem=<n> means an oversized item is incomplete and its remainder unretrievable:
 			narrow the query; never claim complete coverage. Unpaged oversized results stop at a whole line
 			with outputTruncated=Y, fullOutputChars=<n>.

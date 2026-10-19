@@ -49,7 +49,7 @@ public sealed class RenameParameterTool
 
 		Errors:
 		- Invalid: invalid identifier or newName=parameterName.
-		- Ambiguous methodId: overload candidates; no match gives fuzzy suggestions.
+		- Ambiguous symbolName: overload candidates; no match gives fuzzy suggestions.
 		- NotFound: absent parameterName; lists parameters.
 		- Conflict: newName clashes with a parameter, local, local function, lambda/query variable or
 		  type parameter in a renamed declaration.
@@ -65,7 +65,7 @@ public sealed class RenameParameterTool
 		OpenWorld = false)]
 	public async Task<string> RenameParameter(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Declaring method/local function/constructor/indexer name.")] string methodId,
+		[Description("Declaring method/local function/constructor/indexer name.")] string symbolName,
 		[Description("Current parameter name.")] string parameterName,
 		[Description("New C# identifier.")] string newName,
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
@@ -88,14 +88,14 @@ public sealed class RenameParameterTool
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(baseSolution);
 
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(baseSolution, cancellationToken);
-		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, methodId, cancellationToken);
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName, cancellationToken);
 		if (groups.Count == 0)
 		{
-			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(baseSolution, methodId, cancellationToken: cancellationToken);
-			return Failure(Error.NotFound($"No symbol matched '{methodId}'.", suggestions.Count > 0 ? suggestions : null));
+			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(baseSolution, symbolName, cancellationToken: cancellationToken);
+			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", suggestions.Count > 0 ? suggestions : null));
 		}
 		if (groups.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(methodId, groups.Select(group => group[0].Symbol)));
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
 		ISymbol member = resolved[0].Symbol;

@@ -31,7 +31,7 @@ public class MultiQueryLimitTests
 		var operations = new List<MultiQueryOperation>
 		{
 			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("SimpleLibrary.Greeter")))),
-			new(MultiQueryOp.get_members, Args(("typeName", Json("SimpleLibrary.Greeter")))),
+			new(MultiQueryOp.get_members, Args(("symbolName", Json("SimpleLibrary.Greeter")))),
 			new(MultiQueryOp.search_symbols, Args(("query", Json("Widget")))),
 		};
 		string envelope = await subject.MultiQuery(TestSolutions.Simple, operations);
@@ -241,7 +241,7 @@ public class MultiQueryLimitTests
 		var operations = new List<MultiQueryOperation>
 		{
 			new(MultiQueryOp.get_symbol, Args(("symbolName", Json("enormous")))),
-			new(MultiQueryOp.get_members, Args(("typeName", Json("small")), ("chars", Json(1_000)))),
+			new(MultiQueryOp.get_members, Args(("symbolName", Json("small")), ("chars", Json(1_000)))),
 		};
 		string envelope = await subject.ExecuteBatchAsync(model, instance, catalog, operations);
 

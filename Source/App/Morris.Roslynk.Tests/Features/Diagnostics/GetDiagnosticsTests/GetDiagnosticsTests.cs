@@ -160,14 +160,14 @@ public class GetDiagnosticsTests
 	}
 
 	[Fact]
-	public async Task WhenMaxResultsIsExceeded_ThenTheListIsTruncatedAndCountsStayComplete()
+	public async Task WhenMaxSizeIsExceeded_ThenTheFirstEntriesAreKeptAndCountsStayComplete()
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
-			TestSolutions.Broken, includeErrors: true, includeWarnings: true, includeAnalyzers: false, maxResults: 1);
+			TestSolutions.Broken, includeErrors: true, includeWarnings: true, includeAnalyzers: false, maxSize: 1);
 
 		Assert.Contains("errors=2", result);
 		Assert.Contains("warnings=0", result);
@@ -291,14 +291,14 @@ public class GetDiagnosticsTests
 	}
 
 	[Fact]
-	public async Task WhenMaxResultsIsNegative_ThenTheResultIsHeadersOnly()
+	public async Task WhenMaxSizeIsNegative_ThenTheResultIsHeadersOnly()
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
-			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, maxResults: -5);
+			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, maxSize: -5);
 
 		Assert.DoesNotContain("error=", result);
 		Assert.Contains("errors=2", result);
@@ -375,7 +375,7 @@ public class GetDiagnosticsTests
 	}
 
 	[Fact]
-	public async Task WhenTruncated_ThenTheKeptLeavesAreTheFirstInBodyOrder()
+	public async Task WhenMaxSizeIsExceeded_ThenTheKeptLeavesAreTheFirstInBodyOrder()
 	{
 		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
@@ -392,7 +392,7 @@ public class GetDiagnosticsTests
 
 		string full = await subject.GetDiagnostics(solutionPath, includeErrors: true, includeAnalyzers: false);
 		string truncated = await subject.GetDiagnostics(
-			solutionPath, includeErrors: true, includeAnalyzers: false, maxResults: 1);
+			solutionPath, includeErrors: true, includeAnalyzers: false, maxSize: 1);
 
 		string[] fullLeaves = [.. BodyOf(full).Split('\n').Where(line => line.Contains("CS0"))];
 		string[] keptLeaves = [.. BodyOf(truncated).Split('\n').Where(line => line.Contains("CS0"))];
@@ -430,10 +430,10 @@ public class GetDiagnosticsTests
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
-			solutionPath, includeAnalyzers: false, summaryOnly: true, ids: ["CS0029", "CS0103"], maxResults: 1);
+			solutionPath, includeAnalyzers: false, summaryOnly: true, ids: ["CS0029", "CS0103"], maxSize: 1);
 
-		// Three diagnostics collapse to two id rows; the cap counts id rows, so count= names the one
-		// row the capped set carries.
+		// Three diagnostics collapse to two id rows; maxSize caps the listed rows, so count= names the
+		// one row the capped set carries.
 		Assert.Contains("count=1", result);
 		Assert.Contains("truncated=Y", result);
 		Assert.Contains("errors=3", result);

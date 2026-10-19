@@ -313,9 +313,9 @@ public class RazorSourceToolTests
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
-		(int startLine, int startColumn, int endLine, int endColumn) = await GreetingSelectionAsync(solutionPath);
+		(int line, int column, int endLine, int endColumn) = await GreetingSelectionAsync(solutionPath);
 
-		string result = await subject.ExtractMethod(solutionPath, IndexRelativePath, startLine, startColumn, endLine, endColumn, methodName: "AppendGreeting", asLocalFunction: true);
+		string result = await subject.ExtractMethod(solutionPath, IndexRelativePath, line, column, endLine, endColumn, methodName: "AppendGreeting", asLocalFunction: true);
 
 		Assert.True(result.Contains("applied=Y"), result);
 		Assert.Contains("kind=LocalFunction", result);
@@ -329,11 +329,11 @@ public class RazorSourceToolTests
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
 		var extract = new ExtractMethodTool(registry, new ApplyPipeline());
-		(int startLine, int startColumn, int endLine, int endColumn) = await GreetingSelectionAsync(solutionPath);
+		(int line, int column, int endLine, int endColumn) = await GreetingSelectionAsync(solutionPath);
 
-		string extracted = await extract.ExtractMethod(solutionPath, IndexRelativePath, startLine, startColumn, endLine, endColumn, methodName: "AppendGreeting", asLocalFunction: true);
-		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "unused");
-		string fixedResult = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", line, column);
+		string extracted = await extract.ExtractMethod(solutionPath, IndexRelativePath, line, column, endLine, endColumn, methodName: "AppendGreeting", asLocalFunction: true);
+		(int unusedLine, int unusedColumn) = await PositionOfAsync(solutionPath, IndexRelativePath, "unused");
+		string fixedResult = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", unusedLine, unusedColumn);
 
 		Assert.Contains("applied=Y", extracted);
 		Assert.True(fixedResult.Contains("applied=Y"), fixedResult);
@@ -373,10 +373,10 @@ public class RazorSourceToolTests
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(solutionPath);
 		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
-		(int startLine, int startColumn, int endLine, int endColumn) = await GreetingSelectionAsync(solutionPath);
+		(int line, int column, int endLine, int endColumn) = await GreetingSelectionAsync(solutionPath);
 		string before = await ReadAsync(solutionPath, IndexRelativePath);
 
-		string result = await subject.ExtractMethod(solutionPath, IndexRelativePath, startLine, startColumn, endLine, endColumn);
+		string result = await subject.ExtractMethod(solutionPath, IndexRelativePath, line, column, endLine, endColumn);
 
 		Assert.Contains("error=NotSupported", result);
 		Assert.Contains("asLocalFunction=true", result);
@@ -386,9 +386,9 @@ public class RazorSourceToolTests
 	/// <summary>The two builder.Append statements in Index.cshtml's Format method, end-exclusive.</summary>
 	private static async Task<(int StartLine, int StartColumn, int EndLine, int EndColumn)> GreetingSelectionAsync(string solutionPath)
 	{
-		(int startLine, int startColumn) = await PositionOfAsync(solutionPath, IndexRelativePath, "builder.Append(\"Hello \");");
+		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "builder.Append(\"Hello \");");
 		(int endLine, int endColumn) = await PositionOfAsync(solutionPath, IndexRelativePath, "builder.Append(name);");
-		return (startLine, startColumn, endLine, endColumn + "builder.Append(name);".Length);
+		return (line, column, endLine, endColumn + "builder.Append(name);".Length);
 	}
 
 	[Fact]

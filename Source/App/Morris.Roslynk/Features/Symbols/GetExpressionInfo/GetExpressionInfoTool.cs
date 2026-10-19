@@ -76,7 +76,7 @@ public sealed partial class GetExpressionInfoTool
 		OpenWorld = false)]
 	public async Task<string> GetExpressionInfo(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description(ParameterDescriptions.DocumentPath)] string filePath,
+		[Description(ParameterDescriptions.FilePath)] string filePath,
 		[Description("Expression/declaration line.")] int line,
 		[Description("Expression/declaration column.")] int column)
 	{

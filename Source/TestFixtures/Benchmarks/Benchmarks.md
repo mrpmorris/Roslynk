@@ -27,28 +27,28 @@ on two axes: warm latency (ms) and payload token cost. Produce one results table
 ## Roslynk tools + scenarios (15)
 Confirm parameter names with `tools/list` first. IMPORTANT: the codebase changes between
 runs, so DO NOT hardcode symbol targets — resolve them against the current code first:
-run `get_members {typeName: "...TaskManager", nameFilter: "Search*"}` and pick real,
+run `get_members {symbolName: "...TaskManager", nameFilter: "Search*"}` and pick real,
 currently-existing symbols; verify each scenario returns a real result (not
 "error=NotFound") before recording it. Overloaded methods may fail to resolve — prefer an
 unambiguous target. For find_definition, open the target .cs file and pick a file+line+column
 that actually sits on an identifier usage today.
 
 Tools to cover (arg names as of tools/list):
-  search_symbols {query, maxResults}
+  search_symbols {query, maxSize}
   find_definition {filePath, line, column}
-  find_references {symbolName, maxResults}
+  find_references {symbolName, maxSize}
   find_implementations {symbolName}
-  get_callers {methodName}
-  get_members {typeName, nameFilter?, ...}
+  get_callers {symbolName}
+  get_members {symbolName, nameFilter?, ...}
   get_symbol {symbolName}
-  get_type_hierarchy {typeName}
-  find_dead_code {scope, maxResults}
+  get_type_hierarchy {symbolName}
+  find_dead_code {scope, maxSize}
   get_diagnostics {} (whole solution; has includeAnalyzers, includeWarnings flags)
-  get_code_actions {documentPath, line, column}
+  get_code_actions {filePath, line, column}
   rename_symbol {symbolName, newName, checkOnly:true}
-  change_signature {methodId, parameterType, parameterName, defaultValue, checkOnly:true}
-  remove_unused_usings {documentPath, checkOnly:true}
-  apply_code_fix {documentPath, diagnosticId, checkOnly:true}
+  change_signature {symbolName, parameterType, parameterName, defaultValue, checkOnly:true}
+  remove_unused_usings {filePath, checkOnly:true}
+  apply_code_fix {filePath, diagnosticId, checkOnly:true}
 Use checkOnly:true on all mutating tools so nothing is written.
 
 Good anchor targets to try (verify they still exist): type

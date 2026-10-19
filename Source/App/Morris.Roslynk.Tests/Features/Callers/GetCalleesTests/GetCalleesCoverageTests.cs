@@ -212,7 +212,7 @@ public class GetCalleesCoverageTests : IClassFixture<GetCalleesCoverageTests.Scr
 			Subject = new GetCalleesTool(Registry, new SymbolResolver(), new ProjectionService());
 		}
 
-		public Task<string> GetCalleesAsync(string memberName) => Subject.GetCallees(SolutionPath, memberName);
+		public Task<string> GetCalleesAsync(string symbolName) => Subject.GetCallees(SolutionPath, symbolName);
 
 		public Task DisposeAsync()
 		{

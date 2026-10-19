@@ -45,19 +45,19 @@ public sealed class GetTypeHierarchyTool
 		OpenWorld = false)]
 	public async Task<string> GetTypeHierarchy(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Type name.")] string typeName,
+		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await GetTypeHierarchyCoreAsync(model, instance, typeName, startItem, maxSize, Budget);
+		return await GetTypeHierarchyCoreAsync(model, instance, symbolName, startItem, maxSize, Budget);
 	}
 
 	internal async Task<string> GetTypeHierarchyCoreAsync(
 		SolutionModel model,
 		RoslynInstance instance,
-		string typeName,
+		string symbolName,
 		int startItem = 1,
 		int maxSize = 0,
 		ResponseBudget? budget = null,
@@ -72,18 +72,18 @@ public sealed class GetTypeHierarchyTool
 		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(
 			SymbolResolver,
 			projections,
-			typeName,
+			symbolName,
 			includeMetadata: false,
 			accept: symbol => symbol is INamedTypeSymbol);
 
 		if (groups.Count == 0)
 		{
-			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, typeName);
-			return Failure(Error.NotFound($"No type matched '{typeName}'.", candidates.Count > 0 ? candidates : null));
+			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
+			return Failure(Error.NotFound($"No type matched '{symbolName}'.", candidates.Count > 0 ? candidates : null));
 		}
 
 		if (groups.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(typeName, groups.Select(group => group[0].Symbol)));
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		IReadOnlyList<ProjectionSymbol> resolvedType = groups[0];
 		var type = (INamedTypeSymbol)resolvedType[0].Symbol;

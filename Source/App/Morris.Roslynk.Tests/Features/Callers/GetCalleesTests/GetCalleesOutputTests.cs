@@ -219,7 +219,7 @@ public class GetCalleesOutputTests : IClassFixture<GetCalleesOutputTests.Scratch
 			[
 				new(MultiQueryOp.get_callees, new Dictionary<string, JsonElement>
 				{
-					["memberName"] = JsonSerializer.SerializeToElement(Member),
+					["symbolName"] = JsonSerializer.SerializeToElement(Member),
 					["excludeExternal"] = JsonSerializer.SerializeToElement(true),
 				}),
 			]);
@@ -245,8 +245,8 @@ public class GetCalleesOutputTests : IClassFixture<GetCalleesOutputTests.Scratch
 			Subject = new GetCalleesTool(Registry, new SymbolResolver(), new ProjectionService());
 		}
 
-		public Task<string> GetCalleesAsync(string memberName, bool excludeExternal = false) =>
-			Subject.GetCallees(SolutionPath, memberName, excludeExternal);
+		public Task<string> GetCalleesAsync(string symbolName, bool excludeExternal = false) =>
+			Subject.GetCallees(SolutionPath, symbolName, excludeExternal);
 
 		public Task DisposeAsync()
 		{

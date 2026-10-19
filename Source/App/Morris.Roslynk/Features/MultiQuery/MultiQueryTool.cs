@@ -3,6 +3,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
@@ -63,7 +64,7 @@ public sealed class MultiQueryTool
 		Destructive = false,
 		OpenWorld = false)]
 		public async Task<string> MultiQuery(
-			[Description("Solution handle.")] string solutionId,
+			[Description(ParameterDescriptions.SolutionId)] string solutionId,
 			[Description("Read-only tools and arguments, in request order.")] IReadOnlyList<MultiQueryOperation> operations,
 			[Description("Previous snapshot id; mismatch returns Stale before execution.")] string? expectSnapshot = null)
 	{

@@ -149,7 +149,7 @@ public class GetMembersTests
 	}
 
 	private static async Task<string> RunAsync(
-		string typeName,
+		string symbolName,
 		bool includeInherited = false,
 		string? nameFilter = null,
 		bool includeMethods = true,
@@ -164,7 +164,7 @@ public class GetMembersTests
 
 		return await subject.GetMembers(
 			TestSolutions.Simple,
-			typeName,
+			symbolName,
 			includeInherited,
 			nameFilter,
 			includeMethods,

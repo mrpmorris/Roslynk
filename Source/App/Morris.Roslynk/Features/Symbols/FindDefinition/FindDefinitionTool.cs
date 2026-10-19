@@ -42,7 +42,7 @@ public sealed class FindDefinitionTool
 		OpenWorld = false)]
 	public async Task<string> FindDefinition(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Usage's .cs file path.")] string filePath,
+		[Description(ParameterDescriptions.FilePath)] string filePath,
 		[Description("Usage line.")] int line,
 		[Description("Usage column.")] int column)
 	{

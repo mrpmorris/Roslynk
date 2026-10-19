@@ -61,7 +61,7 @@ public sealed class ApplyCodeFixTool
 		OpenWorld = false)]
 	public async Task<string> ApplyCodeFix(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description(ParameterDescriptions.DocumentPath)] string documentPath,
+		[Description(ParameterDescriptions.FilePath)] string filePath,
 		[Description("Diagnostic id, e.g. CS0219/IDE0005.")] string diagnosticId,
 		[Description("Diagnostic line from get_diagnostics.")] int line,
 		[Description("Diagnostic column from get_diagnostics.")] int column,
@@ -81,13 +81,13 @@ public sealed class ApplyCodeFixTool
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
-		RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, documentPath, cancellationToken);
+		RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, filePath, cancellationToken);
 		if (source is null)
-			return Failure(Error.NotFound($"'{documentPath}' is not a solution-compiled .cs, .razor or .cshtml document."));
+			return Failure(Error.NotFound($"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document."));
 		Document document = source.Document;
 
 		var position = new LinePosition(line - 1, column - 1);
-		string notFound = $"No {diagnosticId} diagnostic was found at {line}:{column} in '{documentPath}'.";
+		string notFound = $"No {diagnosticId} diagnostic was found at {line}:{column} in '{filePath}'.";
 
 		string title;
 		Solution? changed;

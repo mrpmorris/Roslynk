@@ -53,19 +53,19 @@ public sealed class GetCallersTool
 		OpenWorld = false)]
 	public async Task<string> GetCallers(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Method name.")] string methodName,
+		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await GetCallersCoreAsync(model, instance, methodName, startItem, maxSize, Budget, CancellationToken.None);
+		return await GetCallersCoreAsync(model, instance, symbolName, startItem, maxSize, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> GetCallersCoreAsync(
 		SolutionModel model,
 		RoslynInstance instance,
-		string methodName,
+		string symbolName,
 		int startItem = 1,
 		int maxSize = 0,
 		ResponseBudget? budget = null,
@@ -79,16 +79,16 @@ public sealed class GetCallersTool
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
-		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, methodName, token);
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName, token);
 
 		if (groups.Count == 0)
 		{
-			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, methodName);
-			return Failure(Error.NotFound($"No symbol matched '{methodName}'.", candidates.Count > 0 ? candidates : null));
+			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
+			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", candidates.Count > 0 ? candidates : null));
 		}
 
 		if (groups.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(methodName, groups.Select(group => group[0].Symbol)));
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
 
