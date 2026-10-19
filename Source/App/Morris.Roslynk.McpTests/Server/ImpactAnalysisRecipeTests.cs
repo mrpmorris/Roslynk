@@ -182,6 +182,7 @@ public class ImpactAnalysisRecipeTests : IClassFixture<ServerBuilder>
 		"errorMessage", "fullOutputChars", "outputTruncated", "partialItem", "nextStartItem",
 		// Resolution and outline leaves
 		"resolvedSymbol", "resolvedMethod", "resolvedType", "fullName", "candidates", "symbolKind",
+		"resolvedPath",
 		"memberKind", "memberName", "typeKind", "typeName", "parameterTypes", "accessKind", "exprKind",
 		"symbolLoc", "symbolPath", "flowState", "convertedType", "candidateReason",
 		// Per-tool result headers and leaf fields

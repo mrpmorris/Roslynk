@@ -31,6 +31,8 @@ public sealed class FindDefinitionTool
 	[Description("""
 		Resolves the symbol at a source position. Returns fullName (including method/indexer parameter
 		types) and kind; source symbols add project, path and loc, metadata symbols add assembly.
+		filePath accepts absolute, solution-relative, or a unique path suffix/file name; a fallback match
+		adds resolvedPath=<solution-relative path>.
 		No binding in any projection returns NotFound.
 		""")]
 	[McpServerTool(
@@ -61,6 +63,10 @@ public sealed class FindDefinitionTool
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
+		ResolvedDocumentPath? resolvedPath = DocumentPathResolver.Resolve(model.Solution, filePath);
+		if (resolvedPath is null)
+			return Failure(Error.NotFound($"'{filePath}' is not a C# document compiled in the solution."));
+
 		// Resolve in every projection: a position inside a branch inactive in the loaded configuration resolves
 		// to no symbol in the base projection but binds in the projection where that branch is active, and a
 		// copy whose parameter types failed to bind must not win over one where they bind. A bound answer
@@ -71,7 +77,7 @@ public sealed class FindDefinitionTool
 		int bestErrors = int.MaxValue;
 		foreach (Projection projection in projections)
 		{
-			ISymbol? resolved = await SymbolResolver.ResolveAtPositionAsync(projection.Solution, filePath, line, column);
+			ISymbol? resolved = await SymbolResolver.ResolveAtPositionAsync(projection.Solution, resolvedPath.AbsolutePath, line, column);
 			if (resolved is null)
 				continue;
 
@@ -93,6 +99,8 @@ public sealed class FindDefinitionTool
 		var builder = new OutlineBuilder();
 		builder.Header("fullName", SymbolResolver.SignatureName(symbol));
 		builder.Header("kind", SymbolKindText.Of(symbol));
+		if (resolvedPath.ResolvedBySuffix)
+			builder.Header("resolvedPath", resolvedPath.RelativePath);
 
 		Location? location = symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
 		if (location is null)

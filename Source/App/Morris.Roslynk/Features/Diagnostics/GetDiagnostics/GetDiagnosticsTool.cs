@@ -43,6 +43,8 @@ public sealed class GetDiagnosticsTool
 		projectName/filePath/ids filter after compilation, reusing cached results; active filters echo
 		filter=<parameter>:<value>. Empty filtered results do not prove the solution clean.
 		Unknown project/file returns NotFound with candidates. Known matches without diagnostics return zeros.
+		filePath also accepts a unique path suffix or file name; when that resolves it, resolvedPath=<solution-relative path>
+		names the canonical form. Several matching files still return NotFound with candidates.
 		Private fixer-trigger IDs are omitted; fix the public rule instead (e.g. IDE0005).
 		""")]
 	[McpServerTool(
@@ -84,9 +86,11 @@ public sealed class GetDiagnosticsTool
 		string? projectNameFilter = NormalizeProjectName(projectName);
 		if (projectNameFilter is not null)
 			projectNameFilter = CanonicalProjectName(current, projectNameFilter);
-		string? fullFilePath = string.IsNullOrWhiteSpace(filePath)
-			? null
-			: SolutionRelativePath.ToAbsolute(solutionDirectory, filePath);
+		bool fileFilterRequested = !string.IsNullOrWhiteSpace(filePath);
+		ResolvedDocumentPath? resolvedFile = fileFilterRequested
+			? DocumentPathResolver.Resolve(current, filePath)
+			: null;
+		string? fullFilePath = resolvedFile?.AbsolutePath;
 		HashSet<string>? idSet = IdsOrNull(ids);
 
 		if (projectNameFilter is string name && !ProjectNameExists(current, name))
@@ -96,11 +100,11 @@ public sealed class GetDiagnosticsTool
 					ProjectNameCandidates(current, name)),
 				model.Status);
 
-		if (fullFilePath is not null && !PathIsInSolution(current, fullFilePath))
+		if (fileFilterRequested && resolvedFile is null)
 			return OutlineError.Format(
 				Error.NotFound(
 					$"No file '{filePath!.Trim()}' is compiled or loaded in the solution; pass a path relative to the solution folder or an absolute path.",
-					FilePathCandidates(current, solutionDirectory, fullFilePath)),
+					DocumentPathResolver.Candidates(current, filePath)),
 				model.Status);
 
 		// Fence writes, drain in-flight ones, then build (or reuse the cached result when nothing changed).
@@ -239,6 +243,8 @@ public sealed class GetDiagnosticsTool
 					builder.Header("filter", $"projectName:{echoedProject}");
 				if (fullFilePath is not null)
 					builder.Header("filter", $"filePath:{filePath!.Trim()}");
+				if (resolvedFile is { ResolvedBySuffix: true })
+					builder.Header("resolvedPath", resolvedFile.RelativePath);
 				if (idSet is not null)
 					builder.Header("filter", $"ids:{string.Join('|', idSet.Order(StringComparer.Ordinal))}");
 
@@ -438,51 +444,6 @@ public sealed class GetDiagnosticsTool
 			.OrderBy(name => name, StringComparer.Ordinal)];
 
 		IEnumerable<string> result = related.Length > 0 ? related : names.OrderBy(name => name, StringComparer.Ordinal);
-		return [.. result.Take(20)];
-	}
-
-	private static bool PathIsInSolution(Solution solution, string fullPath)
-	{
-		// GetDocumentIdsWithFilePath covers additional documents too, so a .razor/.cshtml path resolves.
-		foreach (DocumentId id in solution.GetDocumentIdsWithFilePath(fullPath))
-		{
-			if (solution.GetDocument(id) is not null || solution.GetAdditionalDocument(id) is not null)
-				return true;
-		}
-
-		return false;
-	}
-
-	private static IReadOnlyList<string> FilePathCandidates(Solution solution, string? solutionDirectory, string fullPath)
-	{
-		string requested = SolutionRelativePath.Of(solutionDirectory, fullPath)!;
-		SortedSet<string> all = new(StringComparer.Ordinal);
-		SortedSet<string> related = new(StringComparer.Ordinal);
-
-		void Consider(string? path)
-		{
-			if (string.IsNullOrEmpty(path))
-				return;
-
-			string relative = SolutionRelativePath.Of(solutionDirectory, path)!;
-			all.Add(relative);
-			if (relative.Contains(requested, StringComparison.OrdinalIgnoreCase)
-				|| requested.Contains(relative, StringComparison.OrdinalIgnoreCase))
-			{
-				related.Add(relative);
-			}
-		}
-
-		foreach (Project project in solution.Projects)
-		{
-			foreach (Document document in project.Documents)
-				Consider(document.FilePath);
-
-			foreach (AdditionalDocument document in project.AdditionalDocuments)
-				Consider(document.FilePath);
-		}
-
-		IEnumerable<string> result = related.Count > 0 ? related : all;
 		return [.. result.Take(20)];
 	}
 

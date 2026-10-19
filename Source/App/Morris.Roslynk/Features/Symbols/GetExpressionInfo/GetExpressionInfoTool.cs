@@ -66,6 +66,8 @@ public sealed partial class GetExpressionInfoTool
 		nullability=declared annotation/initializer flow (None without initializer).
 
 		Whitespace/comments/keywords/punctuation or files outside the solution return NotFound.
+		filePath accepts absolute, solution-relative, or a unique path suffix/file name; a fallback match
+		adds resolvedPath=<solution-relative path>.
 		""")]
 	[McpServerTool(
 		Name = GetExpressionInfoName,
@@ -96,6 +98,7 @@ public sealed partial class GetExpressionInfoTool
 		RazorSourceDocument? baseDocument = await RazorSourceDocument.ResolveAsync(model.Solution, filePath, token);
 		if (baseDocument is null)
 			return Failure(Error.NotFound($"'{filePath}' is not a C#, Razor or CSHTML document compiled in the solution."));
+		string? resolvedPath = baseDocument.ResolvedBySuffix ? baseDocument.ResolvedPath : null;
 
 		SourceText sourceText = await baseDocument.GetSourceTextAsync(token);
 		if (line < 1 || line > sourceText.Lines.Count)
@@ -129,10 +132,10 @@ public sealed partial class GetExpressionInfoTool
 
 			ExpressionSyntax? expression = FindExpression(root, mapped.Value.Start);
 			if (expression is not null)
-				return Describe(model.Solution, semanticModel, expression, token);
+				return Describe(model.Solution, semanticModel, expression, token, resolvedPath);
 
 			if (FindDeclaredName(root, semanticModel, mapped.Value.Start, token) is (SyntaxToken name, ISymbol declared))
-				return DescribeDeclaration(model.Solution, semanticModel, name, declared, token);
+				return DescribeDeclaration(model.Solution, semanticModel, name, declared, token, resolvedPath);
 		}
 
 		return Failure(Error.NotFound(
@@ -219,10 +222,12 @@ public sealed partial class GetExpressionInfoTool
 		return symbol is not null && symbol.Name == name.ValueText ? (name, symbol) : null;
 	}
 
-	private static string DescribeDeclaration(Solution baseSolution, SemanticModel semanticModel, SyntaxToken name, ISymbol symbol, CancellationToken token)
+	private static string DescribeDeclaration(Solution baseSolution, SemanticModel semanticModel, SyntaxToken name, ISymbol symbol, CancellationToken token, string? resolvedPath = null)
 	{
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(baseSolution);
 		var builder = new OutlineBuilder();
+		if (resolvedPath is not null)
+			builder.Header("resolvedPath", resolvedPath);
 
 		builder.Header("expr", name.ValueText);
 		builder.Header("exprKind", name.Parent!.Kind().ToString());
@@ -267,10 +272,12 @@ public sealed partial class GetExpressionInfoTool
 		builder.Header("loc", $"{span.StartLinePosition.Line + 1}:{span.StartLinePosition.Character + 1}-{span.EndLinePosition.Line + 1}:{span.EndLinePosition.Character + 1}");
 	}
 
-	private static string Describe(Solution baseSolution, SemanticModel semanticModel, ExpressionSyntax expression, CancellationToken token)
+	private static string Describe(Solution baseSolution, SemanticModel semanticModel, ExpressionSyntax expression, CancellationToken token, string? resolvedPath = null)
 	{
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(baseSolution);
 		var builder = new OutlineBuilder();
+		if (resolvedPath is not null)
+			builder.Header("resolvedPath", resolvedPath);
 
 		builder.Header("expr", Truncate(CollapseWhitespace(expression.ToString()), MaxExpressionTextLength));
 		builder.Header("exprKind", expression.Kind().ToString());

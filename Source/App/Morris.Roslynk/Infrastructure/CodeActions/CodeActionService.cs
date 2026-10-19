@@ -125,28 +125,16 @@ public sealed class CodeActionService
 		}
 	}
 
-	public static Document? FindDocument(Solution solution, string path)
-	{
-		string normalized = path.Replace('/', System.IO.Path.DirectorySeparatorChar).Replace('\\', System.IO.Path.DirectorySeparatorChar);
-		string full = SolutionRelativePath.ToAbsolute(SolutionRelativePath.DirectoryOf(solution), normalized);
-
-		Document? suffixMatch = null;
-		int suffixMatches = 0;
-		foreach (Document document in solution.Projects.SelectMany(project => project.Documents))
-		{
-			if (document.FilePath is null)
-				continue;
-			if (string.Equals(document.FilePath, full, StringComparison.OrdinalIgnoreCase))
-				return document;
-			if (document.FilePath.EndsWith(System.IO.Path.DirectorySeparatorChar + normalized, StringComparison.OrdinalIgnoreCase))
-			{
-				suffixMatch = document;
-				suffixMatches++;
-			}
-		}
-
-		return suffixMatches == 1 ? suffixMatch : null;
-	}
+	/// <summary>
+	/// The compiled document a caller-supplied path names, through <see cref="DocumentPathResolver"/>: exact
+	/// first, then a unique path suffix or file name.
+	/// </summary>
+	public static Document? FindDocument(Solution solution, string path) =>
+		DocumentPathResolver.Resolve(solution, path) is { } resolved
+			? solution.GetDocumentIdsWithFilePath(resolved.AbsolutePath)
+				.Select(solution.GetDocument)
+				.FirstOrDefault(document => document is not null)
+			: null;
 
 	public static TextSpan SpanFor(SourceText text, int line, int column, int? endLine, int? endColumn)
 	{

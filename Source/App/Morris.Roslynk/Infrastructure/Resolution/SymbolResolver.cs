@@ -430,17 +430,14 @@ public sealed class SymbolResolver
 
 	private static IEnumerable<Document> FindDocuments(Solution solution, string filePath)
 	{
-		string fullPath = SolutionRelativePath.ToAbsolute(SolutionRelativePath.DirectoryOf(solution), filePath);
-		foreach (Project project in solution.Projects)
+		ResolvedDocumentPath? resolved = DocumentPathResolver.Resolve(solution, filePath);
+		if (resolved is null)
+			yield break;
+
+		foreach (DocumentId id in solution.GetDocumentIdsWithFilePath(resolved.AbsolutePath))
 		{
-			foreach (Document document in project.Documents)
-			{
-				if (document.FilePath is not null
-					&& string.Equals(Path.GetFullPath(document.FilePath), fullPath, StringComparison.OrdinalIgnoreCase))
-				{
-					yield return document;
-				}
-			}
+			if (solution.GetDocument(id) is Document document)
+				yield return document;
 		}
 	}
 }

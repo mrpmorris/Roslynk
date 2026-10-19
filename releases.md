@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Solution-scoped tools wait server-side (up to the configurable `Roslynk:LoadWaitSeconds`, default 30s) for an in-flight load instead of failing fast with `error=Indexing`; the timeout response carries live `projects=loaded/?` progress, `open_solution` waits by default (`noWait=true` pre-warms), and concurrent callers join the same load task (Fixes #119)
+- A `filePath` that matches no solution file exactly but names exactly one loaded file by path suffix or file name is used automatically and echoed as `resolvedPath=<solution-relative path>`; several matches still return `NotFound` with candidates (Fixes #117)
 - One name per concept across every tool: `symbolName` replaces `typeName`/`memberName`/`methodName`/`methodId`, `filePath` replaces `documentPath`, and `maxResults` merges into `maxSize` so no query drops results (Fixes #121)
 - An argument the tool does not declare is rejected before anything runs with `error=UnknownArgument` naming the valid parameters (and the closest name when it is a plausible typo), so a misspelled argument can no longer silently fall back to defaults; `multi_query` operations get the same check (Fixes #122)
 - The daemon roots its host content at its install directory, so starting `roslynk` from a home directory no longer recursively watches it and exhausts Linux inotify watches (Fixes #103)

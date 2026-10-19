@@ -30,7 +30,8 @@ public sealed class GetCodeActionsTool
 		diagnostics at the span; refactorings use the span itself.
 
 		Returns up to 50 <actionId>,<kind>,<diagnosticId> <title> lines; diagnosticId='-' for refactorings.
-		Unknown filePath returns NotFound.
+		filePath accepts absolute, solution-relative, or a unique path suffix/file name; a fallback match
+		adds resolvedPath=<solution-relative path>. Unknown/ambiguous filePath returns NotFound.
 		Razor offers compiler fixes/refactorings; positions outside C# return NotSupported.
 		""")]
 	[McpServerTool(
@@ -69,6 +70,8 @@ public sealed class GetCodeActionsTool
 
 		var builder = new OutlineBuilder();
 		builder.Status(model.Status);
+		if (source.ResolvedBySuffix)
+			builder.Header("resolvedPath", source.ResolvedPath);
 		builder.BeginBody();
 
 		foreach (DiscoveredAction action in actions)

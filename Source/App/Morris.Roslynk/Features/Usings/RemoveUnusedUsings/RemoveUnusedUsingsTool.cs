@@ -51,9 +51,10 @@ public sealed class RemoveUnusedUsingsTool
 
 	[Description("""
 		Removes unnecessary using directives (CS8019), solution-wide or in filePath, including
-		Razor @using lines. Additional header: removedCount.
+		Razor @using lines. filePath also accepts a unique path suffix or file name; a fallback match
+		adds resolvedPath=<solution-relative path>. Additional header: removedCount.
 		No changes: applied=N, removedCount=0; safe to rerun.
-		NotFound: unloaded source file.
+		NotFound: unloaded or ambiguous source file.
 		""")]
 	[McpServerTool(
 		Name = RemoveUnusedUsingsName,
@@ -79,11 +80,15 @@ public sealed class RemoveUnusedUsingsTool
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
+		string? resolvedPath = null;
+
 		string Success(bool applied, IReadOnlyList<string> changed, int removedCount)
 		{
 			var builder = new OutlineBuilder();
 			builder.Header("applied", applied);
 			builder.Header("removedCount", removedCount);
+			if (resolvedPath is not null)
+				builder.Header("resolvedPath", resolvedPath);
 			builder.Status(instance.CurrentModel.Status);
 			ChangedFilesOutline.Write(builder, changed, instance.CurrentSolution, solutionDirectory);
 			return builder.ToString();
@@ -96,6 +101,8 @@ public sealed class RemoveUnusedUsingsTool
 			RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, filePath, cancellationToken);
 			if (source is null)
 				return Failure(Error.NotFound($"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document."));
+			if (source.ResolvedBySuffix)
+				resolvedPath = source.ResolvedPath;
 			if (source.IsRazor)
 			{
 				targetRazor = source;

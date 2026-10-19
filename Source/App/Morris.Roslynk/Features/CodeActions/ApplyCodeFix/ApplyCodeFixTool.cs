@@ -50,6 +50,8 @@ public sealed class ApplyCodeFixTool
 		line/column below 1; NotSupported for no registered fix; Conflict for no changes (without candidates).
 		CS8019/IDE0005 fixes remove the @using on that line.
 
+		filePath also accepts a unique path suffix or file name; a fallback match adds
+		resolvedPath=<solution-relative path>.
 		Additional header: action.
 		""")]
 	[McpServerTool(
@@ -166,6 +168,8 @@ public sealed class ApplyCodeFixTool
 		var builder = new OutlineBuilder();
 		builder.Header("applied", !checkOnly);
 		builder.Header("action", title);
+		if (source.ResolvedBySuffix)
+			builder.Header("resolvedPath", source.ResolvedPath);
 		builder.Status(instance.CurrentModel.Status);
 		ChangedFilesOutline.Write(builder, files, instance.CurrentSolution, solutionDirectory);
 		return builder.ToString();

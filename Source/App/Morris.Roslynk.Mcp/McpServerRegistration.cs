@@ -53,10 +53,12 @@ internal static class McpServerRegistration
 
 			Names are consistent across tools: solutionPath opens a solution, solutionId is the handle every
 			other tool takes, symbolName identifies any symbol (a type, member or Member:parameter), and
-			filePath identifies a source file. Paths accept absolute or solution-relative forms. filePath
-			accepts .cs/.razor/.cshtml unless restricted by the tool. Source lines/columns are 1-based;
-			selections start inclusive, end exclusive. checkOnly=true previews without writing, returning
-			would-change paths (apply_patch: headers only). Omitted optional arguments use defaults.
+			filePath identifies a source file. Paths accept absolute or solution-relative forms. When a
+			filePath matches no file exactly but names exactly one loaded file by path suffix or file name,
+			tools use it and add resolvedPath=<solution-relative path>; several matches return NotFound with
+			candidates. filePath accepts .cs/.razor/.cshtml unless restricted by the tool. Source lines/columns
+			are 1-based; selections start inclusive, end exclusive. checkOnly=true previews without writing,
+			returning would-change paths (apply_patch: headers only). Omitted optional arguments use defaults.
 
 			## Name grammar
 

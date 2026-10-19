@@ -48,7 +48,8 @@ public sealed class ExtractMethodTool
 
 		Additional headers: method (final name), symbolName (usable in name-based tools, e.g.
 		N.T.M(int).NewMethod(string) for a local function), kind (Method|LocalFunction), signature
-		(declaration header), call (statement containing the call).
+		(declaration header), call (statement containing the call). A filePath that resolves through a
+		unique path suffix or file name adds resolvedPath=<solution-relative path>.
 
 		Errors:
 		- NotSupported: extraction unavailable, behavior-change warnings, new compile errors (listed),
@@ -215,6 +216,8 @@ public sealed class ExtractMethodTool
 		var builder = new OutlineBuilder();
 		builder.Header("applied", !checkOnly);
 		builder.Header("method", finalName);
+		if (source.ResolvedBySuffix)
+			builder.Header("resolvedPath", source.ResolvedPath);
 		if (declared is not null)
 			builder.Header("symbolName", SymbolResolver.SignatureName(declared));
 		builder.Header("kind", declaration is LocalFunctionStatementSyntax ? "LocalFunction" : "Method");
