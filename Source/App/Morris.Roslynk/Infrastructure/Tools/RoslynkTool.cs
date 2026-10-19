@@ -11,9 +11,11 @@ using Morris.Roslynk.Infrastructure.Results;
 namespace Morris.Roslynk.Infrastructure.Tools;
 
 /// <summary>
-/// Wraps every Roslynk tool so three failure modes that bypass a tool's own error handling are covered:
+/// Wraps every Roslynk tool so four failure modes that bypass a tool's own error handling are covered:
 /// the published schema is rewritten so defaulted parameters are genuinely omittable, an argument the
-/// SDK cannot bind - a wrong type, an unparseable value - comes back as the standard header-only
+/// tool does not declare is refused before the tool runs as 'error=UnknownArgument' naming the valid
+/// parameters (the SDK would otherwise bind the known arguments and silently drop the rest), an argument
+/// the SDK cannot bind - a wrong type, an unparseable value - comes back as the standard header-only
 /// 'error='/'errorMessage=' result instead of an unhandled exception, and a result larger than the
 /// server-wide <see cref="ResponseBudget"/> is cut after its last whole line and marked (the backstop
 /// for the tools that cannot page - get_symbol, find_definition, get_expression_info,
@@ -55,6 +57,18 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 	{
 		try
 		{
+			// Refuse an argument the tool does not declare before anything runs. The SDK binds a known
+			// argument by name and silently drops the rest, which turns a misspelled name into a
+			// plausible-looking result from the defaults; the schema is the authority on what is known.
+			if (request.Params.Arguments is { Count: > 0 } arguments
+				&& Published.InputSchema.TryGetProperty("properties", out JsonElement properties))
+			{
+				UnknownArgument.Reject(
+					arguments.Keys,
+					properties.EnumerateObject().Select(property => property.Name).ToList(),
+					Published.Name);
+			}
+
 			CallToolResult result = await base.InvokeAsync(request, cancellationToken);
 
 			// Last line of defence for the tools that cannot page (get_symbol, find_definition,
@@ -157,7 +171,9 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 	/// block agrees exactly with what the standalone path would have returned.
 	/// </summary>
 	public static Error ToError(Exception exception) =>
-		exception is ArgumentException or FormatException or JsonException or NotSupportedException
-			? Error.Invalid(exception.Message)
-			: Error.Faulted(exception.Message);
+		exception is UnknownArgumentException
+			? Error.UnknownArgument(exception.Message)
+			: exception is ArgumentException or FormatException or JsonException or NotSupportedException
+				? Error.Invalid(exception.Message)
+				: Error.Faulted(exception.Message);
 }

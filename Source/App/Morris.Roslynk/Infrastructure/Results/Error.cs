@@ -33,6 +33,9 @@ public sealed class Error
 	public static Error Invalid(string message) =>
 		new() { Code = ErrorCode.Invalid, Message = message };
 
+	public static Error UnknownArgument(string message) =>
+		new() { Code = ErrorCode.UnknownArgument, Message = message };
+
 	public static Error Conflict(string message, IReadOnlyList<string>? candidates = null) =>
 		new() { Code = ErrorCode.Conflict, Message = message, Candidates = candidates };
 

@@ -8,6 +8,8 @@ using Morris.Roslynk.Features.Symbols.GetSymbolBody;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
+using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Tools;
 
 namespace Morris.Roslynk.Tests.Features.MultiQuery;
 
@@ -131,11 +133,11 @@ public class MultiQueryCatalogTests
 	[Fact]
 	public async Task WhenAResponseBudgetIsPassedAsAnArgument_ThenItIsRejectedAsUnknown()
 	{
-		// The slot allowance is binder-supplied: sending it as an argument is an ordinary unknown-key error.
+		// The slot allowance is binder-supplied: sending it as an argument is an unknown-argument error.
 		var entry = MultiQueryCatalog.Entries[GetSymbolBodyTool.GetSymbolBodyName];
 		var arguments = new Dictionary<string, JsonElement>(StringComparer.Ordinal) { ["budget"] = MultiQueryTestHelpers.Json(10_000) };
 
-		var exception = await Assert.ThrowsAsync<ArgumentException>(() => MultiQueryCatalog.InvokeCoreAsync(
+		var exception = await Assert.ThrowsAsync<UnknownArgumentException>(() => MultiQueryCatalog.InvokeCoreAsync(
 			CreateBinderProvider(),
 			entry,
 			model: null!,
@@ -144,7 +146,8 @@ public class MultiQueryCatalogTests
 			arguments,
 			CancellationToken.None));
 
-		Assert.Contains("'budget' is not a parameter of 'get_symbol_body'", exception.Message);
+		Assert.Equal("Unknown argument 'budget' for get_symbol_body. Valid: symbolName, includeLeadingTrivia, startItem, maxSize, part.", exception.Message);
+		Assert.Equal(ErrorCode.UnknownArgument, RoslynkTool.ToError(exception).Code);
 	}
 
 	[Fact]

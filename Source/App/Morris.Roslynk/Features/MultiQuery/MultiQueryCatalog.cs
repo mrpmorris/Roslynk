@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Features.Symbols.GetSymbol;
 using Morris.Roslynk.Features.Symbols.GetSymbolBody;
 using Morris.Roslynk.Features.Symbols.GetMembers;
@@ -84,8 +85,10 @@ internal static class MultiQueryCatalog
 	/// batch's token are supplied here — never taken from the caller's arguments, which is the line that
 	/// makes the snapshot guarantee real. <paramref name="allowance"/> is null when the core runs stand-alone.
 	/// </summary>
-	/// <exception cref="ArgumentException">A required argument is missing, an unknown argument key is
-	/// present, or a value cannot be coerced to the parameter's type. Mapped to slot error=Invalid.</exception>
+	/// <exception cref="UnknownArgumentException">An argument key is not one of the entry's bindable
+	/// parameters. Mapped to slot error=UnknownArgument.</exception>
+	/// <exception cref="ArgumentException">A required argument is missing, or a value cannot be coerced to
+	/// the parameter's type. Mapped to slot error=Invalid.</exception>
 	public static async Task<string> InvokeCoreAsync(
 		IServiceProvider provider,
 		OpEntry entry,
@@ -100,19 +103,16 @@ internal static class MultiQueryCatalog
 		ParameterInfo[] parameters = core.GetParameters();
 
 		// Unknown keys first: the caller's actual mistake is the one to name, before any missing-required
-		// error can mask it.
-		var bindable = new HashSet<string>(StringComparer.Ordinal);
+		// error can mask it. The same shared check the published-tool wrapper applies, so a misspelled
+		// argument reads identically whether it arrives alone or inside a batch.
+		var bindable = new List<string>();
 		foreach (ParameterInfo parameter in parameters)
 		{
 			if (IsSupplied(parameter.ParameterType))
 				continue;
 			bindable.Add(parameter.Name!);
 		}
-		foreach (string key in arguments.Keys)
-		{
-			if (!bindable.Contains(key))
-				throw new ArgumentException($"'{key}' is not a parameter of '{entry.ToolName}'.");
-		}
+		UnknownArgument.Reject(arguments.Keys, bindable, entry.ToolName);
 
 		var args = new object?[parameters.Length];
 		for (int index = 0; index < parameters.Length; index++)

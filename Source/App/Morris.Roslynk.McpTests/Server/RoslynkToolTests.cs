@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -112,7 +112,7 @@ public class RoslynkToolTests
 			new McpServerToolCreateOptions { Name = "oversized" });
 
 		var wrapped = new RoslynkTool(inner, new ResponseBudget(80_000));
-		CallToolResult result = await InvokeAsync(wrapped, "oversized", [("chars", 300_000)]);
+		CallToolResult result = await InvokeAsync(wrapped, "oversized", ("chars", JsonSerializer.SerializeToElement(300_000)));
 
 		string text = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
 		Assert.StartsWith("outputTruncated=Y\n", text, StringComparison.Ordinal);
@@ -128,21 +128,80 @@ public class RoslynkToolTests
 			new McpServerToolCreateOptions { Name = "fits" });
 
 		var wrapped = new RoslynkTool(inner, new ResponseBudget(80_000));
-		CallToolResult result = await InvokeAsync(wrapped, "fits", [("chars", 100)]);
+		CallToolResult result = await InvokeAsync(wrapped, "fits", ("chars", JsonSerializer.SerializeToElement(100)));
 
 		string text = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
 		Assert.Equal(new string('x', 100), text);
 	}
 
+	[Fact]
+	public async Task WhenAnUnknownArgumentIsSupplied_ThenTheToolIsNotInvokedAndTheCallIsUnknownArgument()
+	{
+		bool invoked = false;
+		McpServerTool inner = McpServerTool.Create(
+			(string name, int take = 10) =>
+			{
+				invoked = true;
+				return name;
+			},
+			new McpServerToolCreateOptions { Name = "sample" });
+
+		var wrapped = new RoslynkTool(inner);
+		CallToolResult result = await InvokeAsync(
+			wrapped,
+			"sample",
+			("name", JsonSerializer.SerializeToElement("x")),
+			("documentPath", JsonSerializer.SerializeToElement("ignored")));
+
+		string text = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
+		Assert.True(result.IsError);
+		Assert.StartsWith("error=UnknownArgument\n", text, StringComparison.Ordinal);
+		Assert.Contains("errorMessage=Unknown argument 'documentPath' for sample.", text, StringComparison.Ordinal);
+		Assert.Contains("Valid: name, take", text, StringComparison.Ordinal);
+		Assert.False(invoked);
+	}
+
+	[Fact]
+	public async Task WhenAnUnknownArgumentLooksLikeAValidOne_ThenTheMessageSuggestsIt()
+	{
+		McpServerTool inner = McpServerTool.Create(
+			(string filePath) => filePath,
+			new McpServerToolCreateOptions { Name = "diagnostics" });
+
+		var wrapped = new RoslynkTool(inner);
+		CallToolResult result = await InvokeAsync(
+			wrapped,
+			"diagnostics",
+			("filePth", JsonSerializer.SerializeToElement("a.cs")));
+
+		string text = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
+		Assert.Contains("Did you mean 'filePath'?", text, StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public async Task WhenAToolTakesNoArguments_ThenAnyArgumentIsRejected()
+	{
+		McpServerTool inner = McpServerTool.Create(
+			() => "ok",
+			new McpServerToolCreateOptions { Name = "noargs" });
+
+		var wrapped = new RoslynkTool(inner);
+		CallToolResult result = await InvokeAsync(wrapped, "noargs", ("extra", JsonSerializer.SerializeToElement(1)));
+
+		string text = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
+		Assert.StartsWith("error=UnknownArgument\n", text, StringComparison.Ordinal);
+		Assert.Contains("The tool takes no arguments.", text, StringComparison.Ordinal);
+	}
+
 	/// <summary>Invokes a wrapped tool through the real binding layer, exactly as a client call arrives.</summary>
-	private static async Task<CallToolResult> InvokeAsync(RoslynkTool tool, string name, params (string Key, int Value)[] arguments)
+	private static async Task<CallToolResult> InvokeAsync(RoslynkTool tool, string name, params (string Key, JsonElement Value)[] arguments)
 	{
 		var requestParams = new CallToolRequestParams
 		{
 			Name = name,
 			Arguments = arguments.ToDictionary(
 				pair => pair.Key,
-				pair => JsonSerializer.SerializeToElement(pair.Value)),
+				pair => pair.Value),
 		};
 		var request = new JsonRpcRequest
 		{

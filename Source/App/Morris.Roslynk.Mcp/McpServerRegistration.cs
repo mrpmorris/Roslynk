@@ -69,7 +69,9 @@ internal static class McpServerRegistration
 			## Failures and freshness
 
 			Failures are header-only: error=<code>, errorMessage=..., optional candidates.
-			Stale: target changed since reading; recompute/retry. Re-query after relevant writes/user saves.
+			An argument the tool does not declare returns error=UnknownArgument naming the valid parameters;
+			nothing ran, so retry with the listed names. Stale: target changed since reading; recompute/retry.
+			Re-query after relevant writes/user saves.
 
 			## Paging
 

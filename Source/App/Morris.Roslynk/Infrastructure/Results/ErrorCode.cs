@@ -27,6 +27,12 @@ public enum ErrorCode
 	/// <summary>The request itself was malformed; a bad identifier, an unparseable patch, an invalid span.</summary>
 	Invalid,
 
+	/// <summary>
+	/// The call named an argument the tool does not declare. Nothing ran, so a misspelled argument can never
+	/// silently fall back to a default; <see cref="Error.Message"/> lists the valid names.
+	/// </summary>
+	UnknownArgument,
+
 	/// <summary>The change could not be applied because it conflicts with the current state.</summary>
 	Conflict,
 

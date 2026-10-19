@@ -89,7 +89,7 @@ public class MultiQueryTests
 	}
 
 	[Fact]
-	public async Task WhenAnOperationHasAnUnknownArgument_ThenItsSlotIsInvalid()
+	public async Task WhenAnOperationHasAnUnknownArgument_ThenItsSlotIsUnknownArgument()
 	{
 		(MultiQueryTool subject, _) = await CreateAsync();
 
@@ -97,8 +97,9 @@ public class MultiQueryTests
 			TestSolutions.Simple,
 			[new MultiQueryOperation(MultiQueryOp.get_symbol, Args(("foo", Json("bar"))))]);
 
-		Assert.Contains("error=Invalid", envelope);
-		Assert.Contains("'foo' is not a parameter of 'get_symbol'", envelope);
+		Assert.Contains("error=UnknownArgument", envelope);
+		Assert.Contains("Unknown argument 'foo' for get_symbol.", envelope);
+		Assert.Contains("Valid: symbolName", envelope);
 	}
 
 	[Fact]
@@ -125,8 +126,8 @@ public class MultiQueryTests
 				MultiQueryOp.get_symbol,
 				Args(("solutionId", Json(TestSolutions.Simple)), ("symbolName", Json("SimpleLibrary.Greeter"))))]);
 
-		Assert.Contains("error=Invalid", envelope);
-		Assert.Contains("'solutionId' is not a parameter of 'get_symbol'", envelope);
+		Assert.Contains("error=UnknownArgument", envelope);
+		Assert.Contains("Unknown argument 'solutionId' for get_symbol.", envelope);
 	}
 
 	[Fact]
