@@ -22,9 +22,6 @@ internal static class ParameterDescriptions
 
 	public const string MaxSize = "Page character limit.";
 
-	public const string MaxResults =
-		"Result cap; omit for every result.";
-
 	public const string CheckOnly =
 		"Preview only.";
 }

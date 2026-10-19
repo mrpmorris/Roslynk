@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 using ModelContextProtocol.Server;
 using Morris.Roslynk;
+using static Morris.Roslynk.McpTests.Server.PublishedSchema;
 
 namespace Morris.Roslynk.McpTests.Server;
 
@@ -256,14 +257,4 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 			}
 		}
 	}
-
-	private static IReadOnlyDictionary<string, JsonElement> Properties(JsonElement schema) =>
-		schema.TryGetProperty("properties", out JsonElement properties)
-			? properties.EnumerateObject().ToDictionary(property => property.Name, property => property.Value, StringComparer.Ordinal)
-			: new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-
-	private static IReadOnlyCollection<string> Required(JsonElement schema) =>
-		schema.TryGetProperty("required", out JsonElement required)
-			? required.EnumerateArray().Select(value => value.GetString()!).ToHashSet(StringComparer.Ordinal)
-			: new HashSet<string>(StringComparer.Ordinal);
 }
