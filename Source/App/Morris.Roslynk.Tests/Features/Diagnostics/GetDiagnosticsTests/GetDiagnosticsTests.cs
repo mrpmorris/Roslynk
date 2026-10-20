@@ -404,7 +404,7 @@ public class GetDiagnosticsTests
 	}
 
 	[Fact]
-	public async Task WhenSummaryOnlyCoversEverySeverityWithoutToggles_ThenTheHeaderCountsStayComplete()
+	public async Task WhenSummaryOnlyIsRequestedWithoutSeverityFlags_ThenNonHiddenIdsAreListedAndCountsStayComplete()
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Broken);
@@ -412,12 +412,13 @@ public class GetDiagnosticsTests
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeAnalyzers: false, summaryOnly: true);
 
-		// No include flag is set, yet the summary still lists every id - unlike detail mode, whose body would
-		// be empty. The header counts keep their all-severities scope.
+		// No include flag is set, yet the summary lists the non-hidden ids - unlike detail mode, whose body
+		// would be empty. The header counts keep their all-severities scope.
 		Assert.Contains("errors=2", result);
 		Assert.Contains("warnings=0", result);
 		Assert.Contains("\nCS0029,1,BrokenLibrary,BrokenLibrary/Broken.cs,9:27,", result);
 		Assert.Contains("\nCS0169,1,BrokenLibrary,BrokenLibrary/Broken.cs,", result);
+		Assert.DoesNotContain("CS8019,", result);
 		Assert.DoesNotContain("count=", result);
 	}
 
@@ -443,6 +444,50 @@ public class GetDiagnosticsTests
 	}
 
 	[Fact]
+	public async Task WhenSummaryOnlyIsRequestedWithoutSeverityFlags_ThenHiddenIdsAreOmitted()
+	{
+		string solutionPath = await CreateScratchWithEverySeverityAsync();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+
+		string result = await subject.GetDiagnostics(solutionPath, summaryOnly: true);
+
+		// The no-flag fallback covers errors, warnings and infos; hidden stays opt-in, as includeHidden's
+		// false default says. CS8019/CS8933 are the hidden ids the generated obj files carry.
+		Assert.Contains("errors=1", result);
+		Assert.DoesNotContain("warnings=0", result);
+		Assert.DoesNotContain("infos=0", result);
+		Assert.Contains("\nCS0029,1,", result);
+		Assert.Contains("\nCS0169,1,", result);
+		Assert.Contains("\nCA1822,", result);
+		Assert.DoesNotContain("CS8019,", result);
+		Assert.DoesNotContain("CS8933,", result);
+		Assert.DoesNotContain("CA1716,", result);
+
+		// The header counts keep counting every severity regardless of the include flags.
+		Assert.NotEqual("0", HeaderOf(result, "hidden"));
+	}
+
+	[Fact]
+	public async Task WhenSummaryOnlyIncludesHidden_ThenHiddenIdsAreListedAndTheHeaderCountIsUnchanged()
+	{
+		string solutionPath = await CreateScratchWithEverySeverityAsync();
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solutionPath);
+		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+
+		string withoutHidden = await subject.GetDiagnostics(solutionPath, summaryOnly: true);
+		string withHidden = await subject.GetDiagnostics(solutionPath, summaryOnly: true, includeHidden: true);
+
+		Assert.Contains("\nCS8019,", withHidden);
+		Assert.Contains("\nCS8933,", withHidden);
+		// includeHidden alone flags only hidden, so the other severities are not summarised.
+		Assert.DoesNotContain("CS0029,", withHidden);
+		Assert.Equal(HeaderOf(withoutHidden, "hidden"), HeaderOf(withHidden, "hidden"));
+	}
+
+	[Fact]
 	public async Task WhenFilteredByAPrivateFixTriggerId_ThenNothingMatches()
 	{
 		using var registry = new InstanceRegistry();
@@ -462,11 +507,46 @@ public class GetDiagnosticsTests
 		Assert.DoesNotContain("CS0029", result);
 	}
 
+	private static string HeaderOf(string result, string name)
+	{
+		foreach (string line in result.Split('\n'))
+		{
+			if (line.StartsWith(name + "=", StringComparison.Ordinal))
+				return line[(name.Length + 1)..].Trim();
+		}
+
+		Assert.Fail($"No {name}= header in:\n{result}");
+		return "";
+	}
+
 	private static string BodyOf(string result)
 	{
 		int blank = result.IndexOf("\n\n", StringComparison.Ordinal);
 		Assert.True(blank >= 0, result);
 		return result[(blank + 2)..];
+	}
+
+	/// <summary>
+	/// A scratch SimpleSolution carrying one diagnostic of each severity: CS0029 (error), CS0169 (warning),
+	/// CA1822 (info, from the analyzers) and the hidden CS8019/CS8933 the generated obj files report. The
+	/// scratch copy lives outside Source/, so it does not inherit TreatWarningsAsErrors and CS0169 stays a
+	/// warning.
+	/// </summary>
+	private static async Task<string> CreateScratchWithEverySeverityAsync()
+	{
+		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
+		await File.WriteAllTextAsync(
+			Path.Combine(projectDirectory, "Broken.cs"),
+			"namespace SimpleLibrary;\n"
+			+ "\n"
+			+ "public class Broken\n"
+			+ "{\n"
+			+ "	private int unusedField;\n"
+			+ "\n"
+			+ "	public int GetValue() => \"not an int\";\n"
+			+ "}\n");
+		return solutionPath;
 	}
 
 	/// <summary>

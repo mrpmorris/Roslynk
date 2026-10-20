@@ -36,8 +36,9 @@ public sealed class GetDiagnosticsTool
 		Returns compiler/analyzer diagnostics.
 
 		errors/warnings/infos/hidden count all content-filtered severities regardless of include flags.
-		The body lists flagged severities; summaryOnly summarizes all if none are flagged, otherwise
-		only flagged ones. Details: project > folder > file > severity; leaves: <id>,<line:col>,<message>.
+		The body lists flagged severities; summaryOnly summarizes the flagged severities, or errors,
+		warnings and infos when none are flagged. Hidden rows are listed only with includeHidden=true.
+		Details: project > folder > file > severity; leaves: <id>,<line:col>,<message>.
 		Summary: <id>,<count>,<project>,<path>,<line:col>,<message> per id, ordered by count descending then id.
 
 		projectName/filePath/ids filter after compilation, reusing cached results; active filters echo
@@ -451,7 +452,8 @@ public sealed class GetDiagnosticsTool
 
 	/// <summary>
 	/// Groups the filtered diagnostics by id, keeping each id's first diagnostic in body order as its example.
-	/// When no include toggle is set the population is every severity; otherwise the selected ones only.
+	/// When no include toggle is set the population is every severity except Hidden, matching the flags'
+	/// defaults (hidden is opt-in); otherwise the selected ones only.
 	/// </summary>
 	private static IReadOnlyList<IdSummary> SummarizeById(
 		List<Diagnostic> filtered,
@@ -460,7 +462,7 @@ public sealed class GetDiagnosticsTool
 		string? solutionDirectory)
 	{
 		IEnumerable<Diagnostic> population = wanted.Count == 0
-			? filtered
+			? filtered.Where(diagnostic => diagnostic.Severity != DiagnosticSeverity.Hidden)
 			: filtered.Where(diagnostic => wanted.Contains(diagnostic.Severity));
 
 		var byId = new Dictionary<string, (int Count, Diagnostic Example)>(StringComparer.Ordinal);

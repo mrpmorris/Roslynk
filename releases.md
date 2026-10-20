@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `get_diagnostics` with `summaryOnly` and no severity flags summarises errors, warnings and infos; hidden diagnostics are listed only with `includeHidden=true`, while the header counts still count every severity (Fixes #137)
 - open_solution echoes solutionId with forward slashes so it can be reused verbatim in JSON (Fixes #107)
 - find_references and find_dead_code no longer treat a plain disposable local declaration as a Dispose reference (Fixes #88)
 - Precise pre-validation errors: invalid JSON bodies report position and token; malformed multi_query operations name the offending argument (Fixes #108)
