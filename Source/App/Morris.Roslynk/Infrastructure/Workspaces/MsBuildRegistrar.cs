@@ -9,7 +9,7 @@ namespace Morris.Roslynk.Infrastructure.Workspaces;
 /// </summary>
 public static class MsBuildRegistrar
 {
-	private static readonly object SyncRoot = new();
+	private static readonly Lock RegistrationGate = new();
 	private static bool Registered;
 
 	public static void EnsureRegistered()
@@ -17,7 +17,7 @@ public static class MsBuildRegistrar
 		if (Registered)
 			return;
 
-		lock (SyncRoot)
+		lock (RegistrationGate)
 		{
 			if (Registered)
 				return;

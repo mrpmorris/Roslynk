@@ -14,7 +14,7 @@ public sealed class SolutionFileWatcher : IDisposable
 	private readonly SolutionFileSync Sync;
 	private readonly List<FileSystemWatcher> Watchers = [];
 	private readonly HashSet<string> Pending = new(StringComparer.OrdinalIgnoreCase);
-	private readonly object Gate = new();
+	private readonly Lock StateGate = new();
 	private readonly Timer Debounce;
 	private bool Disposed;
 
@@ -66,7 +66,7 @@ public sealed class SolutionFileWatcher : IDisposable
 
 	private void Queue(string path)
 	{
-		lock (Gate)
+		lock (StateGate)
 		{
 			if (Disposed)
 				return;
@@ -78,7 +78,7 @@ public sealed class SolutionFileWatcher : IDisposable
 	private void Flush()
 	{
 		string[] paths;
-		lock (Gate)
+		lock (StateGate)
 		{
 			if (Disposed)
 				return;
@@ -103,7 +103,7 @@ public sealed class SolutionFileWatcher : IDisposable
 
 	public void Dispose()
 	{
-		lock (Gate)
+		lock (StateGate)
 		{
 			if (Disposed)
 				return;

@@ -31,12 +31,12 @@ public sealed class RoslynInstance : IDisposable
 	private IDisposable? Watcher;
 	private readonly TaskCompletionSource ReadySignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-	private readonly SemaphoreSlimReadWriteLock Lock = new();
+	private readonly SemaphoreSlimReadWriteLock StateGate = new();
 	private readonly Channel<WorkItem> Work = Channel.CreateUnbounded<WorkItem>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 	private readonly CancellationTokenSource Shutdown = new();
 	private readonly Task Consumer;
 
-	private readonly object RebuildGate = new();
+	private readonly Lock RebuildGate = new();
 	private Task RebuildInFlight = Task.CompletedTask;
 
 	public SolutionKey Key { get; }
@@ -157,7 +157,7 @@ public sealed class RoslynInstance : IDisposable
 	{
 		using (RoslynkActivitySource.Instance.StartActivity($"{nameof(RoslynInstance)}.{nameof(RoslynInstance.ReadModelAsync)}"))
 		{
-			using (await Lock.AcquireReadAsync(cancellationToken))
+			using (await StateGate.AcquireReadAsync(cancellationToken))
 				return CurrentModel;
 		}
 	}
@@ -245,7 +245,7 @@ public sealed class RoslynInstance : IDisposable
 		}
 
 		Solution current = model.Solution;
-		using (await Lock.AcquireWriteAsync(cancellationToken))
+		using (await StateGate.AcquireWriteAsync(cancellationToken))
 		{
 			Swap(SolutionModel.Updating(current));
 			try
@@ -450,7 +450,7 @@ public sealed class RoslynInstance : IDisposable
 		var item = new WorkItem(
 			async () =>
 			{
-				using (await Lock.AcquireWriteAsync(Shutdown.Token))
+				using (await StateGate.AcquireWriteAsync(Shutdown.Token))
 				{
 					SolutionWorkspace? previous = Volatile.Read(ref WorkspaceField);
 					Volatile.Write(ref WorkspaceField, workspace);
@@ -481,7 +481,7 @@ public sealed class RoslynInstance : IDisposable
 		var item = new WorkItem(
 			async () =>
 			{
-				using (await Lock.AcquireWriteAsync(Shutdown.Token))
+				using (await StateGate.AcquireWriteAsync(Shutdown.Token))
 					Swap(SolutionModel.Faulted(message));
 				completion.TrySetResult();
 			},
@@ -513,7 +513,7 @@ public sealed class RoslynInstance : IDisposable
 		Shutdown.Cancel();
 		Watcher?.Dispose();
 		Volatile.Read(ref WorkspaceField)?.Dispose();
-		Lock.Dispose();
+		StateGate.Dispose();
 		Shutdown.Dispose();
 	}
 

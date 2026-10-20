@@ -17,7 +17,7 @@ public sealed class TrackedAnalyzers
 	public static readonly TrackedAnalyzers None = new([]);
 
 	private readonly IReadOnlyList<TrackedAnalyzer> Entries;
-	private readonly object Gate = new();
+	private readonly Lock StateGate = new();
 	private Task LastRefresh = Task.CompletedTask;
 
 	internal TrackedAnalyzers(IReadOnlyList<TrackedAnalyzer> entries)
@@ -55,7 +55,7 @@ public sealed class TrackedAnalyzers
 		if (Entries.Count == 0)
 			return Task.CompletedTask;
 
-		lock (Gate)
+		lock (StateGate)
 		{
 			var loaded = new List<Loaded>();
 			foreach (TrackedAnalyzer entry in Entries)
@@ -102,7 +102,7 @@ public sealed class TrackedAnalyzers
 		catch (Exception)
 		{
 			// The instance is shutting down or the write faulted; the stamps go back so the next use retries.
-			lock (Gate)
+			lock (StateGate)
 			{
 				foreach (Loaded item in loaded)
 				{

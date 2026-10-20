@@ -30,7 +30,7 @@ public sealed class DocumentDiagnosticsProvider
 
 	private const int MaxCachedDocuments = 4;
 
-	private readonly object Gate = new();
+	private readonly Lock StateGate = new();
 	private readonly LinkedList<CacheEntry> Cache = new();
 	private DriverEntry? Driver;
 
@@ -46,7 +46,7 @@ public sealed class DocumentDiagnosticsProvider
 		var key = new CacheKey(document.Id, version);
 
 		Task<ImmutableArray<Diagnostic>> pending;
-		lock (Gate)
+		lock (StateGate)
 		{
 			pending = Take(key) ?? Add(key, document, version);
 		}
@@ -157,7 +157,7 @@ public sealed class DocumentDiagnosticsProvider
 	/// </summary>
 	private CompilationWithAnalyzers DriverFor(Project project, VersionStamp version, Compilation compilation, ImmutableArray<DiagnosticAnalyzer> analyzers)
 	{
-		lock (Gate)
+		lock (StateGate)
 		{
 			DriverEntry? existing = Driver;
 			if (existing is not null

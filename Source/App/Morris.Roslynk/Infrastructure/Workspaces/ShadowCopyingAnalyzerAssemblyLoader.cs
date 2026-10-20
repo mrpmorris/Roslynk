@@ -41,7 +41,7 @@ internal sealed class ShadowCopyingAnalyzerAssemblyLoader : IAnalyzerAssemblyLoa
 	private readonly ConcurrentDictionary<string, string> _shadowCopies =
 		new(StringComparer.OrdinalIgnoreCase);
 
-	private readonly object _copyLock = new();
+	private readonly Lock CopyGate = new();
 
 	public ShadowCopyingAnalyzerAssemblyLoader(string shadowRoot)
 	{
@@ -89,7 +89,7 @@ internal sealed class ShadowCopyingAnalyzerAssemblyLoader : IAnalyzerAssemblyLoa
 		if (_shadowCopies.TryGetValue(key, out string? existing))
 			return existing;
 
-		lock (_copyLock)
+		lock (CopyGate)
 		{
 			if (_shadowCopies.TryGetValue(key, out existing))
 				return existing;
