@@ -328,7 +328,25 @@ public class RoslynInstanceTests
 		Assert.Throws<IOException>(() => subject.AttachWatcher(() => throw new IOException("start failed")));
 
 		Assert.Empty(events);
-		Assert.Single(subject.WatchDiagnostics);
+		Assert.Single(subject.WatchDiagnostics.Messages);
+	}
+
+	[Fact]
+	public void WhenTheInstanceIsDisposedWhileAWatcherStarts_ThenThatWatcherIsDisposedNotAttached()
+	{
+		var subject = new RoslynInstance(SolutionKey.For(TestSolutions.Simple));
+		var events = new List<string>();
+		var late = new RecordingWatcher("late", events);
+		late.Diagnostics.Record("late", "/watched");
+
+		subject.AttachWatcher(() =>
+		{
+			subject.Dispose();
+			return late;
+		});
+
+		Assert.Equal(["late disposed"], events);
+		Assert.Empty(subject.WatchDiagnostics.Messages);
 	}
 
 	private sealed class RecordingWatcher(string name, List<string> events) : IInstanceWatcher

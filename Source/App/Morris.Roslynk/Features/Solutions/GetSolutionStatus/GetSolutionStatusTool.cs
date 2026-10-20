@@ -33,7 +33,7 @@ public sealed class GetSolutionStatusTool
 
 		Any state adds indented watchDiagnostic=<message> when the file watcher failed in a way a
 		reload would not fix (e.g. the OS watch limit): changes on disk may then not be picked up.
-		Up to 20 per solution, then watchDiagnosticsTruncated=<n>.
+		Up to 20 per solution, then watchDiagnosticsTruncated=<n>; beyond 100 the text is not kept.
 		""")]
 	[McpServerTool(
 		Name = GetSolutionStatusName,
@@ -66,7 +66,8 @@ public sealed class GetSolutionStatusTool
 			if (model.Status == SolutionStatus.Ready)
 				AppendMessages(builder, "loadDiagnostic", instance.Workspace?.LoadDiagnostics ?? [], messageLimit);
 
-			AppendMessages(builder, "watchDiagnostic", instance.WatchDiagnostics, messageLimit, instance.WatchDiagnosticsDropped);
+			WatchDiagnosticsSnapshot watch = instance.WatchDiagnostics;
+			AppendMessages(builder, "watchDiagnostic", watch.Messages, messageLimit, watch.Dropped);
 		}
 
 		return builder.ToString();

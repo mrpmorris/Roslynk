@@ -9,40 +9,28 @@ namespace Morris.Roslynk.Infrastructure.Lifecycle;
 public sealed class WatchDiagnostics
 {
 	/// <summary>
-	/// How many distinct messages are kept. A bound on memory only: get_solution_status applies its own listing
-	/// limit, and counts what this bound drops as truncated.
+	/// How many distinct messages are kept in full. Beyond it only a hash of each further distinct message is
+	/// kept, so it is still recognised (<see cref="Contains"/>) and counted once as dropped; its text is gone.
 	/// </summary>
 	public const int MaxMessages = 100;
 
 	private readonly Lock Gate = new();
 	private readonly Dictionary<string, string> MessagesByError = new(StringComparer.Ordinal);
-	private int DroppedField;
+	private readonly HashSet<int> DroppedHashes = [];
 
-	/// <summary>The recorded messages, each as '<c>error (directory)</c>'.</summary>
-	public IReadOnlyList<string> Messages
+	/// <summary>The kept messages, each as '<c>error (directory)</c>', and how many distinct messages were dropped,
+	/// read together so the two always describe the same moment.</summary>
+	public WatchDiagnosticsSnapshot Snapshot()
 	{
-		get
-		{
-			lock (Gate)
-				return MessagesByError.Values.ToArray();
-		}
+		lock (Gate)
+			return new WatchDiagnosticsSnapshot(MessagesByError.Values.ToArray(), DroppedHashes.Count);
 	}
 
-	/// <summary>How many distinct messages were not kept because <see cref="MaxMessages"/> was reached.</summary>
-	public int Dropped
-	{
-		get
-		{
-			lock (Gate)
-				return DroppedField;
-		}
-	}
-
-	/// <summary>Whether an error with this message is already recorded.</summary>
+	/// <summary>Whether an error with this message is already recorded, kept or dropped.</summary>
 	public bool Contains(string error)
 	{
 		lock (Gate)
-			return MessagesByError.ContainsKey(error);
+			return MessagesByError.ContainsKey(error) || DroppedHashes.Contains(StringComparer.Ordinal.GetHashCode(error));
 	}
 
 	public void Record(string error, string directory)
@@ -54,7 +42,13 @@ public sealed class WatchDiagnostics
 			if (MessagesByError.Count < MaxMessages)
 				MessagesByError.Add(error, $"{error} ({directory})");
 			else
-				DroppedField++;
+				DroppedHashes.Add(StringComparer.Ordinal.GetHashCode(error));
 		}
 	}
+}
+
+/// <summary>A consistent read of <see cref="WatchDiagnostics"/>.</summary>
+public readonly record struct WatchDiagnosticsSnapshot(IReadOnlyList<string> Messages, int Dropped)
+{
+	public static WatchDiagnosticsSnapshot Empty { get; } = new([], 0);
 }

@@ -36,7 +36,7 @@ public class SolutionFileSyncTests
 		subject.OnWatcherError(diagnostics, "/watched", new InternalBufferOverflowException("Too many changes at once."), whileStarting);
 
 		Assert.True(instance.IsDirty);
-		Assert.Empty(diagnostics.Messages);
+		Assert.Empty(diagnostics.Snapshot().Messages);
 	}
 
 	[Theory]
@@ -62,7 +62,7 @@ public class SolutionFileSyncTests
 		}
 
 		Assert.False(instance.IsDirty);
-		string message = Assert.Single(diagnostics.Messages);
+		string message = Assert.Single(diagnostics.Snapshot().Messages);
 		Assert.Contains("inotify watches", message);
 		Assert.Contains("/watched/a", message);
 	}
@@ -78,7 +78,7 @@ public class SolutionFileSyncTests
 		subject.OnWatcherError(diagnostics, "/watched", new UnauthorizedAccessException("Access to the watched directory was denied."), whileStarting: false);
 
 		Assert.True(instance.IsDirty);
-		Assert.Empty(diagnostics.Messages);
+		Assert.Empty(diagnostics.Snapshot().Messages);
 	}
 
 	[Fact]
@@ -94,7 +94,7 @@ public class SolutionFileSyncTests
 		subject.OnWatcherError(diagnostics, "/watched", denied, whileStarting: false);
 
 		Assert.False(instance.IsDirty);
-		Assert.Single(diagnostics.Messages);
+		Assert.Single(diagnostics.Snapshot().Messages);
 	}
 
 	[Fact]
@@ -105,9 +105,35 @@ public class SolutionFileSyncTests
 		for (int i = 0; i < WatchDiagnostics.MaxMessages + 5; i++)
 			subject.Record($"failure {i}", $"/watched/{i}");
 		subject.Record("failure 0", "/watched/again");
+		// A dropped error reported again is still one dropped error.
+		subject.Record($"failure {WatchDiagnostics.MaxMessages}", "/watched/again");
 
-		Assert.Equal(WatchDiagnostics.MaxMessages, subject.Messages.Count);
-		Assert.Equal(5, subject.Dropped);
+		WatchDiagnosticsSnapshot snapshot = subject.Snapshot();
+		Assert.Equal(WatchDiagnostics.MaxMessages, snapshot.Messages.Count);
+		Assert.Equal(5, snapshot.Dropped);
+		Assert.True(subject.Contains($"failure {WatchDiagnostics.MaxMessages}"));
+	}
+
+	[Fact]
+	public async Task WhenTheSameErrorArrivesAfterStartingInSuccessiveWatchers_ThenOnlyTheFirstForcesAReload()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await LoadDetachedAsync(registry);
+		var subject = new SolutionFileSync(instance);
+		// On .NET 11 a child directory that cannot be watched is reported asynchronously, after starting, to each
+		// fresh watcher's empty diagnostics.
+		var denied = new UnauthorizedAccessException("Access to the path '/watched/root-owned' is denied.");
+		var first = new WatchDiagnostics();
+		var second = new WatchDiagnostics();
+
+		subject.OnWatcherError(first, "/watched", denied, whileStarting: false);
+		Assert.True(instance.IsDirty);
+		Assert.Empty(first.Snapshot().Messages);
+
+		// The reload's fresh watcher meets it again: recorded (rather than marking the instance dirty once more).
+		new SolutionFileSync(instance).OnWatcherError(second, "/watched", denied, whileStarting: false);
+
+		Assert.Single(second.Snapshot().Messages);
 	}
 
 	[Fact]
@@ -121,7 +147,7 @@ public class SolutionFileSyncTests
 		subject.RaiseErrorForTest(sender, new UnauthorizedAccessException("Access to the watched directory was denied."));
 
 		Assert.True(instance.IsDirty);
-		Assert.Empty(subject.Diagnostics.Messages);
+		Assert.Empty(subject.Diagnostics.Snapshot().Messages);
 	}
 
 	[Fact]
@@ -136,7 +162,7 @@ public class SolutionFileSyncTests
 		subject.RaiseErrorForTest(sender, new InternalBufferOverflowException("late"));
 
 		Assert.False(instance.IsDirty);
-		Assert.Empty(subject.Diagnostics.Messages);
+		Assert.Empty(subject.Diagnostics.Snapshot().Messages);
 	}
 
 	[Fact]
@@ -149,7 +175,7 @@ public class SolutionFileSyncTests
 
 		instance.AttachWatcher(() => watcher);
 
-		Assert.Equal(["watch limit (/watched)"], instance.WatchDiagnostics);
+		Assert.Equal(["watch limit (/watched)"], instance.WatchDiagnostics.Messages);
 	}
 
 	[Fact]

@@ -29,6 +29,9 @@ public sealed class RoslynInstance : IDisposable
 	private DiagnosticsCacheEntry? DiagnosticsCacheField;
 	private long LastAccessedTicks;
 	private IInstanceWatcher? Watcher;
+	private bool WatcherClosed;
+	private readonly Lock WatcherGate = new();
+	private readonly HashSet<string> WatchErrorsReloadedFor = new(StringComparer.Ordinal);
 	private readonly TaskCompletionSource ReadySignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
 	private readonly SemaphoreSlimReadWriteLock StateGate = new();
@@ -94,10 +97,26 @@ public sealed class RoslynInstance : IDisposable
 	/// limit: while any are listed, changes on disk may not reach the snapshot. Each watcher owns its own, so a
 	/// replacement watcher starts with none.
 	/// </summary>
-	public IReadOnlyList<string> WatchDiagnostics => Volatile.Read(ref Watcher)?.Diagnostics.Messages ?? [];
+	public WatchDiagnosticsSnapshot WatchDiagnostics => Volatile.Read(ref Watcher)?.Diagnostics.Snapshot() ?? WatchDiagnosticsSnapshot.Empty;
 
-	/// <summary>How many distinct watcher errors the attached watcher did not keep (see <see cref="WatchDiagnostics"/>).</summary>
-	public int WatchDiagnosticsDropped => Volatile.Read(ref Watcher)?.Diagnostics.Dropped ?? 0;
+	/// <summary>
+	/// How many distinct watcher errors may each force one reload over the instance's lifetime; beyond it a new
+	/// one is recorded straight away, so a stream of distinct errors cannot keep the instance reloading.
+	/// </summary>
+	public const int MaxWatchErrorReloads = 100;
+
+	/// <summary>
+	/// Claims the one reload a watcher error that arrived after its watcher started may force: true the first
+	/// time for <paramref name="error"/>, false once it has already forced one (in this or an earlier watcher),
+	/// meaning a reload did not cure it and it should be recorded instead. Kept across watchers, because an
+	/// asynchronous failure (a child directory .NET 11 cannot watch) reaches each fresh watcher's empty
+	/// diagnostics after it has started.
+	/// </summary>
+	public bool TryClaimWatchErrorReload(string error)
+	{
+		lock (WatchErrorsReloadedFor)
+			return WatchErrorsReloadedFor.Count < MaxWatchErrorReloads && WatchErrorsReloadedFor.Add(error);
+	}
 
 	/// <summary>Whether the snapshot changed since the last diagnostics build, so the next build must recompile.</summary>
 	public bool BuildNeeded => BuildNeededField;
@@ -106,13 +125,43 @@ public sealed class RoslynInstance : IDisposable
 	/// Starts the watcher that keeps the instance fresh, then disposes any previous one (a rebuild re-attaches), so
 	/// the solution stays watched throughout and a watcher that fails to start leaves the old one in place. Each
 	/// watcher owns its diagnostics, so the overlap cannot mix them. The cost is that both hold OS watches for a
-	/// moment: an instance using over half the inotify watch limit can see its replacement meet the limit, which
-	/// is then listed as a watch diagnostic rather than leaving edits unwatched.
+	/// moment: on .NET 10, where each watcher has its own inotify instance, an instance using over half the watch
+	/// limit can see its replacement meet the limit, which is then listed as a watch diagnostic (the replacement
+	/// may then cover less than the old one did). A watcher that finishes starting after the instance was disposed
+	/// is disposed rather than attached.
 	/// </summary>
 	public void AttachWatcher(Func<IInstanceWatcher> startWatcher)
 	{
 		IInstanceWatcher started = startWatcher();
-		Interlocked.Exchange(ref Watcher, started)?.Dispose();
+		IInstanceWatcher? toDispose;
+		lock (WatcherGate)
+		{
+			if (WatcherClosed)
+			{
+				toDispose = started;
+			}
+			else
+			{
+				toDispose = Watcher;
+				Volatile.Write(ref Watcher, started);
+			}
+		}
+
+		toDispose?.Dispose();
+	}
+
+	/// <summary>Detaches the watcher and, when <paramref name="close"/>, refuses any attached later.</summary>
+	private void DisposeWatcher(bool close)
+	{
+		IInstanceWatcher? toDispose;
+		lock (WatcherGate)
+		{
+			WatcherClosed |= close;
+			toDispose = Watcher;
+			Volatile.Write(ref Watcher, null);
+		}
+
+		toDispose?.Dispose();
 	}
 
 	/// <summary>
@@ -120,10 +169,7 @@ public sealed class RoslynInstance : IDisposable
 	/// detach it: their staged changes would otherwise race the watcher's own debounced fold, which reads
 	/// disk text before queueing and can enqueue a redundant write against a stale snapshot.
 	/// </summary>
-	internal void DetachWatcher()
-	{
-		Interlocked.Exchange(ref Watcher, null)?.Dispose();
-	}
+	internal void DetachWatcher() => DisposeWatcher(close: false);
 
 	/// <summary>
 	/// Attaches a fresh reference for every tracked analyzer DLL (see <see cref="TrackedAnalyzers"/>) built or
@@ -527,7 +573,7 @@ public sealed class RoslynInstance : IDisposable
 	{
 		Work.Writer.TryComplete();
 		Shutdown.Cancel();
-		Watcher?.Dispose();
+		DisposeWatcher(close: true);
 		Volatile.Read(ref WorkspaceField)?.Dispose();
 		StateGate.Dispose();
 		Shutdown.Dispose();
