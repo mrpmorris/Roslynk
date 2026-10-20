@@ -36,7 +36,8 @@ namespace Morris.Roslynk.Features.MultiQuery;
 /// <see cref="RoslynInstance"/>, the slot's <see cref="ResponseBudget"/> and the <see cref="CancellationToken"/>
 /// parameters itself, binds the caller's arguments by parameter name, honours each parameter's declared C#
 /// default when the caller omits it, and rejects unknown argument keys instead of ignoring them. With every
-/// user-facing core parameter being string/string?/bool/int, no per-tool binding code exists to drift.
+/// user-facing core parameter being string/string?/bool/int/int?/string[], no per-tool binding code exists to
+/// drift; a string array accepts a real JSON array or a JSON-array string, and anything else is a caller error.
 /// </remarks>
 internal static class MultiQueryCatalog
 {
@@ -179,8 +180,9 @@ internal static class MultiQueryCatalog
 
 	/// <summary>
 	/// Converts a JSON argument value to the core parameter's type. MCP clients vary in how they serialize
-	/// scalars, so string forms are accepted for bool/int; anything the target type cannot take is a caller
-	/// error (ArgumentException → slot Invalid), never a silent fallback.
+	/// scalars, so string forms are accepted for bool/int; a string array accepts both a real JSON array and
+	/// a JSON-array string. Anything the target type cannot take is a caller error
+	/// (ArgumentException → slot Invalid), never a silent fallback.
 	/// </summary>
 	private static object? Coerce(Type type, JsonElement value, string toolName, string parameterName)
 	{
@@ -214,6 +216,9 @@ internal static class MultiQueryCatalog
 					return null;
 				return (int?)Coerce(typeof(int), value, toolName, parameterName);
 			}
+
+			if (type == typeof(string[]))
+				return JsonArrayArgument.Strings(value, toolName, parameterName);
 
 			throw new NotSupportedException(
 				$"'{toolName}' exposes a parameter type ({type.Name}) the multi_query binder does not support; extend the binder.");

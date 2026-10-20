@@ -5,6 +5,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Features.MultiQuery;
 using Morris.Roslynk.Features.References.FindReferences;
 using Morris.Roslynk.Features.Symbols.GetSymbolBody;
+using Morris.Roslynk.Features.Symbols.SearchSymbols;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -193,6 +194,54 @@ public class MultiQueryCatalogTests
 			allowance: null,
 			arguments,
 			CancellationToken.None));
+	}
+
+	[Fact]
+	public async Task WhenAKindsArgumentIsAJsonArrayString_ThenTheBinderParsesIt()
+	{
+		// The issue #114 repro: agents send the array as a JSON string. Binding must parse it, not reject it
+		// or pass it through as one element.
+		var entry = MultiQueryCatalog.Entries[SearchSymbolsTool.SearchSymbolsName];
+		var arguments = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+		{
+			["query"] = MultiQueryTestHelpers.Json("Greet"),
+			["kinds"] = MultiQueryTestHelpers.Json("[\"Method\"]"),
+		};
+
+		// The coercion succeeds: the core resolves and runs (failing on the null model afterwards), which
+		// proves the parsed array reached the string[] parameter rather than being refused at binding.
+		await Assert.ThrowsAsync<NullReferenceException>(() => MultiQueryCatalog.InvokeCoreAsync(
+			CreateBinderProvider(),
+			entry,
+			model: null!,
+			instance: null!,
+			allowance: null,
+			arguments,
+			CancellationToken.None));
+	}
+
+	[Fact]
+	public async Task WhenAKindsArgumentIsNotAnArray_ThenTheSlotIsInvalidNamingTheParameter()
+	{
+		var entry = MultiQueryCatalog.Entries[SearchSymbolsTool.SearchSymbolsName];
+		var arguments = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+		{
+			["query"] = MultiQueryTestHelpers.Json("Greet"),
+			["kinds"] = MultiQueryTestHelpers.Json("Method"),
+		};
+
+		ArgumentException exception = await Assert.ThrowsAsync<ArgumentException>(() => MultiQueryCatalog.InvokeCoreAsync(
+			CreateBinderProvider(),
+			entry,
+			model: null!,
+			instance: null!,
+			allowance: null,
+			arguments,
+			CancellationToken.None));
+
+		Assert.Contains("'kinds'", exception.Message, StringComparison.Ordinal);
+		Assert.Contains("JSON array", exception.Message, StringComparison.Ordinal);
+		Assert.Equal(ErrorCode.Invalid, RoslynkTool.ToError(exception).Code);
 	}
 
 	private static JsonElement JsonNull() => JsonDocument.Parse("null").RootElement.Clone();

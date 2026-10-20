@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text.Json;
 using ModelContextProtocol.Server;
 using Morris.Roslynk;
@@ -54,6 +54,39 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 		Assert.Contains("line", required);
 		Assert.Contains("column", required);
 		Assert.DoesNotContain("checkOnly", required);
+	}
+
+	[Fact]
+	public void WhenSearchSymbolsIsPublished_ThenKindsIsAnOptionalArrayOfStrings()
+	{
+		JsonElement schema = Tools.Single(tool => tool.ProtocolTool.Name == "search_symbols").ProtocolTool.InputSchema;
+		JsonElement kinds = Properties(schema)["kinds"];
+
+		// A nullable array publishes its type as a union (["array", "null"]) rather than a single string.
+		Assert.Contains("array", TypeNames(kinds));
+		Assert.Contains("string", TypeNames(kinds.GetProperty("items")));
+		Assert.DoesNotContain("kinds", Required(schema));
+		Assert.Contains("JSON array", kinds.GetProperty("description").GetString()!, StringComparison.Ordinal);
+	}
+
+	[Fact]
+	public void WhenGetDiagnosticsIsPublished_ThenIdsIsAnOptionalArrayOfStrings()
+	{
+		JsonElement schema = Tools.Single(tool => tool.ProtocolTool.Name == "get_diagnostics").ProtocolTool.InputSchema;
+		JsonElement ids = Properties(schema)["ids"];
+
+		Assert.Contains("array", TypeNames(ids));
+		Assert.Contains("string", TypeNames(ids.GetProperty("items")));
+		Assert.DoesNotContain("ids", Required(schema));
+	}
+
+	/// <summary>The declared type names, whether the schema writes one string or a nullable union.</summary>
+	private static string[] TypeNames(JsonElement schema)
+	{
+		JsonElement type = schema.GetProperty("type");
+		return type.ValueKind == JsonValueKind.String
+			? [type.GetString()!]
+			: [.. type.EnumerateArray().Select(value => value.GetString()!)];
 	}
 
 	[Fact]

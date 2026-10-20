@@ -63,7 +63,7 @@ public sealed class GetDiagnosticsTool
 		[Description("Run analyzers; false is faster, compiler-only.")] bool includeAnalyzers = true,
 		[Description("Project filter: outline name with optional extension, case-insensitive; all loaded target frameworks.")] string? projectName = null,
 		[Description("File filter (case-insensitive), including diagnostics mapped to Razor source.")] string? filePath = null,
-		[Description("Diagnostic ids (case-insensitive), e.g. [\"CS0246\"]; null/empty matches all.")] string[]? ids = null,
+		[Description("Diagnostic ids (case-insensitive), e.g. [\"CS0246\"]; a JSON-array string such as \"[\\\"CS0246\\\"]\" is also accepted; null/empty matches all.")] string[]? ids = null,
 		[Description("Summarize by diagnostic id.")] bool summaryOnly = false,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,

@@ -13,8 +13,9 @@ namespace Morris.Roslynk.Infrastructure.Tools;
 /// <summary>
 /// Wraps every Roslynk tool so four failure modes that bypass a tool's own error handling are covered:
 /// the published schema is rewritten so defaulted parameters are genuinely omittable, an argument the
-/// tool does not declare is refused before the tool runs as 'error=UnknownArgument' naming the valid
-/// parameters (the SDK would otherwise bind the known arguments and silently drop the rest), an argument
+/// the tool does not declare is refused before the tool runs as 'error=UnknownArgument' naming the valid
+/// parameters (the SDK would otherwise bind the known arguments and silently drop the rest), an array-typed
+/// argument sent as a JSON-array string is parsed into the array the SDK binds, an argument
 /// the SDK cannot bind - a wrong type, an unparseable value - comes back as the standard header-only
 /// 'error='/'errorMessage=' result instead of an unhandled exception, and a result larger than the
 /// server-wide <see cref="ResponseBudget"/> is cut after its last whole line and marked (the backstop
@@ -57,12 +58,22 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 	{
 		try
 		{
-			// Refuse an argument the tool does not declare before anything runs. The SDK binds a known
-			// argument by name and silently drops the rest, which turns a misspelled name into a
-			// plausible-looking result from the defaults; the schema is the authority on what is known.
+			// Array-typed arguments arrive either as a real JSON array or as a JSON-array string; the
+			// string form is parsed into the array the SDK binds instead of failing the call (or, worse,
+			// being read as one element). A malformed value is refused naming the parameter. This runs
+			// before binding, so it applies to every published array parameter - kinds, ids, and so on.
 			if (request.Params.Arguments is { Count: > 0 } arguments
 				&& Published.InputSchema.TryGetProperty("properties", out JsonElement properties))
 			{
+				foreach (string key in arguments.Keys.ToList())
+				{
+					if (properties.TryGetProperty(key, out JsonElement property) && IsArrayProperty(property))
+						arguments[key] = JsonArrayArgument.Normalize(arguments[key], Published.Name, key);
+				}
+
+				// Refuse an argument the tool does not declare before anything runs. The SDK binds a known
+				// argument by name and silently drops the rest, which turns a misspelled name into a
+				// plausible-looking result from the defaults; the schema is the authority on what is known.
 				UnknownArgument.Reject(
 					arguments.Keys,
 					properties.EnumerateObject().Select(property => property.Name).ToList(),
@@ -94,6 +105,24 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 		{
 			return ToErrorResult(exception);
 		}
+	}
+
+	/// <summary>
+	/// True when the published property schema declares an array, whether as <c>"type": "array"</c> or as
+	/// one member of a type union (a nullable array).
+	/// </summary>
+	private static bool IsArrayProperty(JsonElement property)
+	{
+		if (!property.TryGetProperty("type", out JsonElement type))
+			return false;
+
+		return type.ValueKind switch
+		{
+			JsonValueKind.String => type.GetString() == "array",
+			JsonValueKind.Array => type.EnumerateArray().Any(
+				item => item.ValueKind == JsonValueKind.String && item.GetString() == "array"),
+			_ => false,
+		};
 	}
 
 	/// <summary>

@@ -193,6 +193,64 @@ public class RoslynkToolTests
 		Assert.Contains("The tool takes no arguments.", text, StringComparison.Ordinal);
 	}
 
+	[Fact]
+	public async Task WhenAnArrayArgumentIsAJsonString_ThenItIsParsedBeforeBinding()
+	{
+		// Agents commonly stringify array arguments; the schema says array, but the call must still mean
+		// the same filter rather than fail or bind the string as a single element.
+		McpServerTool inner = McpServerTool.Create(
+			([Description("Kinds.")] string[]? kinds = null) => kinds is null ? "<null>" : string.Join(",", kinds),
+			new McpServerToolCreateOptions { Name = "sample" });
+
+		var wrapped = new RoslynkTool(inner);
+		CallToolResult result = await InvokeAsync(wrapped, "sample", ("kinds", JsonSerializer.SerializeToElement("[\"Method\"]")));
+
+		string text = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
+		Assert.True(result.IsError is not true);
+		Assert.Equal("Method", text);
+	}
+
+	[Fact]
+	public async Task WhenAnArrayArgumentIsARealJsonArray_ThenItBindsUnchanged()
+	{
+		McpServerTool inner = McpServerTool.Create(
+			([Description("Kinds.")] string[]? kinds = null) => kinds is null ? "<null>" : string.Join(",", kinds),
+			new McpServerToolCreateOptions { Name = "sample" });
+
+		var wrapped = new RoslynkTool(inner);
+		CallToolResult result = await InvokeAsync(
+			wrapped,
+			"sample",
+			("kinds", JsonSerializer.SerializeToElement(new[] { "Method", "Class" })));
+
+		string text = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
+		Assert.True(result.IsError is not true);
+		Assert.Equal("Method,Class", text);
+	}
+
+	[Fact]
+	public async Task WhenAnArrayArgumentIsAMalformedString_ThenTheResultIsInvalidNamingTheParameter()
+	{
+		bool invoked = false;
+		McpServerTool inner = McpServerTool.Create(
+			(string[]? kinds = null) =>
+			{
+				invoked = true;
+				return "ran";
+			},
+			new McpServerToolCreateOptions { Name = "sample" });
+
+		var wrapped = new RoslynkTool(inner);
+		CallToolResult result = await InvokeAsync(wrapped, "sample", ("kinds", JsonSerializer.SerializeToElement("Method")));
+
+		string text = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
+		Assert.True(result.IsError);
+		Assert.StartsWith("error=Invalid\n", text, StringComparison.Ordinal);
+		Assert.Contains("Parameter 'kinds' of 'sample'", text, StringComparison.Ordinal);
+		Assert.Contains("JSON array", text, StringComparison.Ordinal);
+		Assert.False(invoked);
+	}
+
 	/// <summary>Invokes a wrapped tool through the real binding layer, exactly as a client call arrives.</summary>
 	private static async Task<CallToolResult> InvokeAsync(RoslynkTool tool, string name, params (string Key, JsonElement Value)[] arguments)
 	{

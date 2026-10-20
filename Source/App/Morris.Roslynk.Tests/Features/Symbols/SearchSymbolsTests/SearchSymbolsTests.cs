@@ -182,4 +182,76 @@ public class SearchSymbolsTests
 		Assert.DoesNotContain("Calculator", result);
 		Assert.Equal(1, result.Split('\n').Count(line => line.TrimStart('	').StartsWith("method,Add,", StringComparison.Ordinal)));
 	}
+	[Fact]
+	public async Task WhenKindsFiltersToMethods_ThenOnlyMethodsAreReturned()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new SearchSymbolsTool(registry, new ProjectionService());
+
+		// "Greet" matches both the Greeter class and its Greet method; only the method was requested.
+		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet", kinds: ["Method"]);
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("method,Greet,", result);
+		Assert.DoesNotContain("class,Greeter,", result);
+	}
+
+	[Fact]
+	public async Task WhenKindsFiltersToClasses_ThenMembersAreNotReturned()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new SearchSymbolsTool(registry, new ProjectionService());
+
+		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet", kinds: ["Class"]);
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("class,Greeter,", result);
+		Assert.DoesNotContain("method,Greet,", result);
+	}
+
+	[Fact]
+	public async Task WhenKindsUsesPascalCase_ThenTheFilterStillApplies()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new SearchSymbolsTool(registry, new ProjectionService());
+
+		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet", kinds: ["METHOD"]);
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("method,Greet,", result);
+		Assert.DoesNotContain("class,Greeter,", result);
+	}
+
+	[Fact]
+	public async Task WhenKindsIsEmpty_ThenEveryKindIsReturned()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new SearchSymbolsTool(registry, new ProjectionService());
+
+		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet", kinds: []);
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("class,Greeter,", result);
+		Assert.Contains("method,Greet,", result);
+	}
+
+	[Fact]
+	public async Task WhenAKindNameIsUnknown_ThenTheCallIsInvalidAndNamesTheAcceptedKinds()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new SearchSymbolsTool(registry, new ProjectionService());
+
+		// A silently unmatched name would look like "no such symbol"; the caller's typo must be named.
+		FormatException exception = await Assert.ThrowsAsync<FormatException>(
+			() => subject.SearchSymbols(TestSolutions.Simple, "Greet", kinds: ["Methods"]));
+
+		Assert.Contains("'kinds'", exception.Message, StringComparison.Ordinal);
+		Assert.Contains("'Methods'", exception.Message, StringComparison.Ordinal);
+		Assert.Contains("method", exception.Message, StringComparison.Ordinal);
+	}
 }

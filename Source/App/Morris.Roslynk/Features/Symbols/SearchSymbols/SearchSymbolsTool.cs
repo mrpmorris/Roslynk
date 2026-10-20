@@ -38,6 +38,9 @@ public sealed class SearchSymbolsTool
 		(Widget.Compute, SimpleLibrary.Widget.Compute). A bare name stays a case-insensitive substring search.
 		Body: project > folder > file > namespace > type > member. Members nest under parent types;
 		type locations appear only when the type itself matches.
+		'kinds' filters the matched declarations by outline kind (namespace, class, struct, interface, enum,
+		delegate, module, method, property, field, event, localfunction), case-insensitively; an unknown kind
+		name is error=Invalid rather than an empty result.
 		""")]
 	[McpServerTool(
 		Name = SearchSymbolsName,
@@ -49,24 +52,30 @@ public sealed class SearchSymbolsTool
 	public async Task<string> SearchSymbols(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("Case-insensitive name substring. A dotted query is a container-qualified name: the last segment names the symbol, the preceding segments a suffix of its containing type/namespace chain.")] string query,
+		[Description("Optional kind filter: a JSON array of kind names, e.g. [\"Method\"]. A JSON-array string such as \"[\\\"Method\\\"]\" is also accepted. Kinds (case-insensitive): namespace, class, struct, interface, enum, delegate, module, method, property, field, event, localfunction. Omit or pass [] for all kinds.")] string[]? kinds = null,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await SearchSymbolsCoreAsync(model, instance, query, startItem, maxSize, Budget, CancellationToken.None);
+		return await SearchSymbolsCoreAsync(model, instance, query, kinds, startItem, maxSize, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> SearchSymbolsCoreAsync(
 		SolutionModel model,
 		RoslynInstance instance,
 		string query,
+		string[]? kinds = null,
 		int startItem = 1,
 		int maxSize = 0,
 		ResponseBudget? budget = null,
 		CancellationToken token = default)
 	{
+		// Validate the filter before doing any work: an unknown kind name is the caller's mistake and must
+		// be named, not turned into an empty result that looks like "no such symbol".
+		HashSet<string>? kindFilter = SymbolKinds.Parse(kinds);
+
 		if (model.Solution is null)
 			return OutlineError.Format(Error.Indexing(instance.LoadedProjects), model.Status);
 
@@ -116,9 +125,12 @@ public sealed class SearchSymbolsTool
 			}
 		}
 
-		// The result set is every match; the response budget and maxSize bound what one page carries, so a
-		// long result pages with startItem instead of losing matches to a cap. count= names the set's size.
-		IReadOnlyList<(ISymbol Symbol, Solution Solution)> page = matched.Items.ToList();
+		// The result set is every match of the requested kinds; the response budget and maxSize bound what
+		// one page carries, so a long result pages with startItem instead of losing matches to a cap.
+		// count= names the filtered set's size.
+		IReadOnlyList<(ISymbol Symbol, Solution Solution)> page = matched.Items
+			.Where(item => SymbolKinds.Matches(item.Symbol, kindFilter))
+			.ToList();
 
 		var root = new SymbolNode();
 		foreach ((ISymbol symbol, Solution symbolSolution) in page)
