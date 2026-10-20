@@ -169,9 +169,9 @@ public class FindReadsAndWritesTests
 	}
 
 	[Fact]
-	public async Task WhenTheSolutionIsStillLoading_ThenAnIndexingHeaderIsReturned()
+	public async Task WhenTheLoadWaitTimeoutElapses_ThenAnIndexingHeaderIsReturned()
 	{
-		using var registry = new InstanceRegistry();
+		using var registry = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero));
 		var subject = new FindWritesTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindWrites(TestSolutions.Access, "AccessSpace.Counter.Total");

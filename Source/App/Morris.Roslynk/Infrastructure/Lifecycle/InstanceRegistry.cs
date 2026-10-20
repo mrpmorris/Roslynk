@@ -16,6 +16,12 @@ namespace Morris.Roslynk.Infrastructure.Lifecycle;
 public sealed class InstanceRegistry : IDisposable
 {
 	private readonly ConcurrentDictionary<SolutionKey, Lazy<RoslynInstance>> Instances = new();
+	private readonly LoadWaitTimeout LoadWaitTimeout;
+
+	public InstanceRegistry(LoadWaitTimeout? loadWaitTimeout = null)
+	{
+		LoadWaitTimeout = loadWaitTimeout ?? LoadWaitTimeout.Default;
+	}
 
 	/// <summary>The file paths of the solutions currently open, whether they are loading, ready, or faulted.</summary>
 	public IReadOnlyList<string> OpenSolutionPaths => Instances.Keys.Select(key => key.FilePath).ToArray();
@@ -70,18 +76,23 @@ public sealed class InstanceRegistry : IDisposable
 	}
 
 	/// <summary>
-	/// Returns the instance for <paramref name="solutionPath"/>, creating it if needed, and — when a build-file
-	/// or additional-document edit has left it dirty — rebuilds it from disk and awaits that rebuild, so the
-	/// caller sees the reloaded snapshot in a single read (a <c>.mixin</c> or other source-generator input edit
-	/// is reflected without a second call). Does not block on the very first load: while no snapshot exists yet
-	/// it returns immediately with <see cref="SolutionStatus.Building"/>, preserving the non-blocking open path.
+	/// Returns the instance for <paramref name="solutionPath"/>, creating it if needed, and waits up to the
+	/// configured <see cref="LoadWaitTimeout"/> for its in-flight initial load (joining that one load, never
+	/// starting another). When a build-file or additional-document edit has left the instance dirty it is
+	/// rebuilt from disk and awaited, so the caller sees the reloaded snapshot in a single read (a
+	/// <c>.mixin</c> or other source-generator input edit is reflected without a second call). If the initial
+	/// load is still running when the timeout elapses it returns the instance with
+	/// <see cref="SolutionStatus.Building"/> and no snapshot; the tool then reports <c>Indexing</c> with the
+	/// live project count. <paramref name="cancellationToken"/> cancels the wait, not the shared load.
 	/// </summary>
-	public async Task<RoslynInstance> GetOrBeginAsync(string solutionPath)
+	public async Task<RoslynInstance> GetOrBeginAsync(string solutionPath, CancellationToken cancellationToken = default)
 	{
 		using (RoslynkActivitySource.Instance.StartActivity($"{nameof(InstanceRegistry)}.{nameof(InstanceRegistry.GetOrBeginAsync)}"))
 		{
 			SolutionKey key = SolutionKey.For(solutionPath);
 			RoslynInstance instance = GetOrCreate(key);
+
+			await instance.WaitForInitialLoadAsync(LoadWaitTimeout.Duration, cancellationToken);
 
 			using (RoslynkActivitySource.Instance.StartActivity($"{nameof(RoslynInstance)}.{nameof(RoslynInstance.EnsureRebuiltAsync)}"))
 			{

@@ -55,9 +55,9 @@ public class ApplyCodeActionTests
 	}
 
 	[Fact]
-	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
+	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{
-		using var registry = new InstanceRegistry();
+		using var registry = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero));
 		var subject = new ApplyCodeActionTool(registry, TestServices.CodeActions(), new ApplyPipeline());
 
 		string result = await subject.ApplyCodeAction(TestSolutions.Simple, "anything");

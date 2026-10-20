@@ -87,17 +87,31 @@ public class GetSymbolTests
 	}
 
 	[Fact]
-	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
+	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturnedWithProgress()
 	{
-		using var registry = new InstanceRegistry();
+		using var registry = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero));
 		var subject = new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetSymbol(TestSolutions.Simple, "SimpleLibrary.Greeter");
 
 		Assert.Contains("error=Indexing", result);
 		Assert.Contains("status=Building", result);
+		Assert.Contains("projects=", result);
 
 		await registry.GetOrAddAsync(TestSolutions.Simple);
+	}
+
+	[Fact]
+	public async Task WhenTheSolutionIsLoading_ThenTheToolWaitsAndReturnsTheResultInsteadOfIndexing()
+	{
+		using var registry = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.FromMinutes(5)));
+		var subject = new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService());
+
+		// No prior load: the call joins the in-flight initial load and waits for it rather than failing fast.
+		string result = await subject.GetSymbol(TestSolutions.Simple, "SimpleLibrary.Greeter");
+
+		Assert.DoesNotContain("error=Indexing", result);
+		Assert.Contains("public class Greeter", result);
 	}
 
 	[Fact]

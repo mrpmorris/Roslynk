@@ -48,9 +48,10 @@ public sealed class FindImplementationsTool
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description("Interface/abstract symbol name.")] string symbolName,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
-		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
+		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
 		return await FindImplementationsCoreAsync(model, instance, symbolName, startItem, maxSize, Budget, CancellationToken.None);
 	}
@@ -67,7 +68,7 @@ public sealed class FindImplementationsTool
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 

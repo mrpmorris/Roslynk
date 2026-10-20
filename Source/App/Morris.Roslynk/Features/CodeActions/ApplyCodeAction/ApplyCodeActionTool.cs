@@ -50,13 +50,13 @@ public sealed class ApplyCodeActionTool
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = instance.CurrentModel;
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
 		if (!CodeActionService.TryDecodeId(actionId, out ActionRef actionRef))
 			return Failure(Error.Invalid("The actionId could not be decoded; get a fresh one from get_code_actions."));

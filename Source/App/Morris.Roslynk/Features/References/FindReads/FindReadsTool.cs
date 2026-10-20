@@ -47,7 +47,7 @@ public sealed class FindReadsTool
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
 		return await FindReadsCoreAsync(model, instance, symbolName, startItem, maxSize, Budget, cancellationToken);
 	}
@@ -60,5 +60,5 @@ public sealed class FindReadsTool
 		int maxSize = 0,
 		ResponseBudget? budget = null,
 		CancellationToken cancellationToken = default) =>
-		AccessQuery.RunAsync(model, SymbolResolver, ProjectionService, symbolName, AccessKindText.IsRead, startItem, maxSize, budget, cancellationToken);
+		AccessQuery.RunAsync(model, instance, SymbolResolver, ProjectionService, symbolName, AccessKindText.IsRead, startItem, maxSize, budget, cancellationToken);
 }

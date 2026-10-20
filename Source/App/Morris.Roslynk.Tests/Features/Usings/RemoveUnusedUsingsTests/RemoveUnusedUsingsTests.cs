@@ -75,9 +75,9 @@ public class RemoveUnusedUsingsTests
 	}
 
 	[Fact]
-	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
+	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{
-		using var registry = new InstanceRegistry();
+		using var registry = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero));
 		var subject = TestServices.RemoveUnusedUsings(registry);
 
 		string result = await subject.RemoveUnusedUsings(TestSolutions.Simple);

@@ -40,9 +40,9 @@ public class FindReferencesTests
 	}
 
 	[Fact]
-	public async Task WhenTheSolutionIsStillLoading_ThenAnIndexingHeaderIsReturned()
+	public async Task WhenTheLoadWaitTimeoutElapses_ThenAnIndexingHeaderIsReturned()
 	{
-		using var registry = new InstanceRegistry();
+		using var registry = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero));
 		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Greeter");

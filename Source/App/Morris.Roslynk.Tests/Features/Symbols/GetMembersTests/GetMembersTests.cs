@@ -36,9 +36,9 @@ public class GetMembersTests
 	}
 
 	[Fact]
-	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
+	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{
-		using var registry = new InstanceRegistry();
+		using var registry = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero));
 		var subject = new GetMembersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetMembers(TestSolutions.Simple, "SimpleLibrary.Greeter");

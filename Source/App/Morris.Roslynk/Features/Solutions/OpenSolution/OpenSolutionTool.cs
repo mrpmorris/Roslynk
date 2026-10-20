@@ -22,9 +22,10 @@ public sealed class OpenSolutionTool
 	}
 
 	[Description("""
-		Opens a .sln/.slnx asynchronously; repeated opens reuse the instance.
+		Opens a .sln/.slnx and waits for the initial load (up to the server's load timeout); repeated opens reuse the instance.
 		Headers: solutionId, status, projects, loadDiagnostics. Body: <projectPath>,<documentCount> per project.
-		While loading: status=Building, empty body. Missing solution: NotFound; failed load: Faulted.
+		noWait=true starts or reuses the load and returns immediately with status=Building (fire-and-forget pre-warming).
+		Missing solution: NotFound; failed load: Faulted.
 		""")]
 	[McpServerTool(
 		Name = OpenSolutionName,
@@ -33,8 +34,10 @@ public sealed class OpenSolutionTool
 		Idempotent = true,
 		Destructive = false,
 		OpenWorld = false)]
-	public string OpenSolution(
-		[Description(ParameterDescriptions.SolutionPath)] string solutionPath)
+	public async Task<string> OpenSolution(
+		[Description(ParameterDescriptions.SolutionPath)] string solutionPath,
+		[Description("Return immediately without waiting for the initial load.")] bool noWait = false,
+		CancellationToken cancellationToken = default)
 	{
 		string fullPath = Path.GetFullPath(solutionPath);
 		if (!File.Exists(fullPath))
@@ -42,8 +45,10 @@ public sealed class OpenSolutionTool
 				Error.NotFound($"No solution file was found at '{fullPath}'."),
 				SolutionStatus.Faulted);
 
-		RoslynInstance instance = InstanceRegistry.GetOrBegin(solutionPath);
-		SolutionModel model = instance.CurrentModel;
+		RoslynInstance instance = noWait
+			? InstanceRegistry.GetOrBegin(solutionPath)
+			: await InstanceRegistry.GetOrBeginAsync(solutionPath, cancellationToken);
+		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
 
 		if (model.Status == SolutionStatus.Faulted)
 			return OutlineError.Format(Error.Faulted(model.FaultMessage ?? "The solution failed to load."), model.Status);

@@ -71,9 +71,9 @@ public class ApplyCodeFixTests
 	}
 
 	[Fact]
-	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
+	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{
-		using var registry = new InstanceRegistry();
+		using var registry = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero));
 		var subject = TestServices.ApplyCodeFix(registry);
 
 		string result = await subject.ApplyCodeFix(TestSolutions.Simple, "Widget.cs", "CS0219", 1, 1);

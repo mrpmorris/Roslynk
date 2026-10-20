@@ -71,7 +71,7 @@ public sealed class RenameParameterTool
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = instance.CurrentModel;
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
@@ -82,7 +82,7 @@ public sealed class RenameParameterTool
 			return Failure(Error.Invalid($"The parameter is already named '{newName}'."));
 
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
 		Solution baseSolution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(baseSolution);

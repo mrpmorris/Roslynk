@@ -222,13 +222,15 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 > `#if` branches and Razor, and it never matches names inside comments or strings.
 >
 > **Getting started:** call `open_solution` with the absolute path to the `.sln`/`.slnx`; the
-> `solutionId` it returns is the handle every other tool needs. It loads in the background — while
-> it does, other calls return `error=Indexing`; retry shortly or poll `get_solution_status`. Never
+> `solutionId` it returns is the handle every other tool needs. It waits for the load by default
+> (`noWait=true` pre-warms in the background); every solution tool waits server-side up to the
+> configured timeout, so you normally get the result rather than a retry prompt. Only if the timeout
+> elapses do calls return `error=Indexing` (with `projects=loaded/?`); retry shortly. Never
 > fall back to reading or editing files directly. Never call `reload_solution` on your own
 > initiative — a file watcher picks up edits automatically; suggest a reload instead.
 >
 > **Lifecycle:**
-> - `open_solution`: Load a solution. Parameters: `solutionPath` (absolute). Idempotent, cheap to repeat.
+> - `open_solution`: Load a solution. Parameters: `solutionPath` (absolute), `noWait` (return before the load finishes). Idempotent, cheap to repeat.
 > - `get_solution_status`: List every loaded solution and its progress, with the messages behind `loadDiagnostics` (skipped analyzers, failed project loads) indented under each Ready solution. A missing generator DLL names the project to build; once built, the next call picks it up without a reload. Optional parameter: `allLoadDiagnostics` (every message instead of the first 20 per solution).
 > - `reload_solution`: Force a from-disk re-evaluation. Parameter: `solutionId`. Only when the user explicitly asks.
 >
@@ -306,6 +308,8 @@ For a foreground daemon with visible logs:
 Listens on `http://localhost:6502`. Point your MCP client at that URL (streamable HTTP). Ctrl+C stops it.
 
 The response budget (the character cap every tool result is held under; default 80,000) is read once at startup from `Roslynk:MaxResponseChars` in `appsettings.json` or the `Roslynk__MaxResponseChars` environment variable. A shared daemon serves every client with one value — set the smallest cap your clients need, and restart the daemon to change it.
+
+Solution-scoped tools wait server-side for an in-flight initial load for up to `Roslynk:LoadWaitSeconds` (default 30, or the `Roslynk__LoadWaitSeconds` environment variable) before returning `error=Indexing` with the live project count. Restart the daemon to change it.
 
 ## Run (Windows)
 

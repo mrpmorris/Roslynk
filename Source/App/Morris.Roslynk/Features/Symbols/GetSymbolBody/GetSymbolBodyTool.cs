@@ -67,7 +67,7 @@ public sealed class GetSymbolBodyTool
 		[Description("Declaration part (1-based); 0 returns all, omitting oversized parts.")] int part = 0,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
 		return await GetSymbolBodyCoreAsync(model, instance, symbolName, includeLeadingTrivia, startItem, maxSize, part, Budget, cancellationToken);
 	}
@@ -86,7 +86,7 @@ public sealed class GetSymbolBodyTool
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 

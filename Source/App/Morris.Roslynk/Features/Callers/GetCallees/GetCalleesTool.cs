@@ -60,9 +60,10 @@ public sealed class GetCalleesTool
 		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description("Exclude metadata callees (BCL/NuGet).")] bool excludeExternal = false,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
-		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
+		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
 		return await GetCalleesCoreAsync(model, instance, symbolName, excludeExternal, startItem, maxSize, Budget, CancellationToken.None);
 	}
@@ -80,7 +81,7 @@ public sealed class GetCalleesTool
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 

@@ -80,9 +80,10 @@ public sealed class FindDeadCodeTool
 		[Description("Name prefix, e.g. MyApp.Services; omit for the whole solution.")] string? scope = null,
 		[Description("Include unreferenced public/protected members (the API surface).")] bool includePublic = false,
 		[Description("Scan cap; omit for a complete scan.")] int maxSize = 0,
-		[Description(ParameterDescriptions.StartItem)] int startItem = 1)
+		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
+		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
 		return await FindDeadCodeCoreAsync(model, instance, scope, includePublic, maxSize, startItem, Budget, CancellationToken.None);
 	}
@@ -98,7 +99,7 @@ public sealed class FindDeadCodeTool
 		CancellationToken token = default)
 	{
 		if (model.Solution is null)
-			return OutlineError.Format(Error.Indexing(), model.Status);
+			return OutlineError.Format(Error.Indexing(instance.LoadedProjects), model.Status);
 
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);

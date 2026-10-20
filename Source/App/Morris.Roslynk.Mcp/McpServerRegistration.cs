@@ -33,7 +33,10 @@ internal static class McpServerRegistration
 
 			## Lifecycle
 
-			open_solution returns solutionId. On error=Indexing, retry shortly or poll get_solution_status.
+			open_solution returns solutionId; it waits for the initial load by default (noWait=true pre-warms in
+			the background). Every solution tool waits server-side for an in-flight load up to the configured
+			timeout; only if that elapses does it return error=Indexing (with projects=loaded/?), and then you
+			should retry rather than read or edit files directly.
 			The watcher folds edits, including yours. Never initiate reload_solution; suggest it after
 			branch switches, restore, SDK/build-property changes.
 

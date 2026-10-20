@@ -12,8 +12,16 @@ public sealed class Error
 	public IReadOnlyList<string>? Candidates { get; init; }
 	public IReadOnlyList<string>? StaleFiles { get; init; }
 
-	public static Error Indexing(string message = "The solution is still loading; retry this same call shortly. Do not fall back to reading or editing the .cs files directly; loading finishes within seconds to a minute, after which this tool returns the compiler-backed result.") =>
-		new() { Code = ErrorCode.Indexing, Message = message };
+	/// <summary>
+	/// The solution's initial load is still in flight after the bounded server-side wait. The message carries
+	/// the live project count so the caller can see progress, e.g. <c>projects=9/?</c>.
+	/// </summary>
+	public static Error Indexing(int loadedProjects = 0, int? totalProjects = null) =>
+		new()
+		{
+			Code = ErrorCode.Indexing,
+			Message = $"The solution is still loading; retry this same call shortly (projects={loadedProjects}/{totalProjects?.ToString() ?? "?"}). Do not fall back to reading or editing the .cs files directly; loading finishes within seconds to a minute, after which this tool returns the compiler-backed result."
+		};
 
 	public static Error Faulted(string message) =>
 		new() { Code = ErrorCode.Faulted, Message = message };

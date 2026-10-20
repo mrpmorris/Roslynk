@@ -50,9 +50,9 @@ public class GetCodeActionsTests
 	}
 
 	[Fact]
-	public async Task WhenTheSolutionIsStillLoading_ThenIndexingIsReturned()
+	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{
-		using var registry = new InstanceRegistry();
+		using var registry = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero));
 		var subject = new GetCodeActionsTool(registry, TestServices.CodeActions());
 
 		string result = await subject.GetCodeActions(TestSolutions.Simple, "Widget.cs", 1, 1);

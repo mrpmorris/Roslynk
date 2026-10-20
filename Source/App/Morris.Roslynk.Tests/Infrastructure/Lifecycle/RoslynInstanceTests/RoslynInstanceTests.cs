@@ -210,6 +210,77 @@ public class RoslynInstanceTests
 		await Assert.ThrowsAnyAsync<Exception>(() =>
 			subject.EnqueueWriteAsync((current, token) => Task.FromResult(new WriteResult(current, []))));
 	}
+	[Fact]
+	public async Task WhenTheInitialLoadExceedsTheWaitTimeout_ThenTheWaitReturnsFalseWhileTheModelStaysBuilding()
+	{
+		var gate = new TaskCompletionSource();
+		using var subject = new RoslynInstance(SolutionKey.For(TestSolutions.Simple));
+		subject.BeginInitialLoad(
+			loader: async progress =>
+			{
+				await gate.Task;
+				return await SolutionWorkspace.LoadAsync(TestSolutions.Simple, progress);
+			},
+			onReady: _ => { });
+
+		bool loaded = await subject.WaitForInitialLoadAsync(TimeSpan.Zero);
+
+		Assert.False(loaded);
+		Assert.Equal(SolutionStatus.Building, subject.CurrentModel.Status);
+		Assert.Null(subject.CurrentModel.Solution);
+
+		gate.SetResult();
+		await subject.WaitUntilReadyAsync();
+		Assert.Equal(SolutionStatus.Ready, subject.CurrentModel.Status);
+	}
+
+	[Fact]
+	public async Task WhenTwoCallersWaitForTheSameInitialLoad_ThenTheyJoinThatOneLoad()
+	{
+		var gate = new TaskCompletionSource();
+		int loads = 0;
+		using var subject = new RoslynInstance(SolutionKey.For(TestSolutions.Simple));
+		subject.BeginInitialLoad(
+			loader: async progress =>
+			{
+				Interlocked.Increment(ref loads);
+				await gate.Task;
+				return await SolutionWorkspace.LoadAsync(TestSolutions.Simple, progress);
+			},
+			onReady: _ => { });
+
+		Task<bool> first = subject.WaitForInitialLoadAsync(TimeSpan.FromMinutes(5));
+		Task<bool> second = subject.WaitForInitialLoadAsync(TimeSpan.FromMinutes(5));
+		gate.SetResult();
+
+		bool[] results = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromMinutes(5));
+		Assert.All(results, Assert.True);
+		Assert.Equal(1, loads);
+		Assert.Equal(SolutionStatus.Ready, subject.CurrentModel.Status);
+	}
+
+	[Fact]
+	public async Task WhenTheWaitIsCancelled_ThenItStopsWaitingWithoutStartingAnotherLoad()
+	{
+		var gate = new TaskCompletionSource();
+		using var subject = new RoslynInstance(SolutionKey.For(TestSolutions.Simple));
+		subject.BeginInitialLoad(
+			loader: async progress =>
+			{
+				await gate.Task;
+				return await SolutionWorkspace.LoadAsync(TestSolutions.Simple, progress);
+			},
+			onReady: _ => { });
+		using var cancellation = new CancellationTokenSource();
+		Task<bool> waiting = subject.WaitForInitialLoadAsync(Timeout, cancellation.Token);
+
+		cancellation.Cancel();
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => waiting);
+		gate.SetResult();
+		await subject.WaitUntilReadyAsync();
+	}
+
 	private static async Task<RoslynInstance> LoadReadyAsync()
 	{
 		var instance = new RoslynInstance(SolutionKey.For(TestSolutions.Simple));

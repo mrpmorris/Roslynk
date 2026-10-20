@@ -64,13 +64,14 @@ public sealed class GetDiagnosticsTool
 		[Description("Diagnostic ids (case-insensitive), e.g. [\"CS0246\"]; null/empty matches all.")] string[]? ids = null,
 		[Description("Summarize by diagnostic id.")] bool summaryOnly = false,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
-		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0)
+		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
 
 		if (model.Solution is null)
-			return OutlineError.Format(Error.Indexing(), model.Status);
+			return OutlineError.Format(Error.Indexing(instance.LoadedProjects), model.Status);
 
 		Solution current = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(current);

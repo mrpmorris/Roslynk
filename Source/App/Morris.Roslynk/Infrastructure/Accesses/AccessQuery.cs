@@ -24,6 +24,7 @@ public static class AccessQuery
 
 	public static async Task<string> RunAsync(
 		SolutionModel model,
+		RoslynInstance instance,
 		SymbolResolver symbolResolver,
 		ProjectionService projectionService,
 		string symbolName,
@@ -36,7 +37,7 @@ public static class AccessQuery
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);

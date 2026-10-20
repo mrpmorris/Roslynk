@@ -49,11 +49,11 @@ public sealed class GetCodeActionsTool
 		[Description("Selection end column.")] int? endColumn = null,
 		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
 
 		if (model.Solution is null)
-			return OutlineError.Format(Error.Indexing(), model.Status);
+			return OutlineError.Format(Error.Indexing(instance.LoadedProjects), model.Status);
 
 		RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(model.Solution, filePath, cancellationToken);
 		if (source?.Document.FilePath is null)

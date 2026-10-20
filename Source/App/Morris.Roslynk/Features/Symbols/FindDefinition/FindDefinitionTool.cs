@@ -44,9 +44,10 @@ public sealed class FindDefinitionTool
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description(ParameterDescriptions.FilePath)] string filePath,
 		[Description("Usage line.")] int line,
-		[Description("Usage column.")] int column)
+		[Description("Usage column.")] int column,
+		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
 		return await FindDefinitionCoreAsync(model, instance, filePath, line, column, CancellationToken.None);
 	}
@@ -56,7 +57,7 @@ public sealed class FindDefinitionTool
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 

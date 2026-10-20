@@ -131,9 +131,9 @@ public class MultiQueryTests
 	}
 
 	[Fact]
-	public async Task WhenTheSolutionIsStillLoading_ThenTheWholeBatchIsIndexing()
+	public async Task WhenTheLoadWaitTimeoutElapses_ThenTheWholeBatchIsIndexing()
 	{
-		using var registry = new InstanceRegistry();
+		using var registry = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero));
 		var provider = new ServiceCollection()
 			.AddSingleton<InstanceRegistry>(registry)
 			.AddSingleton<SymbolResolver>()

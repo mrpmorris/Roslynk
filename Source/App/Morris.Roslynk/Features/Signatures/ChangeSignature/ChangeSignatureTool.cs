@@ -57,9 +57,10 @@ public sealed class ChangeSignatureTool
 		[Description("New parameter's C# identifier.")] string parameterName,
 		[Description("Required default expression, e.g. default, null, 0.")] string defaultValue,
 		[Description("Named argument expression for all call sites; omit to use the default.")] string? callSiteArgument = null,
-		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false)
+		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
+		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = instance.CurrentModel;
 
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
@@ -72,7 +73,7 @@ public sealed class ChangeSignatureTool
 			return Failure(Error.Invalid("A default value is required so the added parameter is optional and the change stays backward-compatible."));
 
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);

@@ -66,7 +66,8 @@ public sealed class MultiQueryTool
 		public async Task<string> MultiQuery(
 			[Description(ParameterDescriptions.SolutionId)] string solutionId,
 			[Description("Read-only tools and arguments, in request order.")] IReadOnlyList<MultiQueryOperation> operations,
-			[Description("Previous snapshot id; mismatch returns Stale before execution.")] string? expectSnapshot = null)
+			[Description("Previous snapshot id; mismatch returns Stale before execution.")] string? expectSnapshot = null,
+		CancellationToken cancellationToken = default)
 	{
 		// Structural validation first: an uninterpretable batch cannot produce slots. (An op naming a tool
 		// outside the enum never reaches here - the SDK's binding layer refuses it and RoslynkTool renders
@@ -76,13 +77,13 @@ public sealed class MultiQueryTool
 
 		// One snapshot for the whole batch: acquire once, pin once. Every core runs on this model, so no two
 		// slots can observe different generations of the solution.
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
 
 		// While loading there is no snapshot to run anything against - the whole batch is Indexing, exactly
 		// like every other tool, rather than n slots each reporting the same condition.
 		if (model.Solution is null)
-			return OutlineError.Format(Error.Indexing(), model.Status);
+			return OutlineError.Format(Error.Indexing(instance.LoadedProjects), model.Status);
 
 		// Continuation seam check: refuse before any op runs, so a rejected continuation costs nothing. The
 		// current id is emitted as a real header (the candidate= precedent) so the caller can see exactly

@@ -58,4 +58,23 @@ public class ToolRegistrationTests
 		Assert.Equal(new[] { "newName", "solutionId", "symbolName" }, required);
 		Assert.False(schema.GetProperty("properties").TryGetProperty("cancellationToken", out _));
 	}
+
+	[Fact]
+	public void WhenOpenSolutionIsPublished_ThenNoWaitIsOptionalAndDefaultsToFalse()
+	{
+		var services = new ServiceCollection();
+		services.AddRoslynk();
+		services.AddMcpServer().WithRoslynkTools();
+		using ServiceProvider provider = services.BuildServiceProvider();
+
+		System.Text.Json.JsonElement schema = provider.GetServices<McpServerTool>()
+			.Single(tool => tool.ProtocolTool.Name == "open_solution")
+			.ProtocolTool.InputSchema;
+
+		System.Text.Json.JsonElement properties = schema.GetProperty("properties");
+		Assert.True(properties.TryGetProperty("noWait", out System.Text.Json.JsonElement noWait));
+		Assert.Contains("Default: false", noWait.GetProperty("description").GetString());
+		Assert.DoesNotContain(schema.GetProperty("required").EnumerateArray(), item => item.GetString() == "noWait");
+		Assert.False(properties.TryGetProperty("cancellationToken", out _));
+	}
 }

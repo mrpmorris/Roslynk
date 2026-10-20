@@ -16,12 +16,15 @@ public static class ServicesRegistration
 	/// Registers Roslynk's engine and feature services. Registrations are added here as each
 	/// Infrastructure area and feature slice is built. The optional <paramref name="responseBudget"/> caps
 	/// every tool result; hosts that read it from configuration pass it here (see the Roslynk MCP host's
-	/// ResponseBudgetConfiguration), otherwise the default applies.
+	/// ResponseBudgetConfiguration), otherwise the default applies. The optional
+	/// <paramref name="loadWaitTimeout"/> bounds how long solution-scoped tools wait for an in-flight initial
+	/// load; hosts read 'Roslynk:LoadWaitSeconds' and pass the plain value, otherwise 30 seconds applies.
 	/// </summary>
-	public static IServiceCollection AddRoslynk(this IServiceCollection services, ResponseBudget? responseBudget = null)
+	public static IServiceCollection AddRoslynk(this IServiceCollection services, ResponseBudget? responseBudget = null, LoadWaitTimeout? loadWaitTimeout = null)
 	{
 		services.AddSingleton(responseBudget ?? ResponseBudget.Default);
-		services.AddSingleton<InstanceRegistry>();
+		services.AddSingleton(loadWaitTimeout ?? LoadWaitTimeout.Default);
+		services.AddSingleton(provider => new InstanceRegistry(provider.GetRequiredService<LoadWaitTimeout>()));
 		services.AddSingleton<DiagnosticsService>();
 		services.AddSingleton<SymbolResolver>();
 		services.AddSingleton<ProjectionService>();

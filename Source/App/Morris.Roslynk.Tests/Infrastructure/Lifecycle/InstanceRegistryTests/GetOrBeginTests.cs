@@ -93,6 +93,32 @@ public class GetOrBeginTests
 		Assert.Equal(SolutionStatus.Ready, instance.CurrentModel.Status);
 	}
 
+	[Fact]
+	public async Task WhenTheLoadWaitTimeoutElapses_ThenGetOrBeginAsyncReturnsTheBuildingInstance()
+	{
+		using var subject = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero));
+
+		RoslynInstance instance = await subject.GetOrBeginAsync(TestSolutions.Simple);
+
+		Assert.Equal(SolutionStatus.Building, instance.CurrentModel.Status);
+		Assert.Null(instance.CurrentModel.Solution);
+
+		await subject.GetOrAddAsync(TestSolutions.Simple);
+		Assert.Equal(SolutionStatus.Ready, instance.CurrentModel.Status);
+	}
+
+	[Fact]
+	public async Task WhenTheInitialLoadIsInFlight_ThenGetOrBeginAsyncWaitsForItAndReturnsTheReadySnapshot()
+	{
+		using var subject = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.FromMinutes(5)));
+
+		// No prior load: this call joins the in-flight initial load and waits up to the configured timeout.
+		RoslynInstance instance = await subject.GetOrBeginAsync(TestSolutions.Simple);
+
+		Assert.Equal(SolutionStatus.Ready, instance.CurrentModel.Status);
+		Assert.NotNull(instance.CurrentModel.Solution);
+	}
+
 	private static async Task WaitForReadyAsync(RoslynInstance instance)
 	{
 		DateTime deadline = DateTime.UtcNow.AddSeconds(60);

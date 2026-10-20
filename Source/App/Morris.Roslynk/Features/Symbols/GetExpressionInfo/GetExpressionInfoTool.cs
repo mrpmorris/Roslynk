@@ -78,9 +78,10 @@ public sealed partial class GetExpressionInfoTool
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description(ParameterDescriptions.FilePath)] string filePath,
 		[Description("Expression/declaration line.")] int line,
-		[Description("Expression/declaration column.")] int column)
+		[Description("Expression/declaration column.")] int column,
+		CancellationToken cancellationToken = default)
 	{
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId);
+		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
 		return await GetExpressionInfoCoreAsync(model, instance, filePath, line, column, CancellationToken.None);
 	}
@@ -90,7 +91,7 @@ public sealed partial class GetExpressionInfoTool
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
 		if (model.Solution is null)
-			return Failure(Error.Indexing());
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
 		RazorSourceDocument? baseDocument = await RazorSourceDocument.ResolveAsync(model.Solution, filePath, token);
 		if (baseDocument is null)
