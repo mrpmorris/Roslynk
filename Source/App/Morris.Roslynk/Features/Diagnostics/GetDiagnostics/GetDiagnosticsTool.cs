@@ -44,7 +44,7 @@ public sealed class GetDiagnosticsTool
 		filter=<parameter>:<value>. Empty filtered results do not prove the solution clean.
 		Unknown project/file returns NotFound with candidates. Known matches without diagnostics return zeros.
 		filePath also accepts a unique path suffix or file name; when that resolves it, resolvedPath=<solution-relative path>
-		names the canonical form. Several matching files still return NotFound with candidates.
+		names the canonical form. Several matching files return Ambiguous with those paths as candidates.
 		Private fixer-trigger IDs are omitted; fix the public rule instead (e.g. IDE0005).
 		""")]
 	[McpServerTool(
@@ -87,9 +87,13 @@ public sealed class GetDiagnosticsTool
 		if (projectNameFilter is not null)
 			projectNameFilter = CanonicalProjectName(current, projectNameFilter);
 		bool fileFilterRequested = !string.IsNullOrWhiteSpace(filePath);
-		ResolvedDocumentPath? resolvedFile = fileFilterRequested
-			? DocumentPathResolver.Resolve(current, filePath)
-			: null;
+		DocumentPathResolution fileResolution = fileFilterRequested
+			? DocumentPathResolution.Of(
+				current,
+				filePath,
+				$"No file '{filePath!.Trim()}' is compiled or loaded in the solution; pass a path relative to the solution folder or an absolute path.")
+			: new(null, null);
+		ResolvedDocumentPath? resolvedFile = fileResolution.Resolved;
 		string? fullFilePath = resolvedFile?.AbsolutePath;
 		HashSet<string>? idSet = IdsOrNull(ids);
 
@@ -100,12 +104,8 @@ public sealed class GetDiagnosticsTool
 					ProjectNameCandidates(current, name)),
 				model.Status);
 
-		if (fileFilterRequested && resolvedFile is null)
-			return OutlineError.Format(
-				Error.NotFound(
-					$"No file '{filePath!.Trim()}' is compiled or loaded in the solution; pass a path relative to the solution folder or an absolute path.",
-					DocumentPathResolver.Candidates(current, filePath)),
-				model.Status);
+		if (fileResolution.Error is Error fileError)
+			return OutlineError.Format(fileError, model.Status);
 
 		// Fence writes, drain in-flight ones, then build (or reuse the cached result when nothing changed).
 		string cacheKey = $"{includeAnalyzers}";

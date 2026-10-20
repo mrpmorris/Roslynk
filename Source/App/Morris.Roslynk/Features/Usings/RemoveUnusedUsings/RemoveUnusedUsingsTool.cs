@@ -54,7 +54,7 @@ public sealed class RemoveUnusedUsingsTool
 		Razor @using lines. filePath also accepts a unique path suffix or file name; a fallback match
 		adds resolvedPath=<solution-relative path>. Additional header: removedCount.
 		No changes: applied=N, removedCount=0; safe to rerun.
-		NotFound: unloaded or ambiguous source file.
+		NotFound: unloaded source file. Ambiguous: several matching files, with those paths as candidates.
 		""")]
 	[McpServerTool(
 		Name = RemoveUnusedUsingsName,
@@ -98,7 +98,13 @@ public sealed class RemoveUnusedUsingsTool
 		RazorSourceDocument? targetRazor = null;
 		if (filePath is not null)
 		{
-			RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, filePath, cancellationToken);
+			(RazorSourceDocument? source, Error? pathError) = await RazorSourceDocument.ResolveWithErrorAsync(
+				solution,
+				filePath,
+				$"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document.",
+				cancellationToken);
+			if (pathError is Error error)
+				return Failure(error);
 			if (source is null)
 				return Failure(Error.NotFound($"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document."));
 			if (source.ResolvedBySuffix)

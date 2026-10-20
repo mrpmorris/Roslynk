@@ -32,7 +32,8 @@ public sealed class FindDefinitionTool
 		Resolves the symbol at a source position. Returns fullName (including method/indexer parameter
 		types) and kind; source symbols add project, path and loc, metadata symbols add assembly.
 		filePath accepts absolute, solution-relative, or a unique path suffix/file name; a fallback match
-		adds resolvedPath=<solution-relative path>.
+		adds resolvedPath=<solution-relative path>. Several matching files return Ambiguous with those paths
+		as candidates; an unloaded file returns NotFound.
 		No binding in any projection returns NotFound.
 		""")]
 	[McpServerTool(
@@ -63,9 +64,13 @@ public sealed class FindDefinitionTool
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
-		ResolvedDocumentPath? resolvedPath = DocumentPathResolver.Resolve(model.Solution, filePath);
-		if (resolvedPath is null)
-			return Failure(Error.NotFound($"'{filePath}' is not a C# document compiled in the solution."));
+		DocumentPathResolution fileResolution = DocumentPathResolution.Of(
+			model.Solution,
+			filePath,
+			$"'{filePath}' is not a C# document compiled in the solution.");
+		ResolvedDocumentPath resolvedPath = fileResolution.Resolved!;
+		if (fileResolution.Error is Error pathError)
+			return Failure(pathError);
 
 		// Resolve in every projection: a position inside a branch inactive in the loaded configuration resolves
 		// to no symbol in the base projection but binds in the projection where that branch is active, and a

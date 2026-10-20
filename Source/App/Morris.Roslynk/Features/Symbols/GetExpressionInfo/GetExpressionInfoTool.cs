@@ -67,7 +67,8 @@ public sealed partial class GetExpressionInfoTool
 
 		Whitespace/comments/keywords/punctuation or files outside the solution return NotFound.
 		filePath accepts absolute, solution-relative, or a unique path suffix/file name; a fallback match
-		adds resolvedPath=<solution-relative path>.
+		adds resolvedPath=<solution-relative path>. Several matching files return Ambiguous with those paths
+		as candidates; an unloaded file returns NotFound.
 		""")]
 	[McpServerTool(
 		Name = GetExpressionInfoName,
@@ -95,12 +96,17 @@ public sealed partial class GetExpressionInfoTool
 		if (model.Solution is null)
 			return Failure(Error.Indexing(instance.LoadedProjects));
 
-		RazorSourceDocument? baseDocument = await RazorSourceDocument.ResolveAsync(model.Solution, filePath, token);
-		if (baseDocument is null)
-			return Failure(Error.NotFound($"'{filePath}' is not a C#, Razor or CSHTML document compiled in the solution."));
-		string? resolvedPath = baseDocument.ResolvedBySuffix ? baseDocument.ResolvedPath : null;
+		(RazorSourceDocument? baseDocument, Error? pathError) = await RazorSourceDocument.ResolveWithErrorAsync(
+			model.Solution,
+			filePath,
+			$"'{filePath}' is not a C#, Razor or CSHTML document compiled in the solution.",
+			token);
+		if (pathError is Error error)
+			return Failure(error);
+		RazorSourceDocument document = baseDocument!;
+		string? resolvedPath = document.ResolvedBySuffix ? document.ResolvedPath : null;
 
-		SourceText sourceText = await baseDocument.GetSourceTextAsync(token);
+		SourceText sourceText = await document.GetSourceTextAsync(token);
 		if (line < 1 || line > sourceText.Lines.Count)
 			return Failure(Error.NotFound($"Line {line} is outside '{filePath}', which has {sourceText.Lines.Count} lines."));
 
@@ -116,7 +122,7 @@ public sealed partial class GetExpressionInfoTool
 		foreach (Projection projection in projections)
 		{
 			RazorSourceDocument? source = ReferenceEquals(projection.Solution, model.Solution)
-				? baseDocument
+				? document
 				: await RazorSourceDocument.ResolveAsync(projection.Solution, filePath, token);
 			if (source is null)
 				continue;

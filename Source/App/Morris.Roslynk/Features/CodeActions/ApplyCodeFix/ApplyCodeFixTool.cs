@@ -51,7 +51,8 @@ public sealed class ApplyCodeFixTool
 		CS8019/IDE0005 fixes remove the @using on that line.
 
 		filePath also accepts a unique path suffix or file name; a fallback match adds
-		resolvedPath=<solution-relative path>.
+		resolvedPath=<solution-relative path>. Several matching files return Ambiguous with those paths as
+		candidates; an unloaded file returns NotFound.
 		Additional header: action.
 		""")]
 	[McpServerTool(
@@ -83,7 +84,13 @@ public sealed class ApplyCodeFixTool
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
-		RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, filePath, cancellationToken);
+		(RazorSourceDocument? source, Error? pathError) = await RazorSourceDocument.ResolveWithErrorAsync(
+			solution,
+			filePath,
+			$"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document.",
+			cancellationToken);
+		if (pathError is Error error)
+			return Failure(error);
 		if (source is null)
 			return Failure(Error.NotFound($"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document."));
 		Document document = source.Document;

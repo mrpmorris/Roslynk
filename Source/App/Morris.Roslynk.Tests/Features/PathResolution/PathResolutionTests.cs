@@ -36,7 +36,7 @@ public class PathResolutionTests
 	}
 
 	[Fact]
-	public async Task WhenGetDiagnosticsIsFilteredByABareFileNameMatchingSeveralFiles_ThenNotFoundOffersCandidates()
+	public async Task WhenGetDiagnosticsIsFilteredByABareFileNameMatchingSeveralFiles_ThenAmbiguousOffersCandidates()
 	{
 		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
@@ -51,7 +51,7 @@ public class PathResolutionTests
 		string result = await subject.GetDiagnostics(
 			solutionPath, includeErrors: true, includeAnalyzers: false, filePath: "Widget.cs");
 
-		Assert.Contains("error=NotFound", result);
+		Assert.Contains("error=Ambiguous", result);
 		Assert.Contains("candidate=SimpleLibrary/Widget.cs", result);
 		Assert.Contains("candidate=SimpleLibrary/Other/Widget.cs", result);
 		Assert.DoesNotContain("resolvedPath=", result);

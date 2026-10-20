@@ -1,5 +1,6 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
+using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Infrastructure.Razor;
@@ -48,12 +49,36 @@ public sealed class RazorSourceDocument
 	/// document, or to the generated document of a .razor/.cshtml file. Returns null when the path names no
 	/// loaded document, or when the fallback matches several files and none can be chosen.
 	/// </summary>
-	public static async Task<RazorSourceDocument?> ResolveAsync(Solution solution, string path, CancellationToken cancellationToken = default)
-	{
-		ResolvedDocumentPath? resolved = DocumentPathResolver.Resolve(solution, path);
-		if (resolved is null)
-			return null;
+	public static async Task<RazorSourceDocument?> ResolveAsync(Solution solution, string path, CancellationToken cancellationToken = default) =>
+		(await ResolveWithErrorAsync(solution, path, null, cancellationToken)).Source;
 
+	/// <summary>
+	/// Resolves <paramref name="path"/> like <see cref="ResolveAsync"/>, but carries the shared path
+	/// classification so a tool can report several matching files as <c>Ambiguous</c> instead of a generic
+	/// <c>NotFound</c>. When <paramref name="notFoundMessage"/> is null, a genuine miss carries no message
+	/// (callers using this overload only need to distinguish ambiguity).
+	/// </summary>
+	public static async Task<(RazorSourceDocument? Source, Error? Error)> ResolveWithErrorAsync(
+		Solution solution,
+		string path,
+		string? notFoundMessage,
+		CancellationToken cancellationToken = default)
+	{
+		DocumentPathResolution resolution = DocumentPathResolution.Of(
+			solution,
+			path,
+			notFoundMessage ?? $"'{path}' is not a solution-compiled .cs, .razor or .cshtml document.");
+		if (resolution.Error is not null)
+			return (null, resolution.Error);
+
+		RazorSourceDocument? source = await ResolveResolvedAsync(solution, resolution.Resolved!, cancellationToken);
+		return source is null
+			? (null, notFoundMessage is null ? null : Error.NotFound(notFoundMessage))
+			: (source, null);
+	}
+
+	private static async Task<RazorSourceDocument?> ResolveResolvedAsync(Solution solution, ResolvedDocumentPath resolved, CancellationToken cancellationToken)
+	{
 		if (!IsRazorSourcePath(resolved.AbsolutePath))
 		{
 			Document? document = FindDocumentAt(solution, resolved.AbsolutePath);

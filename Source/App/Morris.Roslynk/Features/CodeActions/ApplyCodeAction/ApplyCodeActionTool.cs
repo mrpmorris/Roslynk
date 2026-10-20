@@ -64,7 +64,13 @@ public sealed class ApplyCodeActionTool
 		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
-		RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(solution, actionRef.DocumentPath, cancellationToken);
+		(RazorSourceDocument? source, Error? pathError) = await RazorSourceDocument.ResolveWithErrorAsync(
+			solution,
+			actionRef.DocumentPath,
+			$"'{actionRef.DocumentPath}' is no longer a solution document.",
+			cancellationToken);
+		if (pathError is Error error)
+			return Failure(error);
 		if (source is null)
 			return Failure(Error.NotFound($"'{actionRef.DocumentPath}' is no longer a solution document."));
 

@@ -31,7 +31,8 @@ public sealed class GetCodeActionsTool
 
 		Returns up to 50 <actionId>,<kind>,<diagnosticId> <title> lines; diagnosticId='-' for refactorings.
 		filePath accepts absolute, solution-relative, or a unique path suffix/file name; a fallback match
-		adds resolvedPath=<solution-relative path>. Unknown/ambiguous filePath returns NotFound.
+		adds resolvedPath=<solution-relative path>. Unknown filePath returns NotFound; several matching
+		files return Ambiguous with those paths as candidates.
 		Razor offers compiler fixes/refactorings; positions outside C# return NotSupported.
 		""")]
 	[McpServerTool(
@@ -56,7 +57,13 @@ public sealed class GetCodeActionsTool
 		if (model.Solution is null)
 			return OutlineError.Format(Error.Indexing(instance.LoadedProjects), model.Status);
 
-		RazorSourceDocument? source = await RazorSourceDocument.ResolveAsync(model.Solution, filePath, cancellationToken);
+		(RazorSourceDocument? source, Error? pathError) = await RazorSourceDocument.ResolveWithErrorAsync(
+			model.Solution,
+			filePath,
+			$"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document.",
+			cancellationToken);
+		if (pathError is Error error)
+			return OutlineError.Format(error, model.Status);
 		if (source?.Document.FilePath is null)
 			return OutlineError.Format(Error.NotFound($"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document."), model.Status);
 
