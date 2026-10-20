@@ -34,6 +34,8 @@ public sealed class GetSymbolTool
 		Returns a symbol's declaration without implementation. Source results: project, path and loc
 		headers, then the verbatim declaration before its opening brace or '=>'.
 		Without source: source=metadata, kind, signature and assembly headers.
+		A partially qualified symbolName resolves when exactly one symbol matches it as a dotted-segment
+		suffix; the result then carries resolvedSymbol=<canonical fully qualified signature>.
 		""")]
 	[McpServerTool(
 		Name = GetSymbolName,
@@ -44,7 +46,7 @@ public sealed class GetSymbolTool
 		OpenWorld = false)]
 	public async Task<string> GetSymbol(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Symbol name.")] string symbolName,
+		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
@@ -79,20 +81,21 @@ public sealed class GetSymbolTool
 			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		ProjectionSymbol match = groups[0][0];
-		return await DetailLeanAsync(match.Symbol, match.Projection.Solution, solutionDirectory, cancellationToken);
+		return await DetailLeanAsync(match.Symbol, match.Projection.Solution, solutionDirectory, symbolName, cancellationToken);
 	}
 
-	private async Task<string> DetailLeanAsync(ISymbol symbol, Solution solution, string? solutionDirectory, CancellationToken cancellationToken)
+	private async Task<string> DetailLeanAsync(ISymbol symbol, Solution solution, string? solutionDirectory, string requestedName, CancellationToken cancellationToken)
 	{
 		SyntaxReference? reference = symbol.DeclaringSyntaxReferences.FirstOrDefault();
 		if (reference is null)
-			return MetadataLean(symbol);
+			return MetadataLean(symbol, requestedName);
 
 		FileLinePositionSpan span = reference.SyntaxTree.GetDisplaySpan(reference.Span);
 		SourceText text = await reference.SyntaxTree.GetTextAsync(cancellationToken);
 		SyntaxNode node = await reference.GetSyntaxAsync(cancellationToken);
 
 		var builder = new OutlineBuilder();
+		AddResolvedHeader(builder, symbol, requestedName);
 		if (ProjectName.Of(solution, reference.SyntaxTree) is string project)
 			builder.Header("project", project);
 		builder.Header("path", SolutionRelativePath.Of(solutionDirectory, span.Path)!);
@@ -103,9 +106,10 @@ public sealed class GetSymbolTool
 		return builder.ToString();
 	}
 
-	private static string MetadataLean(ISymbol symbol)
+	private static string MetadataLean(ISymbol symbol, string requestedName)
 	{
 		var builder = new OutlineBuilder();
+		AddResolvedHeader(builder, symbol, requestedName);
 		builder.Header("source", "metadata");
 		builder.Header("kind", SymbolKindText.Of(symbol));
 		builder.Header("signature", symbol.ToDisplayString());
@@ -113,6 +117,17 @@ public sealed class GetSymbolTool
 			builder.Header("assembly", assembly.Name);
 
 		return builder.ToString();
+	}
+
+	/// <summary>
+	/// Echoes the canonical name only when the request reached the symbol as a dotted-segment suffix, so
+	/// a caller who wrote a partial name learns the fully-qualified name it resolved to while every
+	/// fully-qualified request keeps its previous output byte for byte.
+	/// </summary>
+	private static void AddResolvedHeader(OutlineBuilder builder, ISymbol symbol, string requestedName)
+	{
+		if (SymbolSignature.ResolvedBySuffix(symbol, requestedName))
+			builder.Header("resolvedSymbol", SymbolResolver.SignatureName(symbol));
 	}
 
 	/// <summary>

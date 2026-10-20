@@ -66,6 +66,11 @@ internal static class McpServerRegistration
 			outline leaves. Methods/indexers accept overload parameter types: Ns.T.M(int, string),
 			Ns.T.this[int]; parameter names/defaults/nullability are ignored. Bare generic names resolve
 			unique arities; multiple arities return Ambiguous; same-named non-generics win.
+			A partially qualified name (a dotted-segment suffix, e.g. UIHelper.Grid) resolves when exactly
+			one symbol's fully-qualified name ends with those whole segments; several suffix matches return
+			Ambiguous. Whole segments only: UIHelper never matches SomeUIHelper. Exact and relaxed full-name
+			matches always win over suffix matches. get_symbol/get_symbol_body echo resolvedSymbol for a
+			suffix-resolved request.
 			Local functions nest under declaring members: Ns.T.M.local.
 
 			## Conditional coverage

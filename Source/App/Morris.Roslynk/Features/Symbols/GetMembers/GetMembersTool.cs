@@ -41,6 +41,7 @@ public sealed class GetMembersTool
 		in declaration order, one level per nesting.
 
 		Includes all accessibilities. Filter with nameFilter/include*; use get_symbol_body for bodies.
+		symbolName accepts a uniquely-matching dotted-segment suffix.
 		""")]
 	[McpServerTool(
 		Name = GetMembersName,

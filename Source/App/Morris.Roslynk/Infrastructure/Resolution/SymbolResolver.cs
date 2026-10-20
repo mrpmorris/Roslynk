@@ -154,6 +154,64 @@ public sealed class SymbolResolver
 				}
 			}
 
+			// A partially-qualified name is accepted only after every full-name pass missed: whole-segment
+			// suffix matching is the lowest-priority level, so an exact or relaxed match can never be
+			// widened by it. The declaration index is keyed on the simple name, so one more sweep of it
+			// finds the candidates; generated declarations, local functions and operators are asked again
+			// because their earlier passes only classified at the exact/relaxed levels.
+			if (exact.Count == 0 && relaxed.Count == 0 && query.Qualified)
+			{
+				activity?.SetTag("roslynk.resolve.suffix", true);
+				var suffix = new List<ISymbol>();
+				foreach (Project project in solution.Projects)
+				{
+					foreach (ISymbol symbol in await SymbolFinder.FindDeclarationsAsync(project, searchName, ignoreCase: false, cancellationToken))
+					{
+						foreach (ISymbol candidate in Expand(symbol, query))
+						{
+							if (SymbolSignature.SuffixMatches(candidate, query) && seen.Add(candidate))
+								suffix.Add(candidate);
+						}
+					}
+
+					foreach (ISymbol generated in await GeneratedDeclarations.FindAsync(project, searchName, cancellationToken))
+					{
+						if (SymbolSignature.SuffixMatches(generated, query) && seen.Add(generated))
+							suffix.Add(generated);
+					}
+				}
+
+				foreach (IMethodSymbol local in await FindLocalFunctionsAsync(solution, query, cancellationToken))
+				{
+					if (SymbolSignature.SuffixMatches(local, query) && seen.Add(local))
+						suffix.Add(local);
+				}
+
+				if (query.ListKind != ParameterListKind.Brackets && query.SimpleName.StartsWith("op_", StringComparison.Ordinal))
+				{
+					string containerName = query.QualifiedName[..query.QualifiedName.LastIndexOf('.')];
+					foreach (ISymbol container in await FindByFullyQualifiedNameAsync(solution, containerName, cancellationToken))
+					{
+						if (container is not INamedTypeSymbol type)
+							continue;
+
+						foreach (ISymbol member in type.GetMembers(query.SimpleName))
+						{
+							if (SymbolSignature.SuffixMatches(member, query) && seen.Add(member))
+								suffix.Add(member);
+						}
+					}
+				}
+
+				if (suffix.Count > 0)
+				{
+					IReadOnlyList<ISymbol> narrowed = SymbolSignature.Narrow(suffix, query);
+					activity?.SetTag("roslynk.match.count", narrowed.Count);
+					activity?.SetTag("roslynk.match.level", nameof(SymbolSignature.SymbolMatchKind.Suffix));
+					return new RankedSymbols(narrowed, SymbolSignature.SymbolMatchKind.Suffix);
+				}
+			}
+
 			if (exact.Count > 0)
 			{
 				IReadOnlyList<ISymbol> narrowed = SymbolSignature.Narrow(exact, query);
@@ -303,14 +361,17 @@ public sealed class SymbolResolver
 			containerSegment = segments[^1].Name;
 		}
 
-		var best = new Dictionary<string, (int Score, bool InContainer)>(StringComparer.Ordinal);
+		var best = new Dictionary<string, (int Score, bool InContainer, bool IsSuffix)>(StringComparer.Ordinal);
 		foreach (Project project in solution.Projects)
 		{
 			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(project, candidate => IsCandidate(candidate, simpleName), cancellationToken))
 			{
 				string fullyQualified = FullyQualifiedName(symbol);
-				(int Score, bool InContainer) rank = (Score(symbol.Name, simpleName), InQueriedContainer(symbol, containerSegment));
-				if (!best.TryGetValue(fullyQualified, out (int, bool) existing) || Rank(rank) < Rank(existing))
+				(int Score, bool InContainer, bool IsSuffix) rank = (
+					Score(symbol.Name, simpleName),
+					InQueriedContainer(symbol, containerSegment),
+					parsed is not null && SymbolSignature.SuffixNameMatches(symbol, parsed));
+				if (!best.TryGetValue(fullyQualified, out (int, bool, bool) existing) || Rank(rank) < Rank(existing))
 					best[fullyQualified] = rank;
 			}
 
@@ -319,8 +380,11 @@ public sealed class SymbolResolver
 			foreach (ISymbol symbol in await GeneratedDeclarations.FindAsync(project, candidate => IsCandidate(candidate, simpleName), SymbolFilter.All, cancellationToken))
 			{
 				string fullyQualified = FullyQualifiedName(symbol);
-				(int Score, bool InContainer) rank = (Score(symbol.Name, simpleName), InQueriedContainer(symbol, containerSegment));
-				if (!best.TryGetValue(fullyQualified, out (int, bool) existing) || Rank(rank) < Rank(existing))
+				(int Score, bool InContainer, bool IsSuffix) rank = (
+					Score(symbol.Name, simpleName),
+					InQueriedContainer(symbol, containerSegment),
+					parsed is not null && SymbolSignature.SuffixNameMatches(symbol, parsed));
+				if (!best.TryGetValue(fullyQualified, out (int, bool, bool) existing) || Rank(rank) < Rank(existing))
 					best[fullyQualified] = rank;
 			}
 		}
@@ -328,8 +392,11 @@ public sealed class SymbolResolver
 		foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(solution, candidate => IsCandidate(candidate, simpleName), cancellationToken))
 		{
 			string fullyQualified = FullyQualifiedName(local);
-			(int Score, bool InContainer) rank = (Score(local.Name, simpleName), InQueriedContainer(LocalFunctions.NamedContainer(local), containerSegment));
-			if (!best.TryGetValue(fullyQualified, out (int, bool) existing) || Rank(rank) < Rank(existing))
+			(int Score, bool InContainer, bool IsSuffix) rank = (
+				Score(local.Name, simpleName),
+				InQueriedContainer(LocalFunctions.NamedContainer(local), containerSegment),
+				parsed is not null && SymbolSignature.SuffixNameMatches(local, parsed));
+			if (!best.TryGetValue(fullyQualified, out (int, bool, bool) existing) || Rank(rank) < Rank(existing))
 				best[fullyQualified] = rank;
 		}
 
@@ -340,7 +407,8 @@ public sealed class SymbolResolver
 			.Select(entry => entry.Key)
 			.ToArray();
 
-		static int Rank((int Score, bool InContainer) rank) => (rank.InContainer ? 0 : 4) + rank.Score;
+		static int Rank((int Score, bool InContainer, bool IsSuffix) rank) =>
+			(rank.IsSuffix ? 0 : rank.InContainer ? 1 : 4) + rank.Score;
 	}
 
 	/// <summary>

@@ -35,6 +35,7 @@ public sealed class GetTypeHierarchyTool
 		Returns base types (including metadata), implemented interfaces and known derived types.
 		Header: resolvedType. Body sections: base, interfaces, derived (empty sections omitted).
 		Entries: <typeKind>,<fully-qualified name>; typeKind=class|struct|interface|enum|delegate.
+		symbolName accepts a uniquely-matching dotted-segment suffix.
 		""")]
 	[McpServerTool(
 		Name = GetTypeHierarchyName,

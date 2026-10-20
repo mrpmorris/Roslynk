@@ -45,6 +45,8 @@ public sealed class GetSymbolBodyTool
 
 		Ambiguous names/overloads return candidates. Namespaces/metadata-only symbols: NotSupported.
 		Metadata spellings of source types (Ns.Box`1, N.Outer+Inner) return source.
+		A partially qualified symbolName resolves when exactly one symbol matches it as a dotted-segment
+		suffix; the result then carries resolvedSymbol=<canonical fully qualified signature>.
 
 		Paging: startItem counts returned lines (including requested leading trivia), not file lines.
 		Past-end startItem returns Invalid with count.
@@ -60,7 +62,7 @@ public sealed class GetSymbolBodyTool
 		OpenWorld = false)]
 	public async Task<string> GetSymbolBody(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Symbol name.")] string symbolName,
+		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description("Include leading comments, XML docs and directives.")] bool includeLeadingTrivia = false,
 		[Description("First returned-text line (1-based).")] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
@@ -190,18 +192,18 @@ public sealed class GetSymbolBodyTool
 		{
 			Part selected = parts.Count == 1 ? parts[0] : parts[part - 1];
 			Action<OutlineBuilder> addHeaders = parts.Count == 1
-				? builder => AddLocationHeaders(builder, selected)
+				? builder => AddLocationHeaders(builder, selected, symbol, requestedName)
 				: builder =>
 				{
 					builder.Header("parts", parts.Count);
 					builder.Header("part", part);
-					AddLocationHeaders(builder, selected);
+					AddLocationHeaders(builder, selected, symbol, requestedName);
 				};
 			return PagedText(addHeaders, selected.Text, model.Status, startItem, maxSize, budget, failure);
 		}
 
 		int ceiling = (budget ?? ResponseBudget.Default).MaxChars;
-		return SeveralParts(parts, model.Status, ceiling);
+		return SeveralParts(parts, model.Status, ceiling, symbol, requestedName);
 	}
 
 	/// <summary>
@@ -227,8 +229,9 @@ public sealed class GetSymbolBodyTool
 		return references.Distinct();
 	}
 
-	private static void AddLocationHeaders(OutlineBuilder builder, Part part)
+	private static void AddLocationHeaders(OutlineBuilder builder, Part part, ISymbol symbol, string requestedName)
 	{
+		AddResolvedHeader(builder, symbol, requestedName);
 		if (part.Project is not null)
 			builder.Header("project", part.Project);
 		builder.Header("path", part.Path);
@@ -240,6 +243,22 @@ public sealed class GetSymbolBodyTool
 				builder.Header("generator", part.Generator);
 		}
 	}
+
+	/// <summary>
+	/// Echoes the canonical name only when the request reached the symbol as a dotted-segment suffix, so a
+	/// caller who wrote a partial name learns the fully-qualified name it resolved to while every
+	/// fully-qualified request keeps its previous output byte for byte.
+	/// </summary>
+	private static void AddResolvedHeader(OutlineBuilder builder, ISymbol symbol, string requestedName)
+	{
+		if (SymbolSignature.ResolvedBySuffix(symbol, requestedName))
+			builder.Header("resolvedSymbol", SymbolResolver.SignatureName(symbol));
+	}
+
+	private static int ResolvedHeaderChars(ISymbol symbol, string requestedName) =>
+		SymbolSignature.ResolvedBySuffix(symbol, requestedName)
+			? ("resolvedSymbol=" + SymbolResolver.SignatureName(symbol) + "\n").Length
+			: 0;
 
 	/// <summary>
 	/// Renders one text - a single part's, or one selected part's - paged within maxSize and the budget.
@@ -295,10 +314,11 @@ public sealed class GetSymbolBodyTool
 	/// (each part line gaining its lines= count); otherwise it degrades to the whole-or-omitted overview:
 	/// parts shown whole, greedily in declaration order, the rest listed with lines= and omitted=Y.
 	/// </summary>
-	private static string SeveralParts(IReadOnlyList<Part> parts, SolutionStatus status, int ceiling)
+	private static string SeveralParts(IReadOnlyList<Part> parts, SolutionStatus status, int ceiling, ISymbol symbol, string requestedName)
 	{
 		int[] lines = new int[parts.Count];
 		long dumpChars = ("parts=" + parts.Count + "\n").Length
+			+ ResolvedHeaderChars(symbol, requestedName)
 			+ (status == SolutionStatus.Ready ? 0 : ("status=" + status + "\n").Length)
 			+ 1; // the blank line between headers and body
 		for (int index = 0; index < parts.Count; index++)
@@ -310,15 +330,16 @@ public sealed class GetSymbolBodyTool
 		}
 
 		if (dumpChars <= ceiling)
-			return AllParts(parts, status, lines);
+			return AllParts(parts, status, lines, symbol, requestedName);
 
-		return PartsOverview(parts, status, lines, ceiling);
+		return PartsOverview(parts, status, lines, ceiling, symbol, requestedName);
 	}
 
 	/// <summary>The complete listing: today's multi-part output with each part line carrying its lines= count.</summary>
-	private static string AllParts(IReadOnlyList<Part> parts, SolutionStatus status, int[] lines)
+	private static string AllParts(IReadOnlyList<Part> parts, SolutionStatus status, int[] lines, ISymbol symbol, string requestedName)
 	{
 		var builder = new OutlineBuilder();
+		AddResolvedHeader(builder, symbol, requestedName);
 		builder.Header("parts", parts.Count);
 		builder.Status(status);
 		builder.BeginBody();
@@ -339,13 +360,14 @@ public sealed class GetSymbolBodyTool
 	/// mistaken for a complete text. Greedy (not fair-share) is deliberate: the typical case is a small
 	/// hand-written part beside a large generated one, and greedy hands back the part the caller wrote.
 	/// </summary>
-	private static string PartsOverview(IReadOnlyList<Part> parts, SolutionStatus status, int[] lines, int ceiling)
+	private static string PartsOverview(IReadOnlyList<Part> parts, SolutionStatus status, int[] lines, int ceiling, ISymbol symbol, string requestedName)
 	{
 		// The header block is reserved at its widest (omittedParts=<parts.Count>), so the greedy pass cannot
 		// spend characters the real headers then take back.
 		int headerChars = ("parts=" + parts.Count + "\n").Length
 			+ "truncated=Y\n".Length
 			+ ("omittedParts=" + parts.Count + "\n").Length
+			+ ResolvedHeaderChars(symbol, requestedName)
 			+ (status == SolutionStatus.Ready ? 0 : ("status=" + status + "\n").Length)
 			+ 1; // the blank line between headers and body
 
@@ -371,6 +393,7 @@ public sealed class GetSymbolBodyTool
 		}
 
 		var builder = new OutlineBuilder();
+		AddResolvedHeader(builder, symbol, requestedName);
 		builder.Header("parts", parts.Count);
 		if (omittedCount > 0)
 		{

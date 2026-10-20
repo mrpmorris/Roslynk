@@ -47,6 +47,7 @@ public sealed class GetCalleesTool
 		under <external:AssemblyName> with empty loc. Leaves: <memberKind>,<memberName>,<loc>, plus
 		parameterTypes only for overloads declared in the callee's type (parameterless overload: '()'). Constructed generics collapse to their definitions; extension
 		methods include their 'this' parameter.
+		symbolName accepts a uniquely-matching dotted-segment suffix.
 		""")]
 	[McpServerTool(
 		Name = GetCalleesName,

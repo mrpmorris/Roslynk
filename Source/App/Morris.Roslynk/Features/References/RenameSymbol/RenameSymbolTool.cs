@@ -42,6 +42,7 @@ public sealed class RenameSymbolTool
 		Partial members/types with handwritten declarations are renamable; generators follow their names.
 
 		Additional header: resolvedSymbol (pre-rename name).
+		symbolName accepts a uniquely-matching dotted-segment suffix.
 		Errors: Invalid for invalid identifiers; Ambiguous with match candidates or fuzzy suggestions
 		when no match; Stale naming the target changed on disk/in the model since computation.
 		Intervening edits to other files are preserved.
@@ -55,7 +56,7 @@ public sealed class RenameSymbolTool
 		OpenWorld = false)]
 	public async Task<string> RenameSymbol(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Symbol name.")] string symbolName,
+		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description("New C# identifier.")] string newName,
 		[Description(ParameterDescriptions.CheckOnly)] bool checkOnly = false,
 		CancellationToken cancellationToken = default)

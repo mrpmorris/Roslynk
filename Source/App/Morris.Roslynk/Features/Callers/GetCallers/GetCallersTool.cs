@@ -43,6 +43,7 @@ public sealed class GetCallersTool
 		handlers, implicit base(), and Length/Count for ^/.. . See get_callees for its narrower coverage.
 
 		Body: project > folder > file > namespace > containing type; leaves name callers and declaration locations.
+		symbolName accepts a uniquely-matching dotted-segment suffix.
 		""")]
 	[McpServerTool(
 		Name = GetCallersName,

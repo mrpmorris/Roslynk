@@ -46,6 +46,7 @@ public sealed class RenameParameterTool
 
 		Additional headers: resolvedMethod (pre-rename member), parameter (old name), renamedMembers
 		(declaration count including target), unchangedRelated (semicolon-separated; omitted if empty).
+		symbolName accepts a uniquely-matching dotted-segment suffix.
 
 		Errors:
 		- Invalid: invalid identifier or newName=parameterName.

@@ -32,6 +32,7 @@ public sealed class FindReadsTool
 
 		Finds reads, including compound/increment/ref, using the shared access contract.
 		Body follows find_references with one location per leaf.
+		symbolName accepts a uniquely-matching dotted-segment suffix.
 		""")]
 	[McpServerTool(
 		Name = FindReadsName,

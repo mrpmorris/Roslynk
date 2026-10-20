@@ -240,7 +240,8 @@ public static class SymbolSignature
 	{
 		None,
 		Exact,
-		Relaxed
+		Relaxed,
+		Suffix
 	}
 
 	/// <summary>
@@ -257,6 +258,63 @@ public static class SymbolSignature
 
 		return RelaxedMatches(symbol, query) ? SymbolMatchKind.Relaxed : SymbolMatchKind.None;
 	}
+
+	/// <summary>
+	/// Whether <paramref name="symbol"/>'s fully-qualified name ends, whole segment by whole segment, with
+	/// the query's written segments. A written arity constrains the declared arity exactly as the relaxed
+	/// pass does; a segment boundary is never crossed, so <c>UIHelper.Grid</c> does not match
+	/// <c>SomeUIHelper.Grid</c>. Only meaningful for a qualified query: a bare name already matches by
+	/// simple name and must keep doing so.
+	/// </summary>
+	internal static bool SuffixNameMatches(ISymbol symbol, SymbolSignatureQuery query)
+	{
+		ArgumentNullException.ThrowIfNull(symbol);
+		ArgumentNullException.ThrowIfNull(query);
+
+		if (!query.Qualified)
+			return false;
+
+		IReadOnlyList<SymbolNameSegment> declared = SplitSegments(SymbolResolver.FullyQualifiedName(symbol));
+		if (query.Segments.Count >= declared.Count)
+			return false;
+
+		return SegmentsMatch(declared, query.Segments, declared.Count - query.Segments.Count);
+	}
+
+	/// <summary>
+	/// Whether the symbol is what a partially-qualified query names by suffix: the query's segments are a
+	/// whole-segment suffix of the symbol's name, and the full contract still holds once that name is
+	/// treated as fully written — so a written parameter list or arity constrains the match exactly as it
+	/// does for an exact name.
+	/// </summary>
+	internal static bool SuffixMatches(ISymbol symbol, SymbolSignatureQuery query)
+	{
+		if (!SuffixNameMatches(symbol, query))
+			return false;
+
+		IReadOnlyList<SymbolNameSegment> declared = SplitSegments(SymbolResolver.FullyQualifiedName(symbol));
+		SymbolNameSegment last = declared[^1];
+		var fullQuery = new SymbolSignatureQuery(
+			qualifiedName: SymbolResolver.FullyQualifiedName(symbol),
+			simpleName: last.Name,
+			arity: last.Arity,
+			qualified: true,
+			segments: declared,
+			listKind: query.ListKind,
+			parameters: query.Parameters);
+
+		return Matches(symbol, fullQuery) || RelaxedMatches(symbol, fullQuery);
+	}
+
+	/// <summary>
+	/// Whether <paramref name="name"/> resolved to the symbol only because its dotted segments are a
+	/// suffix of the symbol's fully-qualified name. Tools use this to echo <c>resolvedSymbol</c> for a
+	/// partially-qualified request without adding that header to every fully-qualified one.
+	/// </summary>
+	internal static bool ResolvedBySuffix(ISymbol symbol, string? name) =>
+		TryParse(name, out SymbolSignatureQuery query)
+		&& Classify(symbol, query) == SymbolMatchKind.None
+		&& SuffixMatches(symbol, query);
 
 	private static bool RelaxedMatches(ISymbol symbol, SymbolSignatureQuery query)
 	{
@@ -341,26 +399,30 @@ public static class SymbolSignature
 		|| (symbol is INamedTypeSymbol type && type.Arity == query.Arity);
 
 	/// <summary>
-	/// Compares the declaration's rendered segments with the query's. Names must be equal; a written arity
-	/// must equal the declared one whatever its type-argument text; an unwritten one matches any arity.
+	/// Compares the declaration's rendered segments with the query's, starting at <paramref name="offset"/>
+	/// in the declaration so a suffix comparison sees only the trailing segments. Names must be equal; a
+	/// written arity must equal the declared one whatever its type-argument text; an unwritten one matches
+	/// any arity.
 	/// </summary>
-	private static bool SegmentsMatch(IReadOnlyList<SymbolNameSegment> declared, IReadOnlyList<SymbolNameSegment> requested)
+	private static bool SegmentsMatch(IReadOnlyList<SymbolNameSegment> declared, IReadOnlyList<SymbolNameSegment> requested, int offset = 0)
 	{
-		if (declared.Count != requested.Count)
+		if (declared.Count - offset != requested.Count)
 			return false;
 
-		for (int index = 0; index < declared.Count; index++)
+		for (int index = 0; index < requested.Count; index++)
 		{
-			if (!string.Equals(declared[index].Name, requested[index].Name, StringComparison.Ordinal))
+			SymbolNameSegment declaredSegment = declared[offset + index];
+			SymbolNameSegment requestedSegment = requested[index];
+			if (!string.Equals(declaredSegment.Name, requestedSegment.Name, StringComparison.Ordinal))
 				return false;
 
 			// A render never writes an empty argument list, so a requested arity of 0 means the non-generic
 			// form: it matches a segment written without one ('Repro.Pair`0' against 'Repro.Pair') and
 			// rejects anything declared generic. A positive arity must equal the declared one.
-			if (requested[index].Arity > 0 && declared[index].Arity != requested[index].Arity)
+			if (requestedSegment.Arity > 0 && declaredSegment.Arity != requestedSegment.Arity)
 				return false;
 
-			if (requested[index].Arity == 0 && declared[index].Arity > 0)
+			if (requestedSegment.Arity == 0 && declaredSegment.Arity > 0)
 				return false;
 		}
 

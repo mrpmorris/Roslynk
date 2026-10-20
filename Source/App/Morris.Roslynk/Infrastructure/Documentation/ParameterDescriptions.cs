@@ -13,7 +13,7 @@ internal static class ParameterDescriptions
 
 	public const string SolutionPath = "Absolute path to the .sln or .slnx file.";
 
-	public const string SymbolName = "Symbol name.";
+	public const string SymbolName = "Symbol name: fully qualified, or a dotted-segment suffix that uniquely matches one symbol.";
 
 	public const string FilePath = "Source file path.";
 

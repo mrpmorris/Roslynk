@@ -42,6 +42,7 @@ public sealed class ChangeSignatureTool
 		Invalid for invalid parameter name/type/default; Ambiguous for multiple overloads (candidates).
 
 		Additional headers: resolvedMethod (pre-edit overload with parameter types), updatedCallSites.
+		symbolName accepts a uniquely-matching dotted-segment suffix.
 		""")]
 	[McpServerTool(
 		Name = ChangeSignatureName,

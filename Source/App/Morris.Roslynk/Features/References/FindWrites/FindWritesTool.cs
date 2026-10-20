@@ -32,6 +32,7 @@ public sealed class FindWritesTool
 
 		Finds writes (assign/compound/increment/ref/out/init) using the shared access contract.
 		Body follows find_references with one location per leaf.
+		symbolName accepts a uniquely-matching dotted-segment suffix.
 		""")]
 	[McpServerTool(
 		Name = FindWritesName,

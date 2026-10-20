@@ -41,6 +41,7 @@ public sealed class FindReferencesTool
 
 		Combine with get_callers/get_callees/find_implementations/get_type_hierarchy via multi_query for
 		usage/impact analysis.
+		symbolName accepts a uniquely-matching dotted-segment suffix.
 		""")]
 	[McpServerTool(
 		Name = FindReferencesName,
@@ -51,7 +52,7 @@ public sealed class FindReferencesTool
 		OpenWorld = false)]
 	public async Task<string> FindReferences(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Symbol name.")] string symbolName,
+		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
 		CancellationToken cancellationToken = default)
