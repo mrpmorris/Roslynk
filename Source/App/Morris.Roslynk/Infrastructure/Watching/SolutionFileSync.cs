@@ -89,27 +89,47 @@ public SolutionFileSync(RoslynInstance instance)
 			ProjectDirectories = CaptureProjectDirectories(instance.CurrentSolution);
 		}
 
-	/// <summary>A new watcher is starting: the previous watcher's errors no longer apply.</summary>
-	public void OnWatcherStarting() => Instance.ClearWatchDiagnostics();
-
 	/// <summary>
-	/// A watcher reported an error. An overflow means the OS dropped events, so the changes are unknown; any other
-	/// error after the watcher started (a watched directory deleted, or moved on Linux, even if it has since been
-	/// recreated) leaves that watcher dead. Either way the instance is marked dirty, and the next use reloads it
-	/// from disk and attaches a fresh watcher over the directories that exist then. An error while the watcher
-	/// is starting, such as an exhausted inotify watch limit, is one a reload would meet again, so it is recorded
-	/// for get_solution_status instead; a failure that persists therefore costs one reload, then is recorded.
+	/// A watcher reported an error, classified by the error rather than by when it arrived (.NET 10 raises a
+	/// Linux add-watch failure synchronously while starting, .NET 11 asynchronously after). An OS resource limit
+	/// (the inotify watch or instance limit: ENOSPC, EMFILE, ENFILE) is one a reload would meet again, so it is
+	/// recorded in <paramref name="diagnostics"/> for get_solution_status and never dirties the instance. Dropped
+	/// events mean the changes are unknown, so the instance is marked dirty. Any other error is recorded when
+	/// raised while its watcher was starting, or when the same error is already recorded; otherwise it means that
+	/// watcher stopped (on Windows, its directory was deleted), so the instance is marked dirty and the next use
+	/// reloads it from disk with a fresh watcher. A failure that persists therefore costs one reload, then is
+	/// recorded. On Linux and macOS a deleted or moved watched directory raises no error at all: that watcher
+	/// stops silently until something else triggers a reload.
 	/// </summary>
-	public void OnWatcherError(string directory, Exception error, bool whileStarting)
+	public void OnWatcherError(WatchDiagnostics diagnostics, string directory, Exception error, bool whileStarting)
 	{
-		if (error is InternalBufferOverflowException || !whileStarting)
+		bool resourceLimit = IsResourceLimit(error);
+		if (!resourceLimit && IsDroppedEvents(error, whileStarting))
 		{
 			Instance.MarkDirty();
 			return;
 		}
 
-		Instance.RecordWatchDiagnostic(error.Message, directory);
+		if (resourceLimit || whileStarting || diagnostics.Contains(error.Message))
+		{
+			diagnostics.Record(error.Message, directory);
+			return;
+		}
+
+		Instance.MarkDirty();
 	}
+
+	/// <summary>ENOSPC (watches), EMFILE and ENFILE (instances): the inotify limits, which a reload cannot fix.</summary>
+	private static bool IsResourceLimit(Exception error) =>
+		!OperatingSystem.IsWindows() && error is IOException { HResult: 28 or 24 or 23 };
+
+	/// <summary>
+	/// An overflow; on macOS, dropped events (a rescan the OS asks for) arrive as a plain <see cref="IOException"/>
+	/// from a running watcher rather than as <see cref="InternalBufferOverflowException"/>.
+	/// </summary>
+	private static bool IsDroppedEvents(Exception error, bool whileStarting) =>
+		error is InternalBufferOverflowException
+		|| (OperatingSystem.IsMacOS() && !whileStarting && error.GetType() == typeof(IOException));
 
 		/// <summary>
 		/// The directories to watch: every project directory recursively (for new globbed files), plus the

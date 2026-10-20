@@ -188,7 +188,7 @@ public class ImpactAnalysisRecipeTests : IClassFixture<ServerBuilder>
 		// Per-tool result headers and leaf fields
 		"actionId", "diagnosticId", "documentVersion", "updatedCallSites", "unchangedRelated", "renamedMembers",
 		"removedCount", "deadConditionals", "omittedParts", "loadDiagnostic", "loadDiagnostics",
-		"loadDiagnosticsTruncated", "documentCount", "projectPath", "solutionId", "startItem", "maxSize",
+		"loadDiagnosticsTruncated", "watchDiagnostic", "watchDiagnosticsTruncated", "documentCount", "projectPath", "solutionId", "startItem", "maxSize",
 		"checkOnly", "baseVersions", "expectSnapshot",
 		// extract_method emits symbolName as a header: the extracted member's usable signature.
 		"symbolName",

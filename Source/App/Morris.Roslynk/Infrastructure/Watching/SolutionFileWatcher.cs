@@ -1,3 +1,5 @@
+using Morris.Roslynk.Infrastructure.Lifecycle;
+
 namespace Morris.Roslynk.Infrastructure.Watching;
 
 /// <summary>
@@ -5,11 +7,18 @@ namespace Morris.Roslynk.Infrastructure.Watching;
 /// back the loaded documents and build files, debounces their noisy event bursts (editors save in 2-3
 /// events), and hands each batch of changed paths to <see cref="SolutionFileSync"/>. Deliberately thin and
 /// best-effort; a dropped, late, or duplicated event only costs freshness, never safety, because the
-/// apply pipeline's stale-write guard is what protects the user.
+/// apply pipeline's stale-write guard is what protects the user. Errors a reload would not fix are kept in its
+/// own <see cref="Diagnostics"/>.
 /// </summary>
-public sealed class SolutionFileWatcher : IDisposable
+public sealed class SolutionFileWatcher : IInstanceWatcher
 {
 	private const int DebounceMilliseconds = 250;
+
+	/// <summary>
+	/// An overflow costs a full reload, and recursive watches see bin/obj/node_modules bursts the sync ignores, so
+	/// use the largest buffer every share accepts (the default is 8 KB, about 60 notifications on Windows).
+	/// </summary>
+	private const int InternalBufferBytes = 64 * 1024;
 
 	private readonly SolutionFileSync Sync;
 	private readonly List<FileSystemWatcher> Watchers = [];
@@ -17,19 +26,32 @@ public sealed class SolutionFileWatcher : IDisposable
 	private readonly Lock StateGate = new();
 	private readonly Timer Debounce;
 	private bool Disposed;
-	private bool Started;
+
+	/// <summary>
+	/// The watcher whose EnableRaisingEvents is running, and on which thread: only its synchronous errors are
+	/// start errors. Errors from watchers already running are classified like any later error.
+	/// </summary>
+	private FileSystemWatcher? Starting;
+	private int StartingThread;
+
+	public WatchDiagnostics Diagnostics { get; } = new();
 
 	public SolutionFileWatcher(SolutionFileSync sync)
 	{
 		Sync = sync ?? throw new ArgumentNullException(nameof(sync));
 		Debounce = new Timer(_ => Flush(), state: null, Timeout.Infinite, Timeout.Infinite);
 
-		Sync.OnWatcherStarting();
-		foreach (WatchTarget target in sync.WatchTargets())
-			TryWatch(target);
-
-		lock (Gate)
-			Started = true;
+		try
+		{
+			foreach (WatchTarget target in sync.WatchTargets())
+				TryWatch(target);
+		}
+		catch
+		{
+			// Never leave started watchers running behind a constructor that threw.
+			Dispose();
+			throw;
+		}
 	}
 
 	private void TryWatch(WatchTarget target)
@@ -37,24 +59,59 @@ public sealed class SolutionFileWatcher : IDisposable
 		if (!Directory.Exists(target.Directory))
 			return;
 
-		var watcher = new FileSystemWatcher(target.Directory)
+		FileSystemWatcher? watcher = null;
+		try
 		{
-			IncludeSubdirectories = target.Recursive,
-			// DirectoryName: a directory created, moved in, renamed or moved out raises one event for itself and
-			// none for the files it holds.
-			NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size,
-		};
+			watcher = new FileSystemWatcher(target.Directory)
+			{
+				IncludeSubdirectories = target.Recursive,
+				InternalBufferSize = InternalBufferBytes,
+				// DirectoryName: a directory created, moved in, renamed or moved out raises one event for itself and
+				// none for the files it holds.
+				NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Size,
+			};
 
-		watcher.Changed += OnChanged;
-		watcher.Created += OnChanged;
-		watcher.Deleted += OnChanged;
-		watcher.Renamed += OnRenamed;
-		// Subscribed before raising starts: on Linux a watch that cannot be added (e.g. the inotify watch limit)
-		// is reported synchronously from EnableRaisingEvents, and only through this event.
-		watcher.Error += OnError;
-		watcher.EnableRaisingEvents = true;
+			watcher.Changed += OnChanged;
+			watcher.Created += OnChanged;
+			watcher.Deleted += OnChanged;
+			watcher.Renamed += OnRenamed;
+			// Subscribed before raising starts: on Linux a watch that cannot be added (e.g. the inotify watch limit)
+			// is reported only through this event, synchronously from EnableRaisingEvents on .NET 10 but
+			// asynchronously on .NET 11 (the tool rolls forward), so OnWatcherError classifies it by the error, not
+			// by when it arrives.
+			watcher.Error += OnError;
+			lock (StateGate)
+			{
+				Starting = watcher;
+				StartingThread = Environment.CurrentManagedThreadId;
+			}
 
-		Watchers.Add(watcher);
+			try
+			{
+				watcher.EnableRaisingEvents = true;
+			}
+			finally
+			{
+				lock (StateGate)
+					Starting = null;
+			}
+
+			Watchers.Add(watcher);
+		}
+		catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+		{
+			// Thrown rather than raised: the inotify instance limit, a Windows open failure, or a directory that
+			// vanished since the check above (which needs no watch, as before).
+			watcher?.Dispose();
+			if (!Directory.Exists(target.Directory))
+				return;
+
+			lock (StateGate)
+			{
+				if (!Disposed)
+					Sync.OnWatcherError(Diagnostics, target.Directory, exception, whileStarting: true);
+			}
+		}
 	}
 
 	private void OnChanged(object sender, FileSystemEventArgs e)
@@ -74,15 +131,18 @@ public sealed class SolutionFileWatcher : IDisposable
 
 	private void OnError(object sender, ErrorEventArgs e)
 	{
-		// Recorded under the gate so that once Dispose has returned no error of this watcher is still being
-		// recorded: the replacement watcher clears the diagnostics as it starts, and nothing stale lands after.
-		lock (Gate)
+		// Under the gate so that once Dispose has returned, a replaced watcher no longer dirties the instance.
+		lock (StateGate)
 		{
 			if (Disposed)
 				return;
-			Sync.OnWatcherError(((FileSystemWatcher)sender).Path, e.GetException(), whileStarting: !Started);
+			bool whileStarting = ReferenceEquals(sender, Starting) && StartingThread == Environment.CurrentManagedThreadId;
+			Sync.OnWatcherError(Diagnostics, ((FileSystemWatcher)sender).Path, e.GetException(), whileStarting);
 		}
 	}
+
+	/// <summary>Raises <paramref name="error"/> as <paramref name="sender"/> would, so tests drive the real gating.</summary>
+	internal void RaiseErrorForTest(FileSystemWatcher sender, Exception error) => OnError(sender, new ErrorEventArgs(error));
 
 	private void Queue(string path)
 	{

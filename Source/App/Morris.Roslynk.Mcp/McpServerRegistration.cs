@@ -40,8 +40,9 @@ internal static class McpServerRegistration
 			solution tool waits server-side for an in-flight load up to the configured timeout; only if that
 			elapses does it return error=Indexing (with projects=loaded/?), and then you should retry rather
 			than read or edit files directly.
-			The watcher folds edits, including yours. Never initiate reload_solution; suggest it after
-			branch switches, restore, SDK/build-property changes.
+			The watcher folds edits, including yours, unless get_solution_status lists watchDiagnostic= for
+			the solution: then disk edits may not arrive. Never initiate reload_solution; suggest it after
+			branch switches, restore, SDK/build-property changes, or when watchDiagnostic= is listed.
 
 			## Output protocol
 

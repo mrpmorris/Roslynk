@@ -10,7 +10,7 @@ public sealed class GetSolutionStatusTool
 {
 	public const string GetSolutionStatusName = "get_solution_status";
 
-	/// <summary>How many load diagnostic messages are listed per solution unless every message is requested.</summary>
+	/// <summary>How many load (and watch) diagnostic messages are listed per solution unless every message is requested.</summary>
 	public const int MaxLoadDiagnostics = 20;
 
 	/// <summary>The same limit as text, because an int cannot be concatenated into an attribute's constant description.</summary>
@@ -33,6 +33,7 @@ public sealed class GetSolutionStatusTool
 
 		Any state adds indented watchDiagnostic=<message> when the file watcher failed in a way a
 		reload would not fix (e.g. the OS watch limit): changes on disk may then not be picked up.
+		Up to 20 per solution, then watchDiagnosticsTruncated=<n>.
 		""")]
 	[McpServerTool(
 		Name = GetSolutionStatusName,
@@ -42,7 +43,7 @@ public sealed class GetSolutionStatusTool
 		Destructive = false,
 		OpenWorld = false)]
 	public string GetSolutionStatus(
-		[Description("Include all load diagnostics.")] bool allLoadDiagnostics = false)
+		[Description("Include all load and watch diagnostics.")] bool allLoadDiagnostics = false)
 	{
 		List<RoslynInstance> instances = InstanceRegistry.LoadedInstances().ToList();
 		int? messageLimit = allLoadDiagnostics ? null : MaxLoadDiagnostics;
@@ -63,29 +64,30 @@ public sealed class GetSolutionStatusTool
 
 			// Messages are final only once the load is done; a Building/Updating/Faulted solution may still be adding them.
 			if (model.Status == SolutionStatus.Ready)
-				AppendLoadDiagnostics(builder, instance.Workspace?.LoadDiagnostics ?? [], messageLimit);
+				AppendMessages(builder, "loadDiagnostic", instance.Workspace?.LoadDiagnostics ?? [], messageLimit);
 
-			foreach (string message in instance.WatchDiagnostics)
-				builder.Line(1, $"watchDiagnostic={OutlineBuilder.Sanitize(message)}");
+			AppendMessages(builder, "watchDiagnostic", instance.WatchDiagnostics, messageLimit, instance.WatchDiagnosticsDropped);
 		}
 
 		return builder.ToString();
 	}
 
 	/// <summary>
-	/// Writes one indented 'loadDiagnostic=' line per message (at most <paramref name="limit"/> when given),
-	/// then a 'loadDiagnosticsTruncated=' line counting those left out.
+	/// Writes one indented '<paramref name="key"/>=' line per message (at most <paramref name="limit"/> when
+	/// given), then a '<paramref name="key"/>sTruncated=' line counting those left out, including
+	/// <paramref name="alreadyDropped"/> messages the source did not keep.
 	/// </summary>
-	internal static void AppendLoadDiagnostics(OutlineBuilder builder, IReadOnlyList<string> diagnostics, int? limit)
+	internal static void AppendMessages(OutlineBuilder builder, string key, IReadOnlyList<string> diagnostics, int? limit, int alreadyDropped = 0)
 	{
-		// The workspace collects messages in arrival order from concurrent loaders; sort so the cap is stable.
+		// Messages arrive in whatever order concurrent loaders and watchers report them; sort so the cap is stable.
 		string[] messages = diagnostics.Order(StringComparer.Ordinal).ToArray();
 		int shown = limit is int cap ? Math.Min(cap, messages.Length) : messages.Length;
 
 		for (int i = 0; i < shown; i++)
-			builder.Line(1, $"loadDiagnostic={OutlineBuilder.Sanitize(messages[i])}");
+			builder.Line(1, $"{key}={OutlineBuilder.Sanitize(messages[i])}");
 
-		if (shown < messages.Length)
-			builder.Line(1, $"loadDiagnosticsTruncated={messages.Length - shown}");
+		int truncated = messages.Length - shown + alreadyDropped;
+		if (truncated > 0)
+			builder.Line(1, $"{key}sTruncated={truncated}");
 	}
 }

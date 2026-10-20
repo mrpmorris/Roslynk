@@ -299,4 +299,41 @@ public class RoslynInstanceTests
 			await Task.Delay(25);
 		}
 	}
+
+	[Fact]
+	public void WhenAWatcherIsReplaced_ThenTheNewOneStartsBeforeTheOldOneIsDisposed()
+	{
+		using var subject = new RoslynInstance(SolutionKey.For(TestSolutions.Simple));
+		var events = new List<string>();
+		subject.AttachWatcher(() => new RecordingWatcher("old", events));
+
+		subject.AttachWatcher(() =>
+		{
+			events.Add("new started");
+			return new RecordingWatcher("new", events);
+		});
+
+		Assert.Equal(["new started", "old disposed"], events);
+	}
+
+	[Fact]
+	public void WhenAReplacementWatcherFailsToStart_ThenTheOldOneIsKept()
+	{
+		using var subject = new RoslynInstance(SolutionKey.For(TestSolutions.Simple));
+		var events = new List<string>();
+		var old = new RecordingWatcher("old", events);
+		old.Diagnostics.Record("kept", "/watched");
+		subject.AttachWatcher(() => old);
+
+		Assert.Throws<IOException>(() => subject.AttachWatcher(() => throw new IOException("start failed")));
+
+		Assert.Empty(events);
+		Assert.Single(subject.WatchDiagnostics);
+	}
+
+	private sealed class RecordingWatcher(string name, List<string> events) : IInstanceWatcher
+	{
+		public WatchDiagnostics Diagnostics { get; } = new();
+		public void Dispose() => events.Add($"{name} disposed");
+	}
 }

@@ -12,98 +12,144 @@ namespace Morris.Roslynk.Tests.Infrastructure.Watching;
 
 public class SolutionFileSyncTests
 {
-	[Fact]
-	public async Task WhenAWatcherReportsAnOverflow_ThenTheInstanceIsMarkedDirty()
+	/// <summary>
+	/// The read-only Simple fixture with its live watcher detached, so only the errors a test raises reach the
+	/// instance. Each test has its own registry, so marking it dirty does not leak.
+	/// </summary>
+	private static async Task<RoslynInstance> LoadDetachedAsync(InstanceRegistry registry)
 	{
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
-		var subject = new SolutionFileSync(instance);
-
-		subject.OnWatcherError("/watched", new InternalBufferOverflowException("Too many changes at once."), whileStarting: false);
-
-		Assert.True(instance.IsDirty);
-		Assert.Empty(instance.WatchDiagnostics);
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.Simple);
+		instance.DetachWatcher();
+		return instance;
 	}
 
-	[Fact]
-	public async Task WhenAWatcherReportsAWatchLimitError_ThenItIsRecordedAndTheInstanceIsNotMarkedDirty()
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task WhenAWatcherReportsAnOverflow_ThenTheInstanceIsMarkedDirty(bool whileStarting)
 	{
 		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
+		RoslynInstance instance = await LoadDetachedAsync(registry);
 		var subject = new SolutionFileSync(instance);
-		var limitReached = new IOException("The configured user limit (524288) on the number of inotify watches has been reached.");
+		var diagnostics = new WatchDiagnostics();
 
-		string watched = Path.GetDirectoryName(instance.Key.FilePath)!;
+		subject.OnWatcherError(diagnostics, "/watched", new InternalBufferOverflowException("Too many changes at once."), whileStarting);
 
-		subject.OnWatcherError(watched, limitReached, whileStarting: true);
-		subject.OnWatcherError("/watched/b", limitReached, whileStarting: true);
+		Assert.True(instance.IsDirty);
+		Assert.Empty(diagnostics.Messages);
+	}
+
+	[Theory]
+	[InlineData(true)]
+	[InlineData(false)]
+	public async Task WhenAWatchLimitErrorArrives_ThenItIsRecordedOnceAndTheInstanceIsNotMarkedDirty(bool whileStarting)
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await LoadDetachedAsync(registry);
+		var subject = new SolutionFileSync(instance);
+		var diagnostics = new WatchDiagnostics();
+		// ENOSPC, as .NET raises it on Linux: errno as the HResult. .NET 10 raises it while starting, .NET 11 after.
+		var limitReached = new IOException("The configured user limit (524288) on the number of inotify watches has been reached.", 28);
+
+		subject.OnWatcherError(diagnostics, "/watched/a", limitReached, whileStarting);
+		subject.OnWatcherError(diagnostics, "/watched/b", limitReached, whileStarting);
+
+		if (OperatingSystem.IsWindows() && !whileStarting)
+		{
+			// errno 28 means nothing on Windows; the first error after starting is a stopped watcher.
+			Assert.True(instance.IsDirty);
+			return;
+		}
 
 		Assert.False(instance.IsDirty);
-		string message = Assert.Single(instance.WatchDiagnostics);
+		string message = Assert.Single(diagnostics.Messages);
 		Assert.Contains("inotify watches", message);
-		Assert.Contains(watched, message);
+		Assert.Contains("/watched/a", message);
 	}
 
 	[Fact]
 	public async Task WhenAWatcherReportsAnErrorAfterStarting_ThenTheInstanceIsMarkedDirtyAndNothingIsRecorded()
 	{
 		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
+		RoslynInstance instance = await LoadDetachedAsync(registry);
 		var subject = new SolutionFileSync(instance);
+		var diagnostics = new WatchDiagnostics();
 
-		subject.OnWatcherError("/watched", new IOException("The watched directory was deleted or moved."), whileStarting: false);
+		subject.OnWatcherError(diagnostics, "/watched", new UnauthorizedAccessException("Access to the watched directory was denied."), whileStarting: false);
 
 		Assert.True(instance.IsDirty);
-		Assert.Empty(instance.WatchDiagnostics);
+		Assert.Empty(diagnostics.Messages);
 	}
 
 	[Fact]
-	public async Task WhenAWatcherIsReplaced_ThenTheOldOneIsDisposedBeforeTheNewOneStarts()
+	public async Task WhenAnErrorRecordedWhileStartingRecursAfterStarting_ThenItIsRecordedAndTheInstanceIsNotMarkedDirty()
 	{
 		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
-		var events = new List<string>();
-		instance.AttachWatcher(() => new RecordingDisposable("old", events));
-
-		instance.AttachWatcher(() =>
-		{
-			events.Add("new started");
-			return new RecordingDisposable("new", events);
-		});
-
-		Assert.Equal(["old disposed", "new started"], events);
-	}
-
-	private sealed class RecordingDisposable(string name, List<string> events) : IDisposable
-	{
-		public void Dispose() => events.Add($"{name} disposed");
-	}
-
-	[Fact]
-	public async Task WhenAWatcherReportsManyDistinctErrors_ThenAtMostTheCapIsKept()
-	{
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
+		RoslynInstance instance = await LoadDetachedAsync(registry);
 		var subject = new SolutionFileSync(instance);
+		var diagnostics = new WatchDiagnostics();
+		var denied = new UnauthorizedAccessException("Access to the path '/watched/root-owned' is denied.");
 
-		for (int i = 0; i < RoslynInstance.MaxWatchDiagnostics + 5; i++)
-			subject.OnWatcherError($"/watched/{i}", new IOException($"failure {i}"), whileStarting: true);
+		subject.OnWatcherError(diagnostics, "/watched", denied, whileStarting: true);
+		subject.OnWatcherError(diagnostics, "/watched", denied, whileStarting: false);
 
-		Assert.Equal(RoslynInstance.MaxWatchDiagnostics, instance.WatchDiagnostics.Count);
+		Assert.False(instance.IsDirty);
+		Assert.Single(diagnostics.Messages);
 	}
 
 	[Fact]
-	public async Task WhenANewWatcherStarts_ThenEarlierWatchDiagnosticsAreCleared()
+	public void WhenMoreDistinctErrorsArriveThanAreKept_ThenTheRestAreCountedAsDropped()
+	{
+		var subject = new WatchDiagnostics();
+
+		for (int i = 0; i < WatchDiagnostics.MaxMessages + 5; i++)
+			subject.Record($"failure {i}", $"/watched/{i}");
+		subject.Record("failure 0", "/watched/again");
+
+		Assert.Equal(WatchDiagnostics.MaxMessages, subject.Messages.Count);
+		Assert.Equal(5, subject.Dropped);
+	}
+
+	[Fact]
+	public async Task WhenARunningWatcherReportsAnError_ThenItIsClassifiedAsAfterStarting()
 	{
 		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
-		var subject = new SolutionFileSync(instance);
-		subject.OnWatcherError("/watched", new IOException("watch limit"), whileStarting: true);
-		Assert.NotEmpty(instance.WatchDiagnostics);
+		RoslynInstance instance = await LoadDetachedAsync(registry);
+		using var subject = new SolutionFileWatcher(new SolutionFileSync(instance));
+		using var sender = new FileSystemWatcher(Path.GetTempPath());
 
-		using var watcher = new SolutionFileWatcher(new SolutionFileSync(instance));
+		subject.RaiseErrorForTest(sender, new UnauthorizedAccessException("Access to the watched directory was denied."));
 
-		Assert.Empty(instance.WatchDiagnostics);
+		Assert.True(instance.IsDirty);
+		Assert.Empty(subject.Diagnostics.Messages);
+	}
+
+	[Fact]
+	public async Task WhenADisposedWatcherReportsAnError_ThenNothingHappens()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await LoadDetachedAsync(registry);
+		var subject = new SolutionFileWatcher(new SolutionFileSync(instance));
+		using var sender = new FileSystemWatcher(Path.GetTempPath());
+		subject.Dispose();
+
+		subject.RaiseErrorForTest(sender, new InternalBufferOverflowException("late"));
+
+		Assert.False(instance.IsDirty);
+		Assert.Empty(subject.Diagnostics.Messages);
+	}
+
+	[Fact]
+	public async Task WhenAWatcherIsAttached_ThenTheInstanceListsItsDiagnostics()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await LoadDetachedAsync(registry);
+		var watcher = new SolutionFileWatcher(new SolutionFileSync(instance));
+		watcher.Diagnostics.Record("watch limit", "/watched");
+
+		instance.AttachWatcher(() => watcher);
+
+		Assert.Equal(["watch limit (/watched)"], instance.WatchDiagnostics);
 	}
 
 	[Fact]

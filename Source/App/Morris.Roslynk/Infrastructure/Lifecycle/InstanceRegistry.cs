@@ -92,6 +92,8 @@ public sealed class InstanceRegistry : IDisposable
 		{
 			SolutionKey key = SolutionKey.For(solutionPath);
 			RoslynInstance instance = GetOrCreate(key);
+			// Touched before awaiting too, so idle eviction cannot close the instance while this call waits on its reload.
+			instance.Touch();
 
 			await instance.WaitForInitialLoadAsync(LoadWaitTimeout.Duration, cancellationToken);
 

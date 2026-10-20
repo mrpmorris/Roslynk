@@ -232,7 +232,7 @@ The skill directory is watched, so a fresh copy is picked up without restarting 
 >
 > **Lifecycle:**
 > - `open_solution`: Load a solution. Parameters: `solutionPath` (absolute), `noWait` (return before the load finishes). Idempotent, cheap to repeat.
-> - `get_solution_status`: List every loaded solution and its progress, with the messages behind `loadDiagnostics` (skipped analyzers, failed project loads) indented under each Ready solution. A missing generator DLL names the project to build; once built, the next call picks it up without a reload. Optional parameter: `allLoadDiagnostics` (every message instead of the first 20 per solution). Any solution whose file watcher failed in a way a reload would not fix (such as the Linux inotify watch limit) also lists `watchDiagnostic=` lines: until they clear, edits on disk may not reach it.
+> - `get_solution_status`: List every loaded solution and its progress, with the messages behind `loadDiagnostics` (skipped analyzers, failed project loads) indented under each Ready solution. A missing generator DLL names the project to build; once built, the next call picks it up without a reload. Optional parameter: `allLoadDiagnostics` (every message instead of the first 20 per solution). Any solution whose file watcher failed in a way a reload would not fix (such as the Linux inotify watch limit) also lists `watchDiagnostic=` lines, capped the same way: until they clear, edits on disk may not reach it.
 > - `reload_solution`: Force a from-disk re-evaluation. Parameter: `solutionId`. Only when the user explicitly asks.
 >
 > **Navigation:**

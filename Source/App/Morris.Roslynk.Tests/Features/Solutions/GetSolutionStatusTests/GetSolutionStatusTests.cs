@@ -1,6 +1,7 @@
 using Morris.Roslynk.Features.Solutions.GetSolutionStatus;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Watching;
 
 namespace Morris.Roslynk.Tests.Features.Solutions.GetSolutionStatusTests;
 
@@ -10,8 +11,10 @@ public class GetSolutionStatusTests
 	public async Task WhenTheFileWatcherReportedAnError_ThenGetSolutionStatusListsIt()
 	{
 		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.CreateScratchSimpleSolution());
-		instance.RecordWatchDiagnostic("The configured user limit (524288) on the number of inotify watches has been reached.", "/src");
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.Simple);
+		var watcher = new SolutionFileWatcher(new SolutionFileSync(instance));
+		watcher.Diagnostics.Record("The configured user limit (524288) on the number of inotify watches has been reached.", "/src");
+		instance.AttachWatcher(() => watcher);
 		var subject = new GetSolutionStatusTool(registry);
 
 		string result = subject.GetSolutionStatus();
@@ -126,7 +129,7 @@ public class GetSolutionStatusTests
 			.ToArray();
 		var builder = new OutlineBuilder();
 
-		GetSolutionStatusTool.AppendLoadDiagnostics(builder, messages, GetSolutionStatusTool.MaxLoadDiagnostics);
+		GetSolutionStatusTool.AppendMessages(builder, "loadDiagnostic", messages, GetSolutionStatusTool.MaxLoadDiagnostics);
 
 		string[] lines = builder.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
 		Assert.Equal(GetSolutionStatusTool.MaxLoadDiagnostics + 1, lines.Length);
@@ -145,8 +148,18 @@ public class GetSolutionStatusTests
 	{
 		var builder = new OutlineBuilder();
 
-		GetSolutionStatusTool.AppendLoadDiagnostics(builder, ["first\r\nsecond", "third"], limit: null);
+		GetSolutionStatusTool.AppendMessages(builder, "loadDiagnostic", ["first\r\nsecond", "third"], limit: null);
 
 		Assert.Equal("\tloadDiagnostic=first  second\n\tloadDiagnostic=third\n", builder.ToString());
+	}
+
+	[Fact]
+	public void WhenTheSourceDroppedMessages_ThenTheTruncationLineCountsThemToo()
+	{
+		var builder = new OutlineBuilder();
+
+		GetSolutionStatusTool.AppendMessages(builder, "watchDiagnostic", ["a", "b", "c"], limit: 2, alreadyDropped: 4);
+
+		Assert.Equal("\twatchDiagnostic=a\n\twatchDiagnostic=b\n\twatchDiagnosticsTruncated=5\n", builder.ToString());
 	}
 }

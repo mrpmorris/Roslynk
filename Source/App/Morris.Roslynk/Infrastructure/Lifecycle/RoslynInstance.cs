@@ -28,7 +28,7 @@ public sealed class RoslynInstance : IDisposable
 	private volatile bool BuildNeededField = true;
 	private DiagnosticsCacheEntry? DiagnosticsCacheField;
 	private long LastAccessedTicks;
-	private IDisposable? Watcher;
+	private IInstanceWatcher? Watcher;
 	private readonly TaskCompletionSource ReadySignal = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
 	private readonly SemaphoreSlimReadWriteLock StateGate = new();
@@ -82,64 +82,37 @@ public sealed class RoslynInstance : IDisposable
 	/// <summary>
 	/// Set by the file watcher when a change on disk is one the immutable snapshot cannot absorb incrementally (a
 	/// project / props / sln file edit, or a file that may have joined or left the build), or when the watcher
-	/// itself lost track (dropped events, or a watched directory that went away). The instance rebuilds in the
-	/// background on its next use.
+	/// itself lost track (dropped events, or a watcher that stopped, such as one whose directory was deleted on
+	/// Windows). The instance rebuilds in the background on its next use.
 	/// </summary>
 	public bool IsDirty => DirtyField;
 
 	public void MarkDirty() => DirtyField = true;
 
-	/// <summary>How many distinct file-watcher error messages are kept per instance.</summary>
-	public const int MaxWatchDiagnostics = 20;
-
-	private readonly object WatchDiagnosticsGate = new();
-	private readonly Dictionary<string, string> WatchDiagnosticsByError = new(StringComparer.Ordinal);
-
 	/// <summary>
-	/// Errors the current file watcher reported that a reload would not fix, such as an exhausted inotify watch
-	/// limit: while any are listed, changes on disk may not reach the snapshot. Cleared when a watcher starts.
+	/// Errors the attached file watcher reported that a reload would not fix, such as an exhausted inotify watch
+	/// limit: while any are listed, changes on disk may not reach the snapshot. Each watcher owns its own, so a
+	/// replacement watcher starts with none.
 	/// </summary>
-	public IReadOnlyList<string> WatchDiagnostics
-	{
-		get
-		{
-			lock (WatchDiagnosticsGate)
-				return WatchDiagnosticsByError.Values.ToArray();
-		}
-	}
+	public IReadOnlyList<string> WatchDiagnostics => Volatile.Read(ref Watcher)?.Diagnostics.Messages ?? [];
 
-	/// <summary>
-	/// Records a watcher error once per distinct <paramref name="error"/> message, naming the first directory it
-	/// was reported for (one failure such as the watch limit hits every directory), keeping at most
-	/// <see cref="MaxWatchDiagnostics"/>.
-	/// </summary>
-	public void RecordWatchDiagnostic(string error, string directory)
-	{
-		lock (WatchDiagnosticsGate)
-		{
-			if (WatchDiagnosticsByError.Count < MaxWatchDiagnostics)
-				WatchDiagnosticsByError.TryAdd(error, $"{error} ({directory})");
-		}
-	}
-
-	/// <summary>Forgets the previous watcher's errors; called as a new watcher starts.</summary>
-	public void ClearWatchDiagnostics()
-	{
-		lock (WatchDiagnosticsGate)
-			WatchDiagnosticsByError.Clear();
-	}
+	/// <summary>How many distinct watcher errors the attached watcher did not keep (see <see cref="WatchDiagnostics"/>).</summary>
+	public int WatchDiagnosticsDropped => Volatile.Read(ref Watcher)?.Diagnostics.Dropped ?? 0;
 
 	/// <summary>Whether the snapshot changed since the last diagnostics build, so the next build must recompile.</summary>
 	public bool BuildNeeded => BuildNeededField;
 
-	/// <summary>Starts the watcher that keeps the instance fresh, disposing any previous one first (a rebuild
-	/// re-attaches), so the two share a lifetime and the old watcher can record nothing once the new one has
-	/// started.</summary>
-	public void AttachWatcher(Func<IDisposable> startWatcher)
+	/// <summary>
+	/// Starts the watcher that keeps the instance fresh, then disposes any previous one (a rebuild re-attaches), so
+	/// the solution stays watched throughout and a watcher that fails to start leaves the old one in place. Each
+	/// watcher owns its diagnostics, so the overlap cannot mix them. The cost is that both hold OS watches for a
+	/// moment: an instance using over half the inotify watch limit can see its replacement meet the limit, which
+	/// is then listed as a watch diagnostic rather than leaving edits unwatched.
+	/// </summary>
+	public void AttachWatcher(Func<IInstanceWatcher> startWatcher)
 	{
-		Watcher?.Dispose();
-		Watcher = null;
-		Watcher = startWatcher();
+		IInstanceWatcher started = startWatcher();
+		Interlocked.Exchange(ref Watcher, started)?.Dispose();
 	}
 
 	/// <summary>
@@ -149,8 +122,7 @@ public sealed class RoslynInstance : IDisposable
 	/// </summary>
 	internal void DetachWatcher()
 	{
-		Watcher?.Dispose();
-		Watcher = null;
+		Interlocked.Exchange(ref Watcher, null)?.Dispose();
 	}
 
 	/// <summary>
