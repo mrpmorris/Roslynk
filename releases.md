@@ -3,6 +3,7 @@
 ## Unreleased
 
 - open_solution echoes solutionId with forward slashes so it can be reused verbatim in JSON (Fixes #107)
+- find_references and find_dead_code no longer treat a plain disposable local declaration as a Dispose reference (Fixes #88)
 - The stdio bridge handshakes with the daemon's version (`GET /version`) before piping a session: a matching daemon is reused, a daemon of another version is asked to shut down (`POST /shutdown`) and replaced by the current one, and a daemon that will not go away fails the handshake naming both versions (Fixes #113)
 - `search_symbols` accepts container-qualified dotted queries: the last segment names the symbol and the preceding segments must be a whole-segment suffix of its containing type/namespace chain (`objInv.BeforeSave`, `ContractInv.objInv.BeforeSave`), while a bare name stays a case-insensitive substring search (Fixes #116)
 - `search_symbols` gains a `kinds` filter, and array-typed arguments (`kinds`, `get_diagnostics`' `ids`) accept both a JSON array and a JSON-array string, with a malformed value refused as `error=Invalid` naming the parameter instead of being silently dropped (Fixes #114)

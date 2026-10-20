@@ -1,7 +1,5 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Callers;
@@ -9,6 +7,7 @@ using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
+using Morris.Roslynk.Infrastructure.References;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -108,8 +107,11 @@ public sealed class GetCallersTool
 
 			foreach (SymbolCallerInfo caller in await SymbolFinder.FindCallersAsync(projectionSymbol.Symbol, solution, token))
 			{
-				if (await IsOnlySpuriousDisposeAsync(caller, token))
+				if (SpuriousDisposeReferences.IsDisposeMethod(caller.CalledSymbol)
+					&& await SpuriousDisposeReferences.AreAllSpuriousAsync(caller.Locations, token))
+				{
 					continue;
+				}
 
 				callers.Add(CallerSymbol.Normalize(caller.CallingSymbol), solution);
 			}
@@ -143,35 +145,5 @@ public sealed class GetCallersTool
 			PagedRender.Invalid invalid => Failure(Error.Invalid(invalid.Message)),
 			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
 		};
-	}
-
-	/// <summary>
-	/// Roslyn's using-disposal finder reports every single-variable local declaration of a disposable type,
-	/// with or without 'using' (Resource r = new Resource(); "calls" Resource.Dispose), at the declaration's
-	/// type token; a real using is reported at its 'using' keyword and an explicit call at the name, so a
-	/// location inside the type span of a declaration with no 'using' keyword is never a call. A caller is
-	/// dropped only when every one of its locations is such a declaration. Roslyn 5.9 behavior; the filter is
-	/// a no-op once fixed upstream.
-	/// </summary>
-	private static async Task<bool> IsOnlySpuriousDisposeAsync(SymbolCallerInfo caller, CancellationToken cancellationToken)
-	{
-		if (caller.CalledSymbol is not IMethodSymbol { Name: WellKnownMemberNames.DisposeMethodName or WellKnownMemberNames.DisposeAsyncMethodName })
-			return false;
-
-		foreach (Location location in caller.Locations)
-		{
-			if (location.SourceTree is not SyntaxTree tree)
-				return false;
-
-			SyntaxNode node = (await tree.GetRootAsync(cancellationToken)).FindNode(location.SourceSpan, getInnermostNodeForTie: true);
-			if (node.FirstAncestorOrSelf<LocalDeclarationStatementSyntax>() is not { } declaration
-				|| !declaration.UsingKeyword.IsKind(SyntaxKind.None)
-				|| !declaration.Declaration.Type.Span.Contains(location.SourceSpan))
-			{
-				return false;
-			}
-		}
-
-		return true;
 	}
 }

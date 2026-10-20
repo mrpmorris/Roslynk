@@ -7,6 +7,7 @@ using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Razor;
+using Morris.Roslynk.Infrastructure.References;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -139,7 +140,7 @@ public sealed class FindDeadCodeTool
 		bool truncated = false;
 		foreach (ISymbol symbol in candidates)
 		{
-			Candidate? candidate = await EvaluateAsync(solution, symbol, testProjects, solutionDirectory);
+			Candidate? candidate = await EvaluateAsync(solution, symbol, testProjects, solutionDirectory, token);
 			if (candidate is null)
 				continue;
 
@@ -188,14 +189,20 @@ public sealed class FindDeadCodeTool
 		};
 	}
 
-	private static async Task<Candidate?> EvaluateAsync(Solution solution, ISymbol symbol, HashSet<ProjectId> testProjects, string? solutionDirectory)
+	private static async Task<Candidate?> EvaluateAsync(Solution solution, ISymbol symbol, HashSet<ProjectId> testProjects, string? solutionDirectory, CancellationToken token)
 	{
 		int nonTestReferences = 0;
 		int testReferences = 0;
+		bool dispose = SpuriousDisposeReferences.IsDisposeMethod(symbol);
 		foreach (ReferencedSymbol referenced in await SymbolFinder.FindReferencesAsync(symbol, solution))
 		{
 			foreach (ReferenceLocation location in referenced.Locations)
 			{
+				// Roslyn 5.9 reports a plain disposable local declaration as a Dispose reference; it must
+				// not keep a genuinely unused Dispose alive.
+				if (dispose && await SpuriousDisposeReferences.IsSpuriousAsync(location.Location, token))
+					continue;
+
 				if (testProjects.Contains(location.Document.Project.Id))
 					testReferences++;
 				else

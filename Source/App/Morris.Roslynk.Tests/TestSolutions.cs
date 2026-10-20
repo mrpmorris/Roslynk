@@ -20,6 +20,7 @@ internal static class TestSolutions
 	private static readonly Lazy<string> MultiTargetSolutionPath = new(() => Prepare("MultiTargetSolution", "src", "MultiTarget.slnx"));
 	private static readonly Lazy<string> ExpressionSolutionPath = new(() => Prepare("ExpressionSolution", "ExpressionSolution.slnx"));
 	private static readonly Lazy<string> AccessSolutionPath = new(() => Prepare("AccessSolution", "AccessSolution.slnx"));
+	private static readonly Lazy<string> DisposeSolutionPath = new(() => Prepare("DisposeSolution", "DisposeSolution.slnx"));
 	private static readonly Lazy<string> RazorMultiProjectSolutionPath = new(() => Prepare("RazorMultiProjectSolution", "RazorMultiProjectSolution.slnx"));
 	private static readonly Lazy<string> GeneratorSolutionPath = new(() =>
 	{
@@ -216,6 +217,12 @@ internal static class TestSolutions
 
 	/// <summary>A single-project solution touching fields, properties and parameters in every read/write form.</summary>
 	public static string Access => AccessSolutionPath.Value;
+
+	/// <summary>
+	/// A solution whose disposable types are used in every disposal shape, plus a non-IDisposable type with
+	/// a Dispose method, so a plain local declaration can be told apart from a real disposal.
+	/// </summary>
+	public static string Dispose => DisposeSolutionPath.Value;
 
 	/// <summary>
 	/// Two Razor projects, the dependent one listed first: App's Page.razor uses Lib's Widget component, whose

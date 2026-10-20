@@ -7,6 +7,7 @@ using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Razor;
+using Morris.Roslynk.Infrastructure.References;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Results;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -104,9 +105,16 @@ public sealed class FindReferencesTool
 		{
 			foreach (ReferencedSymbol referenced in await SymbolFinder.FindReferencesAsync(projectionSymbol.Symbol, projectionSymbol.Projection.Solution, cancellationToken))
 			{
+				bool dispose = SpuriousDisposeReferences.IsDisposeMethod(projectionSymbol.Symbol);
+
 				foreach (ReferenceLocation reference in referenced.Locations)
 				{
 					if (!reference.Location.IsInSource)
+						continue;
+
+					// Roslyn 5.9 reports a plain disposable local declaration at its type token as a Dispose
+					// reference; such a location is not a reference, while a real using or call is.
+					if (dispose && await SpuriousDisposeReferences.IsSpuriousAsync(reference.Location, cancellationToken))
 						continue;
 
 					FileLinePositionSpan referenceSpan = reference.Location.GetDisplaySpan();
