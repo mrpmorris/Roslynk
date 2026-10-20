@@ -33,6 +33,9 @@ public sealed class SearchSymbolsTool
 
 		Searches source symbol names, including generated declarations
 		and local functions nested under their declaring member/outer local functions.
+		A dotted query is container-qualified: the last segment matches a symbol name and the preceding
+		segments must be a whole-segment suffix of its containing type/namespace chain
+		(Widget.Compute, SimpleLibrary.Widget.Compute). A bare name stays a case-insensitive substring search.
 		Body: project > folder > file > namespace > type > member. Members nest under parent types;
 		type locations appear only when the type itself matches.
 		""")]
@@ -45,7 +48,7 @@ public sealed class SearchSymbolsTool
 		OpenWorld = false)]
 	public async Task<string> SearchSymbols(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Case-insensitive name substring.")] string query,
+		[Description("Case-insensitive name substring. A dotted query is a container-qualified name: the last segment names the symbol, the preceding segments a suffix of its containing type/namespace chain.")] string query,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
 		CancellationToken cancellationToken = default)
@@ -69,31 +72,47 @@ public sealed class SearchSymbolsTool
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
+		// A dotted query is container-qualified rather than a substring of a bare name: the declaration
+		// search is keyed on the leaf, and each candidate is then held to the whole-segment suffix of its
+		// containing type/namespace chain. A bare name keeps the substring behaviour it has always had.
+		SymbolSignatureQuery? containerQuery = null;
+		if (SymbolSignature.TryParse(query, out SymbolSignatureQuery parsed) && parsed.Qualified)
+			containerQuery = parsed;
+
+		Func<string, bool> predicate = containerQuery is null
+			? name => name.Contains(query, StringComparison.OrdinalIgnoreCase)
+			: name => string.Equals(name, containerQuery.SimpleName, StringComparison.OrdinalIgnoreCase);
+
+		bool Matches(ISymbol symbol) =>
+			containerQuery is null || SymbolSignature.ContainerQualifiedMatches(symbol, containerQuery);
+
 		// Search every projection so declarations that compile only in a branch inactive in the loaded
 		// configuration are included; dedupe by fully-qualified name across projections, keeping the
 		// best-bound copy of each declaration so a degraded rendering never wins.
 		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution, token);
 		var matched = new DeclarationCopies<Solution>();
-		Func<string, bool> predicate = name => name.Contains(query, StringComparison.OrdinalIgnoreCase);
 		foreach (Projection projection in projections)
 		{
 			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(projection.Solution, predicate, token))
 			{
-				matched.Add(symbol, projection.Solution);
+				if (Matches(symbol))
+					matched.Add(symbol, projection.Solution);
 			}
 
 			// Roslyn's declaration search covers source-generated documents only when a hand-written
 			// declaration in the same project also matches, so the generated ones are asked for directly.
 			foreach (ISymbol symbol in await SourceGeneratedDeclarations.FindAsync(projection.Solution, predicate, token))
 			{
-				matched.Add(symbol, projection.Solution);
+				if (Matches(symbol))
+					matched.Add(symbol, projection.Solution);
 			}
 
 			// Local functions are not in the declaration index, so they are found by walking the syntax
 			// (source-generated documents included).
 			foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(projection.Solution, predicate, token))
 			{
-				matched.Add(local, projection.Solution);
+				if (Matches(local))
+					matched.Add(local, projection.Solution);
 			}
 		}
 

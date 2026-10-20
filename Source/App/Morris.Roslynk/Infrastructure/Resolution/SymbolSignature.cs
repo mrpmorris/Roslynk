@@ -282,6 +282,43 @@ public static class SymbolSignature
 	}
 
 	/// <summary>
+	/// Whether the symbol is what a container-qualified search query names: the query's segments are a
+	/// whole-segment suffix of the symbol's fully-qualified name, so the last segment names the symbol and
+	/// the preceding ones name its containing type/namespace chain. A written parameter list or arity
+	/// constrains the leaf exactly as a fully-written name does. Unlike <see cref="SuffixNameMatches"/> the
+	/// query may spell the whole name, and the comparison is case-insensitive because the search tool's
+	/// contract is case-insensitive. A bare name is not container-qualified.
+	/// </summary>
+	internal static bool ContainerQualifiedMatches(ISymbol symbol, SymbolSignatureQuery query)
+	{
+		ArgumentNullException.ThrowIfNull(symbol);
+		ArgumentNullException.ThrowIfNull(query);
+
+		if (!query.Qualified)
+			return false;
+
+		string fullyQualified = SymbolResolver.FullyQualifiedName(symbol);
+		IReadOnlyList<SymbolNameSegment> declared = SplitSegments(fullyQualified);
+		if (query.Segments.Count > declared.Count)
+			return false;
+
+		if (!SegmentsMatch(declared, query.Segments, declared.Count - query.Segments.Count, StringComparison.OrdinalIgnoreCase))
+			return false;
+
+		SymbolNameSegment last = declared[^1];
+		var fullQuery = new SymbolSignatureQuery(
+			qualifiedName: fullyQualified,
+			simpleName: last.Name,
+			arity: last.Arity,
+			qualified: true,
+			segments: declared,
+			listKind: query.ListKind,
+			parameters: query.Parameters);
+
+		return Matches(symbol, fullQuery) || RelaxedMatches(symbol, fullQuery);
+	}
+
+	/// <summary>
 	/// Whether the symbol is what a partially-qualified query names by suffix: the query's segments are a
 	/// whole-segment suffix of the symbol's name, and the full contract still holds once that name is
 	/// treated as fully written — so a written parameter list or arity constrains the match exactly as it
@@ -400,11 +437,15 @@ public static class SymbolSignature
 
 	/// <summary>
 	/// Compares the declaration's rendered segments with the query's, starting at <paramref name="offset"/>
-	/// in the declaration so a suffix comparison sees only the trailing segments. Names must be equal; a
-	/// written arity must equal the declared one whatever its type-argument text; an unwritten one matches
-	/// any arity.
+	/// in the declaration so a suffix comparison sees only the trailing segments. Names must be equal
+	/// (ordinal unless <paramref name="comparison"/> says otherwise); a written arity must equal the
+	/// declared one whatever its type-argument text; an unwritten one matches any arity.
 	/// </summary>
-	private static bool SegmentsMatch(IReadOnlyList<SymbolNameSegment> declared, IReadOnlyList<SymbolNameSegment> requested, int offset = 0)
+	private static bool SegmentsMatch(
+		IReadOnlyList<SymbolNameSegment> declared,
+		IReadOnlyList<SymbolNameSegment> requested,
+		int offset = 0,
+		StringComparison comparison = StringComparison.Ordinal)
 	{
 		if (declared.Count - offset != requested.Count)
 			return false;
@@ -413,7 +454,7 @@ public static class SymbolSignature
 		{
 			SymbolNameSegment declaredSegment = declared[offset + index];
 			SymbolNameSegment requestedSegment = requested[index];
-			if (!string.Equals(declaredSegment.Name, requestedSegment.Name, StringComparison.Ordinal))
+			if (!string.Equals(declaredSegment.Name, requestedSegment.Name, comparison))
 				return false;
 
 			// A render never writes an empty argument list, so a requested arity of 0 means the non-generic
