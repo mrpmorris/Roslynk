@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -36,9 +37,10 @@ public sealed class GetMembersTool
 		SupportsPaging=Y
 
 		Lists methods/properties/fields/events/nested types grouped by declaring file ('<metadata>' for
-		referenced assemblies). Leaves: <memberKind>,<name>,<loc>, plus pipe-delimited parameter types
-		for methods with parameters. Metadata loc is empty. Local functions nest under their member
-		in declaration order, one level per nesting.
+		referenced assemblies). Razor-generated members are placed under their .razor/.cshtml file with
+		the mapped location (@inject directive lines included). Leaves: <memberKind>,<name>,<loc>, plus
+		pipe-delimited parameter types for methods with parameters. Metadata loc is empty. Local functions
+		nest under their member in declaration order, one level per nesting.
 
 		Includes all accessibilities. Filter with nameFilter/include*; use get_symbol_body for bodies.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
@@ -161,7 +163,7 @@ public sealed class GetMembersTool
 		var entries = new List<(string? Project, string File, int Order, string Line, IReadOnlyList<(int Depth, string Line)> LocalFunctions)>();
 		foreach ((ISymbol member, Solution memberSolution) in memberCopies.Items)
 		{
-			(string? project, string file, int order, string line) = Render(member, memberSolution, solutionDirectory);
+			(string? project, string file, int order, string line) = await RenderAsync(member, memberSolution, solutionDirectory, token);
 			var localFunctions = new List<(int Depth, string Line)>();
 			await AddLocalFunctionsAsync(localFunctions, member, depth: 1, memberSolution, solutionDirectory, token);
 			entries.Add((project, file, order, line, localFunctions));
@@ -250,32 +252,69 @@ public sealed class GetMembersTool
 			.OrderBy(local => local.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0);
 		foreach (IMethodSymbol local in declared)
 		{
-			lines.Add((depth, Render(local, solution, solutionDirectory).Line));
+			lines.Add((depth, (await RenderAsync(local, solution, solutionDirectory, cancellationToken)).Line));
 			await AddLocalFunctionsAsync(lines, local, depth + 1, solution, solutionDirectory, cancellationToken);
 		}
 	}
 
-	private static (string? Project, string File, int Order, string Line) Render(ISymbol member, Solution solution, string? solutionDirectory)
+	private static async Task<(string? Project, string File, int Order, string Line)> RenderAsync(
+		ISymbol member,
+		Solution solution,
+		string? solutionDirectory,
+		CancellationToken cancellationToken)
 	{
 		SyntaxReference? reference = member.DeclaringSyntaxReferences.FirstOrDefault();
-		FileLinePositionSpan? span = reference?.SyntaxTree.GetDisplaySpan(reference.Span);
+		if (reference is null)
+			return (null, MetadataBucket, 0, Line(member, ""));
 
-		string file = span is { } located
-			? GeneratedSource.MarkPath(SolutionRelativePath.Of(solutionDirectory, located.Path)!, solution, reference!.SyntaxTree)
-			: MetadataBucket;
-		string? project = reference is null ? null : ProjectName.Of(solution, reference.SyntaxTree);
-		int order = span is { } start ? start.StartLinePosition.Line + 1 : 0;
+		SyntaxTree tree = reference.SyntaxTree;
+		FileLinePositionSpan span = tree.GetDisplaySpan(reference.Span);
 
-		string location = span is { } range
-			? $"{range.StartLinePosition.Line + 1}:{range.StartLinePosition.Character + 1}-{range.EndLinePosition.Line + 1}:{range.EndLinePosition.Character + 1}"
-			: "";
+		// A Razor-generated declaration that crosses #line regions (@inject properties, BuildRenderTree)
+		// has no single mapped span, so it is placed under the .razor/.cshtml file its first mapped
+		// region names, with that region's location. A property/event accessor has no mapping of its own,
+		// so it is placed by its associated property/event, as an @code member's accessor is.
+		if (!span.HasMappedPath && RazorMapping.IsRazorGeneratedDocument(tree))
+		{
+			SyntaxReference target = reference;
+			if (member is IMethodSymbol { AssociatedSymbol: { } associated }
+				&& associated.DeclaringSyntaxReferences.FirstOrDefault() is { } associatedReference)
+			{
+				target = associatedReference;
+			}
 
+			SourceText generated = await target.SyntaxTree.GetTextAsync(cancellationToken);
+			IReadOnlyList<RazorSourceRange> mapped = await RazorMapping.MapToRazorSourceAsync(
+				solution, target.SyntaxTree, target.Span, generated, cancellationToken);
+			if (mapped.Count > 0)
+			{
+				RazorSourceRange first = mapped[0];
+				return (
+					ProjectName.Of(first.Project),
+					SolutionRelativePath.Of(solutionDirectory, first.Path)!,
+					first.Span.StartLinePosition.Line + 1,
+					Line(member, Location(first.Span)));
+			}
+		}
+
+		string file = GeneratedSource.MarkPath(SolutionRelativePath.Of(solutionDirectory, span.Path)!, solution, tree);
+		string? project = ProjectName.Of(solution, tree);
+		int order = span.StartLinePosition.Line + 1;
+
+		return (project, file, order, Line(member, Location(span)));
+	}
+
+	private static string Location(FileLinePositionSpan span) =>
+		$"{span.StartLinePosition.Line + 1}:{span.StartLinePosition.Character + 1}-{span.EndLinePosition.Line + 1}:{span.EndLinePosition.Character + 1}";
+
+	private static string Line(ISymbol member, string location)
+	{
 		string line = $"{SymbolKindText.Of(member)},{OutlineBuilder.Field(member.Name)},{location}";
 
 		if (member is IMethodSymbol { Parameters.Length: > 0 } method)
 			line += "," + Signature(method);
 
-		return (project, file, order, line);
+		return line;
 	}
 
 	private static string Signature(IMethodSymbol method) => ParameterTypes.Of(method);

@@ -1,0 +1,14 @@
+@inject IClockService Clock
+
+<h1>Panel</h1>
+<p>@Clock.Now</p>
+<p>Count: @Count</p>
+
+@code {
+	private int Count;
+
+	private void Bump()
+	{
+		Count++;
+	}
+}

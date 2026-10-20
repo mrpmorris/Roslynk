@@ -38,7 +38,9 @@ public sealed class GetSymbolBodyTool
 		SupportsPaging=Y
 
 		Returns verbatim declarations of methods, constructors, properties, indexers, events, fields,
-		local functions or types. Razor returns generated C#.
+		local functions or types. Razor declarations map back to their .razor/.cshtml source: @code
+		members, @inject properties (the directive line) and BuildRenderTree (its mapped markup lines).
+		A Razor-generated declaration with no #line mapping into Razor source returns generated C#.
 		Single declaration: project/path/loc headers, then source.
 		Partial types/methods: parts=<n>, then blocks headed part=<n>,project=...,path=...,loc=...,lines=<count>.
 		Includes generated implementations (GeneratedRegex, LoggerMessage, LibraryImport).
@@ -163,9 +165,7 @@ public sealed class GetSymbolBodyTool
 		var parts = new List<Part>();
 		foreach (SyntaxReference reference in DeclarationReferences(symbol))
 		{
-			Part? candidate = await BuildPartAsync(reference, solution, solutionDirectory, includeLeadingTrivia, cancellationToken);
-			if (candidate is not null)
-				parts.Add(candidate);
+			parts.AddRange(await BuildPartsAsync(reference, solution, solutionDirectory, includeLeadingTrivia, cancellationToken));
 		}
 
 		if (parts.Count == 0)
@@ -428,7 +428,7 @@ public sealed class GetSymbolBodyTool
 		return $"part={number},{project}path={part.Path},loc={part.Location}{generated},lines={lines}{(omitted ? ",omitted=Y" : "")}";
 	}
 
-	private static async Task<Part?> BuildPartAsync(
+	private static async Task<IReadOnlyList<Part>> BuildPartsAsync(
 		SyntaxReference reference,
 		Solution solution,
 		string? solutionDirectory,
@@ -446,18 +446,46 @@ public sealed class GetSymbolBodyTool
 		SourceText text = await reference.SyntaxTree.GetTextAsync(cancellationToken);
 		FileLinePositionSpan display = reference.SyntaxTree.GetDisplaySpan(span);
 
+		// A Razor-generated declaration that crosses #line regions (an @inject property, the
+		// BuildRenderTree body) has no single mapped span, so it is split into its mapped Razor ranges.
+		// A declaration whose text maps into Razor source is Razor source, not generated code, so it
+		// carries no generated marker. When nothing maps, the generated declaration is returned as before.
+		if (!display.HasMappedPath)
+		{
+			IReadOnlyList<RazorSourceRange> mapped = await RazorMapping.MapToRazorSourceAsync(
+				solution, reference.SyntaxTree, span, text, cancellationToken);
+			if (mapped.Count > 0)
+			{
+				return mapped
+					.Select(range => new Part(
+						ProjectName.Of(range.Project),
+						SolutionRelativePath.Of(solutionDirectory, range.Path)!,
+						Location(range.Span),
+						range.Text,
+						Generated: false,
+						Generator: null))
+					.ToList();
+			}
+		}
+
 		string? path = SolutionRelativePath.Of(solutionDirectory, display.Path);
 		if (path is null)
-			return null;
+			return [];
 
-		return new Part(
-			ProjectName.Of(solution, reference.SyntaxTree),
-			path,
-			$"{display.StartLinePosition.Line + 1}:{display.StartLinePosition.Character + 1}-{display.EndLinePosition.Line + 1}:{display.EndLinePosition.Character + 1}",
-			text.ToString(span),
-			GeneratedSource.IsGenerated(solution, reference.SyntaxTree),
-			GeneratedSource.GeneratorOf(solution, reference.SyntaxTree));
+		return
+		[
+			new Part(
+				ProjectName.Of(solution, reference.SyntaxTree),
+				path,
+				Location(display),
+				text.ToString(span),
+				GeneratedSource.IsGenerated(solution, reference.SyntaxTree),
+				GeneratedSource.GeneratorOf(solution, reference.SyntaxTree))
+		];
 	}
+
+	private static string Location(FileLinePositionSpan span) =>
+		$"{span.StartLinePosition.Line + 1}:{span.StartLinePosition.Character + 1}-{span.EndLinePosition.Line + 1}:{span.EndLinePosition.Character + 1}";
 
 	/// <summary>
 	/// The node's span extended back over its leading comments, XML documentation and directives. The blank

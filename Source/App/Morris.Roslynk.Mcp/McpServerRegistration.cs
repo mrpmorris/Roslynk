@@ -131,6 +131,8 @@ internal static class McpServerRegistration
 			## Razor
 
 			Positions refer to C# in Razor source (@code/@functions, @{ }, expressions).
+			get_symbol_body/get_members map @inject members and BuildRenderTree markup back to the
+			.razor/.cshtml source; other generated C# has no Razor mapping.
 			Edits map generated C# to source: unmappable edits return NotSupported; mismatched source,
 			Conflict. Analyzers skip generated Razor; compiler/RZxxxx diagnostics and CS8019/IDE0005
 			unused-using fixes are supported. _Imports.razor/_ViewImports.cshtml usings are never removed.
