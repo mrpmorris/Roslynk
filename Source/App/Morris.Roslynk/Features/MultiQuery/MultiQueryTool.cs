@@ -42,7 +42,9 @@ public sealed class MultiQueryTool
 		Operations cannot reference each other's output. Batch only queries needed for the question.
 
 		operations.tool uses the schema enum; arguments use that tool's single-call names/defaults.
-		Unknown/misspelled arguments are rejected.
+		Unknown/misspelled arguments are rejected. A malformed operation (unknown tool, non-object
+		arguments, missing tool) fails only its own slot as Invalid, naming its index and echoing it;
+		the rest still run.
 
 		All operations run. budget=<n> is the per-operation allowance; whole results are selected
 		smallest-first until the response budget fills. Slots are complete or absent. Missing results
@@ -69,9 +71,9 @@ public sealed class MultiQueryTool
 			[Description("Previous snapshot id; mismatch returns Stale before execution.")] string? expectSnapshot = null,
 		CancellationToken cancellationToken = default)
 	{
-		// Structural validation first: an uninterpretable batch cannot produce slots. (An op naming a tool
-		// outside the enum never reaches here - the SDK's binding layer refuses it and RoslynkTool renders
-		// the standard header-only Invalid.)
+		// Structural validation first: an uninterpretable batch cannot produce slots. An operation the
+		// caller's JSON could not describe never reaches the catalog; it is reported in its own slot
+		// (see ExecuteOperationAsync), so one malformed operation does not refuse the rest.
 		if (operations is null || operations.Count == 0)
 			return OutlineError.Format(Error.Invalid("At least one operation is required."), SolutionStatus.Ready);
 
@@ -162,13 +164,13 @@ public sealed class MultiQueryTool
 		await Parallel.ForEachAsync(
 			Enumerable.Range(0, operations.Count),
 			async (index, _) =>
-				bodies[index] = await ExecuteOperationAsync(pinnedModel, pinnedInstance, catalog, operations[index]).ConfigureAwait(false))
+				bodies[index] = await ExecuteOperationAsync(pinnedModel, pinnedInstance, catalog, operations[index], index).ConfigureAwait(false))
 			.ConfigureAwait(false);
 
 		// Costs: frame + body for a delivered slot, one small header entry for a dropped one.
 		int[] cost = new int[operations.Count];
 		for (int index = 0; index < operations.Count; index++)
-			cost[index] = SlotFrame(effectiveBoundary, index, operations[index].Tool).Length + bodies[index].Length;
+			cost[index] = SlotFrame(effectiveBoundary, index, operations[index].DisplayTool).Length + bodies[index].Length;
 
 		// Smallest-first selection. total(k) is exact - including the retry line the complement needs - and
 		// strictly increasing in k (delivering an operation costs far more than its retry entry), so the
@@ -198,7 +200,7 @@ public sealed class MultiQueryTool
 			envelope.Append(RetryFor(order[delivered..]));
 		foreach (int index in order[..delivered].OrderBy(index => index))
 		{
-			envelope.Append(SlotFrame(effectiveBoundary, index, operations[index].Tool));
+			envelope.Append(SlotFrame(effectiveBoundary, index, operations[index].DisplayTool));
 			envelope.Append(bodies[index]);
 		}
 		envelope.Append(Terminator(effectiveBoundary));
@@ -246,7 +248,7 @@ public sealed class MultiQueryTool
 	private static string RetryLine(string[] entries) =>
 		entries.Length == 0 ? "" : $"retry={string.Join(",", entries)}\n";
 
-	private static string SlotFrame(string boundary, int index, MultiQueryOp tool) =>
+	private static string SlotFrame(string boundary, int index, string tool) =>
 		$"\n--{boundary}\nslot={index + 1} tool={tool}\n\n";
 
 	private static string Terminator(string boundary) => $"\n--{boundary}--\n";
@@ -255,14 +257,27 @@ public sealed class MultiQueryTool
 		SolutionModel pinnedModel,
 		RoslynInstance pinnedInstance,
 		IReadOnlyDictionary<string, MultiQueryCatalog.OpEntry> catalog,
-		MultiQueryOperation operation)
+		MultiQueryOperation operation,
+		int index)
 	{
+		// A batch element the caller's JSON could not describe (unknown tool, missing tool, non-object
+		// arguments) is the one failure binding used to raise for the whole call. Report it as this
+		// slot's Invalid, naming the index and echoing the operation, and let every other slot run.
+		if (operation.BindingError is { } bindingError)
+		{
+			return OutlineError.Format(
+				Error.Invalid(
+					$"Operation {index + 1} (operations[{index}]) is invalid: {bindingError} Offending operation: {operation.RawJson}"),
+				pinnedModel.Status);
+		}
+
 		if (!catalog.TryGetValue(operation.Tool.ToString(), out MultiQueryCatalog.OpEntry? entry))
 		{
-			// Unreachable over the wire: the enum schema makes any other name unbindable. This branch serves
-			// the internal seam (tests) and keeps the failure shape defined should the enum ever widen.
+			// Unreachable over the wire: the converter refuses names outside the enum into this slot's
+			// BindingError above. This branch serves the internal seam (tests) and keeps the failure
+			// shape defined should the enum ever widen.
 			return OutlineError.Format(
-				Error.NotFound($"No multi-queryable tool named '{operation.Tool}'.", MultiQueryCatalog.Entries.Keys.ToList()),
+				Error.NotFound($"No multi-queryable tool named '{operation.DisplayTool}'.", MultiQueryCatalog.Entries.Keys.ToList()),
 				pinnedModel.Status);
 		}
 
@@ -287,9 +302,18 @@ public sealed class MultiQueryTool
 		catch (Exception exception)
 		{
 			// Isolation boundary: one operation's failure becomes its slot's error block and the batch
-			// continues. Formatted with the pinned model's status so a slot error during Building still
-			// carries its status header.
-			return OutlineError.Format(RoslynkTool.ToError(exception), pinnedModel.Status);
+			// continues. The index is prefixed so the caller can find the operation without counting
+			// slots, and the pinned model's status keeps a slot error during Building honest.
+			Error mapped = RoslynkTool.ToError(exception);
+			return OutlineError.Format(
+				new Error
+				{
+					Code = mapped.Code,
+					Message = $"Operation {index + 1} (operations[{index}]) failed: {mapped.Message}",
+					Candidates = mapped.Candidates,
+					StaleFiles = mapped.StaleFiles,
+				},
+				pinnedModel.Status);
 		}
 	}
 }

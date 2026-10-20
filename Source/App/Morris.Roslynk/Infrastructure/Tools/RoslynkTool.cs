@@ -4,6 +4,7 @@ using Microsoft.Extensions.AI;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Features.MultiQuery;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
@@ -139,6 +140,12 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 			?? throw new InvalidOperationException($"Could not copy the protocol definition of tool '{tool.Name}'.");
 		JsonNode schema = JsonNode.Parse(AIJsonUtilities.TransformSchema(tool.InputSchema, SchemaTransformOptions).GetRawText())!;
 		ShortenDefaults(tool.InputSchema, schema);
+
+		// multi_query binds operations through a lenient converter so a malformed operation can be
+		// reported in its own slot; the schema exporter cannot describe a converted type, so its item
+		// shape is restored from the same contract types (see MultiQuerySchema).
+		if (tool.Name == MultiQueryName)
+			MultiQuerySchema.RestoreOperationsItem(schema);
 		copy.InputSchema = JsonSerializer.SerializeToElement(schema);
 		copy.Description = string.IsNullOrEmpty(copy.Description) ? null : copy.Description;
 		return copy;

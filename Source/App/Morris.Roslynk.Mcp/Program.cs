@@ -45,6 +45,7 @@ WebApplication app = builder.Build();
 // lifetime; without a resolve the singleton would never be constructed and the metric never appear.
 app.Services.GetRequiredService<SolutionMetrics>();
 
+app.UseMcpBodyValidation();
 app.MapMcp();
 app.MapDaemonEndpoints();
 

@@ -55,11 +55,26 @@ public class MultiQuerySchemaTests : IClassFixture<ServerBuilder>
 	}
 
 	[Fact]
-	public async Task WhenAnOperationNamesAToolOutsideTheEnum_ThenTheWholeCallIsInvalid()
+	public void WhenTheOperationsItemSchemaIsPublished_ThenToolAndArgumentsCarryTheirContracts()
 	{
-		// Decision 4: a write tool is unrepresentable in the enum, so the SDK's binding layer refuses the
-		// call before multi_query runs, and RoslynkTool renders the standard header-only Invalid. This is
-		// the only place that behaviour is observable - constructing the tool directly cannot reach it.
+		JsonElement item = Schema()
+			.GetProperty("properties").GetProperty("operations")
+			.GetProperty("items");
+
+		Assert.Equal("object", item.GetProperty("type").GetString());
+		Assert.True(item.GetProperty("properties").TryGetProperty("tool", out JsonElement tool));
+		Assert.True(item.GetProperty("properties").TryGetProperty("arguments", out JsonElement arguments));
+		Assert.Equal("Read-only tool to run.", tool.GetProperty("description").GetString());
+		Assert.Equal("Tool's single-call arguments. Default: null", arguments.GetProperty("description").GetString());
+		Assert.False(arguments.TryGetProperty("default", out _), "the default must live in the description, not as a schema keyword.");
+	}
+
+	[Fact]
+	public async Task WhenAnOperationNamesAToolOutsideTheEnum_ThenTheBinderAcceptsItForPerSlotReporting()
+	{
+		// The lenient converter accepts an operation outside the enum (and a non-object arguments
+		// value) so multi_query can report it in its own slot, naming the index and echoing it, while
+		// the rest of the batch runs. The old binder failed the whole call with a CLR type name.
 		McpServerTool published = PublishedMultiQuery();
 
 		var requestParams = new CallToolRequestParams
@@ -67,7 +82,7 @@ public class MultiQuerySchemaTests : IClassFixture<ServerBuilder>
 			Name = MultiQueryTool.MultiQueryName,
 			Arguments = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
 			{
-				["solutionId"] = JsonSerializer.SerializeToElement("irrelevant - refused at binding"),
+				["solutionId"] = JsonSerializer.SerializeToElement("irrelevant - binding must accept the batch"),
 				["operations"] = JsonSerializer.SerializeToElement(
 					new Dictionary<string, JsonElement>[] { new() { ["tool"] = JsonSerializer.SerializeToElement("rename_symbol") } }),
 			},
@@ -83,9 +98,9 @@ public class MultiQuerySchemaTests : IClassFixture<ServerBuilder>
 		CallToolResult result = await published.InvokeAsync(context);
 
 		string text = Assert.IsType<TextContentBlock>(Assert.Single(result.Content)).Text;
-		Assert.True(result.IsError);
-		Assert.Contains("error=Invalid", text, StringComparison.Ordinal);
-		Assert.DoesNotContain("operations=", text, StringComparison.Ordinal);
+		Assert.StartsWith("error=", text);
+		Assert.DoesNotContain("could not be converted", text, StringComparison.Ordinal);
+		Assert.DoesNotContain("MultiQueryOperation", text, StringComparison.Ordinal);
 	}
 
 	private JsonElement Schema() =>
