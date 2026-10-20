@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The stdio bridge handshakes with the daemon's version (`GET /version`) before piping a session: a matching daemon is reused, a daemon of another version is asked to shut down (`POST /shutdown`) and replaced by the current one, and a daemon that will not go away fails the handshake naming both versions (Fixes #113)
 - Solution-scoped tools wait server-side (up to the configurable `Roslynk:LoadWaitSeconds`, default 30s) for an in-flight load instead of failing fast with `error=Indexing`; the timeout response carries live `projects=loaded/?` progress, `open_solution` waits by default (`noWait=true` pre-warms), and concurrent callers join the same load task (Fixes #119)
 - A `filePath` that matches no solution file exactly but names exactly one loaded file by path suffix or file name is used automatically and echoed as `resolvedPath=<solution-relative path>`; several matches still return `NotFound` with candidates (Fixes #117)
 - A partially qualified `symbolName`/`typeName` resolves when its dotted segments are a whole-segment suffix of exactly one symbol's fully-qualified name; several matches stay `Ambiguous`, exact/relaxed names always win, and `get_symbol`/`get_symbol_body` echo `resolvedSymbol` for a suffix-resolved request (Fixes #118)

@@ -46,5 +46,6 @@ WebApplication app = builder.Build();
 app.Services.GetRequiredService<SolutionMetrics>();
 
 app.MapMcp();
+app.MapDaemonEndpoints();
 
 app.Run();

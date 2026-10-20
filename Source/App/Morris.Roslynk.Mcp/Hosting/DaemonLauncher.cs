@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
 
 namespace Morris.Roslynk.Mcp.Hosting;
 
@@ -13,7 +11,8 @@ namespace Morris.Roslynk.Mcp.Hosting;
 public static class DaemonLauncher
 {
 	private static readonly TimeSpan StartupTimeout = TimeSpan.FromSeconds(30);
-	private static readonly TimeSpan ProbeTimeout = TimeSpan.FromMilliseconds(500);
+	private static readonly TimeSpan ShutdownTimeout = TimeSpan.FromSeconds(10);
+	private static readonly TimeSpan PollInterval = TimeSpan.FromMilliseconds(200);
 
 	public static string LogFilePath => Path.Combine(
 		Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -22,40 +21,16 @@ public static class DaemonLauncher
 
 	public static async Task EnsureRunningAsync(int port, CancellationToken cancellationToken)
 	{
-		if (await IsListeningAsync(port, cancellationToken))
-			return;
-
-		StartDetached();
-
-		using var startupWindow = new CancellationTokenSource(StartupTimeout);
-		using var linked = CancellationTokenSource.CreateLinkedTokenSource(startupWindow.Token, cancellationToken);
-		while (!await IsListeningAsync(port, linked.Token))
+		var options = new DaemonHandshakeOptions
 		{
-			try
-			{
-				await Task.Delay(200, linked.Token);
-			}
-			catch (OperationCanceledException) when (startupWindow.IsCancellationRequested)
-			{
-				throw new TimeoutException(
-					$"The Roslynk daemon did not start listening on port {port} within " +
-					$"{StartupTimeout.TotalSeconds:0}s; see '{LogFilePath}' for its output.");
-			}
-		}
-	}
+			Port = port,
+			ExpectedVersion = DaemonVersion.Current,
+			StartupTimeout = StartupTimeout,
+			ShutdownTimeout = ShutdownTimeout,
+			PollInterval = PollInterval,
+		};
 
-	private static async Task<bool> IsListeningAsync(int port, CancellationToken cancellationToken)
-	{
-		using var probe = new TcpClient();
-		try
-		{
-			await probe.ConnectAsync(IPAddress.Loopback, port, cancellationToken).AsTask().WaitAsync(ProbeTimeout, cancellationToken);
-			return true;
-		}
-		catch (Exception exception) when (exception is SocketException or TimeoutException)
-		{
-			return false;
-		}
+		await DaemonHandshake.EnsureRunningAsync(options, new HttpDaemonControl(StartDetached), cancellationToken);
 	}
 
 	private static void StartDetached()
