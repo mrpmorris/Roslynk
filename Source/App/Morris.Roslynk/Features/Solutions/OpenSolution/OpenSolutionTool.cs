@@ -23,7 +23,7 @@ public sealed class OpenSolutionTool
 
 	[Description("""
 		Opens a .sln/.slnx and waits for the initial load (up to the server's load timeout); repeated opens reuse the instance.
-		Headers: solutionId, status, projects, loadDiagnostics. Body: <projectPath>,<documentCount> per project.
+		Headers: solutionId (absolute path with forward slashes, reusable verbatim in JSON), status, projects, loadDiagnostics. Body: <projectPath>,<documentCount> per project.
 		noWait=true starts or reuses the load and returns immediately with status=Building (fire-and-forget pre-warming).
 		Missing solution: NotFound; failed load: Faulted.
 		""")]
@@ -60,7 +60,7 @@ public sealed class OpenSolutionTool
 		List<Project> projects = model.Solution?.Projects.ToList() ?? [];
 
 		var builder = new OutlineBuilder();
-		builder.Header("solutionId", instance.Key.FilePath);
+		builder.Header("solutionId", instance.Key.SolutionId);
 		builder.Status(model.Status);
 		builder.Header("projects", projects.Count);
 		builder.Header("loadDiagnostics", loadDiagnostics);

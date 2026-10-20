@@ -27,4 +27,15 @@ public class EqualityTests
 
 		Assert.True(System.IO.Path.IsPathFullyQualified(subject.FilePath));
 	}
+
+	[Fact]
+	public void WhenTheKeyIsEchoed_ThenTheSolutionIdUsesForwardSlashesWithoutChangingTheIdentity()
+	{
+		string path = OperatingSystem.IsWindows() ? @"C:\Solutions\App\App.slnx" : "/Solutions/App/App.slnx";
+
+		SolutionKey subject = SolutionKey.For(path);
+
+		Assert.Equal(System.IO.Path.GetFullPath(path).Replace('\\', '/'), subject.SolutionId);
+		Assert.Equal(System.IO.Path.GetFullPath(path), subject.FilePath);
+	}
 }

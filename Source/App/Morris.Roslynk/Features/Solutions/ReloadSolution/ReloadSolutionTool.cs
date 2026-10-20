@@ -23,7 +23,7 @@ public sealed class ReloadSolutionTool
 		Re-evaluates an open solution from disk using MSBuild. Additional reload reasons: missed watcher
 		events (network/WSL/container filesystems), global.json changes or retrying a Faulted load.
 
-		Returns immediately: solutionId, status, projects. Previous snapshot serves reads with
+		Returns immediately: solutionId (absolute path with forward slashes), status, projects. Previous snapshot serves reads with
 		status=Building until replacement is ready. Files are unchanged; failed reloads return Faulted.
 		""")]
 	[McpServerTool(
@@ -43,7 +43,7 @@ public sealed class ReloadSolutionTool
 			return OutlineError.Format(Error.Faulted(model.FaultMessage ?? "The reload failed."), model.Status);
 
 		return new OutlineBuilder()
-			.Header("solutionId", instance.Key.FilePath)
+			.Header("solutionId", instance.Key.SolutionId)
 			.Status(model.Status)
 			.Header("projects", model.Solution?.Projects.Count() ?? 0)
 			.ToString();

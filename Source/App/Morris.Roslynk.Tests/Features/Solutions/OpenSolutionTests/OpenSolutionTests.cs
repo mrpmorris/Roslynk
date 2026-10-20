@@ -64,4 +64,39 @@ public class OpenSolutionTests
 		Assert.Contains("No solution file was found at", result);
 		Assert.Empty(registry.OpenSolutionPaths);
 	}
+
+	[Fact]
+	public async Task WhenOpeningASolution_ThenTheEchoedSolutionIdUsesForwardSlashes()
+	{
+		using var registry = new InstanceRegistry();
+		var subject = new OpenSolutionTool(registry);
+
+		string result = await subject.OpenSolution(TestSolutions.Simple);
+
+		string expected = Path.GetFullPath(TestSolutions.Simple).Replace('\\', '/');
+		Assert.Equal($"solutionId={expected}", Header(result, "solutionId"));
+	}
+
+	[Fact]
+	public async Task WhenTheSameSolutionIsOpenedWithEitherSlashForm_ThenBothFormsReuseOneInstance()
+	{
+		if (!OperatingSystem.IsWindows())
+			return;
+
+		using var registry = new InstanceRegistry();
+		var subject = new OpenSolutionTool(registry);
+		string forwardSlashPath = TestSolutions.Simple.Replace('\\', '/');
+		string backslashPath = TestSolutions.Simple.Replace('/', '\\');
+
+		string fromForwardSlashes = await subject.OpenSolution(forwardSlashPath, noWait: true);
+		string fromBackslashes = await subject.OpenSolution(backslashPath, noWait: true);
+
+		Assert.Single(registry.OpenSolutionPaths);
+		Assert.Equal(Header(fromForwardSlashes, "solutionId"), Header(fromBackslashes, "solutionId"));
+
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+	}
+
+	private static string Header(string result, string key) =>
+		result.Split('\n').First(line => line.StartsWith($"{key}=", StringComparison.Ordinal));
 }

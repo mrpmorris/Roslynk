@@ -24,7 +24,7 @@ public sealed class GetSolutionStatusTool
 	}
 
 	[Description("""
-		Lists loaded solutions: <solutionId>,<status>,<loaded>/<total>.
+		Lists loaded solutions: <solutionId> (absolute path with forward slashes),<status>,<loaded>/<total>.
 		loaded tracks Building progress; total='?' until known after initial loading.
 
 		Ready solutions add indented loadDiagnostic=<message> for analyzer/generator load failures,
@@ -56,7 +56,7 @@ public sealed class GetSolutionStatusTool
 				: instance.LoadedProjects;
 
 			string totalText = totalProjects?.ToString() ?? "?";
-			builder.Line(0, $"{instance.Key.FilePath},{model.Status},{loadedProjects}/{totalText}");
+			builder.Line(0, $"{instance.Key.SolutionId},{model.Status},{loadedProjects}/{totalText}");
 
 			// Messages are final only once the load is done; a Building/Updating/Faulted solution may still be adding them.
 			if (model.Status == SolutionStatus.Ready)

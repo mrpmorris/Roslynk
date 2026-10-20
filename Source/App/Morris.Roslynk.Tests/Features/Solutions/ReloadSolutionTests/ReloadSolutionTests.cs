@@ -20,6 +20,21 @@ public class ReloadSolutionTests
 		await WaitForReadyAsync(registry, TestSolutions.Simple);
 	}
 
+	[Fact]
+	public async Task WhenReloadingASolution_ThenTheEchoedSolutionIdUsesForwardSlashes()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new ReloadSolutionTool(registry);
+
+		string result = subject.ReloadSolution(TestSolutions.Simple);
+
+		string expected = Path.GetFullPath(TestSolutions.Simple).Replace('\\', '/');
+		Assert.Contains($"solutionId={expected}\n", result);
+
+		await WaitForReadyAsync(registry, TestSolutions.Simple);
+	}
+
 	private static async Task WaitForReadyAsync(InstanceRegistry registry, string solutionPath)
 	{
 		RoslynInstance instance = registry.GetOrBegin(solutionPath);

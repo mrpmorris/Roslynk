@@ -21,6 +21,19 @@ public class GetSolutionStatusTests
 	}
 
 	[Fact]
+	public async Task WhenASolutionIsLoaded_ThenItsSolutionIdUsesForwardSlashes()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetSolutionStatusTool(registry);
+
+		string result = subject.GetSolutionStatus();
+
+		string expected = Path.GetFullPath(TestSolutions.Simple).Replace('\\', '/');
+		Assert.Contains($"{expected},Ready,1/1", result);
+	}
+
+	[Fact]
 	public async Task WhileASolutionIsStillLoading_ThenTheTotalIsUnknownAndStatusIsBuilding()
 	{
 		using var registry = new InstanceRegistry();

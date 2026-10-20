@@ -11,6 +11,12 @@ public readonly struct SolutionKey : IEquatable<SolutionKey>
 {
 	public string FilePath { get; }
 
+	/// <summary>
+	/// The handle tools echo as solutionId: the absolute path with forward slashes, so a client can
+	/// reuse it verbatim inside a JSON string. Identity and comparison still use <see cref="FilePath"/>.
+	/// </summary>
+	public string SolutionId => FilePath.Replace('\\', '/');
+
 	private static StringComparer PathComparer =>
 		OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
 			? StringComparer.OrdinalIgnoreCase

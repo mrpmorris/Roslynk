@@ -9,7 +9,7 @@ namespace Morris.Roslynk.Infrastructure.Documentation;
 /// </summary>
 internal static class ParameterDescriptions
 {
-	public const string SolutionId = "Solution handle.";
+	public const string SolutionId = "Solution handle: the solutionId echoed by open_solution, or an absolute path; either slash form is accepted.";
 
 	public const string SolutionPath = "Absolute path to the .sln or .slnx file.";
 
