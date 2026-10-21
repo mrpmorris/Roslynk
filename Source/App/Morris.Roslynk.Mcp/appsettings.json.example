@@ -2,8 +2,7 @@
 	// Roslynk reads this file only if it is named appsettings.json and sits beside the tool executable.
 	// Copy this example to appsettings.json to change a setting. Every setting below is commented out,
 	// so an untouched copy (or no file at all) means the daemon runs on its code defaults.
-	// Note: a file beside the executable lives in the tool's version directory and is lost on the next
-	// `dotnet tool update`; durable overrides come from environment variables (Roslynk__MaxResponseChars etc.).
+
 	// "Roslynk": {
 	// 	// TCP port the local daemon listens on; loopback only.
 	// 	"Port": 6502,
