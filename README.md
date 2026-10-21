@@ -308,9 +308,7 @@ For a foreground daemon with visible logs:
 
 Listens on `http://localhost:6502`. Point your MCP client at that URL (streamable HTTP). Ctrl+C stops it.
 
-The response budget (the character cap every tool result is held under; default 80,000) is read once at startup from `Roslynk:MaxResponseChars` in `appsettings.json` or the `Roslynk__MaxResponseChars` environment variable. A shared daemon serves every client with one value — set the smallest cap your clients need, and restart the daemon to change it.
-
-Solution-scoped tools wait server-side for an in-flight initial load for up to `Roslynk:LoadWaitSeconds` (default 30, or the `Roslynk__LoadWaitSeconds` environment variable) before returning `error=Indexing` with the live project count. Restart the daemon to change it.
+All `Roslynk:*` settings are read once at startup from a single typed object bound from the `Roslynk` section of `appsettings.json` or `Roslynk__*` environment variables; changing any of them requires a daemon restart. The keys are `Roslynk:MaxResponseChars` (the character cap every tool result is held under; absent means 80,000, and a configured value below the 8,000 minimum is raised to it), `Roslynk:LoadWaitSeconds` (how long solution-scoped tools wait server-side for an in-flight initial load before returning `error=Indexing` with the live project count; absent means 30, and `0` means do not wait), `Roslynk:IdleEvictionMinutes` (absent means 30; zero or less disables eviction), `Roslynk:EvictionCheckMinutes` (absent means 5, floored at 1), and `Roslynk:Port` (absent means 6502). A shared daemon serves every client with one set of values — set the smallest response cap your clients need.
 
 ## Run (Windows)
 

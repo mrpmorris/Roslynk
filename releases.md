@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- All `Roslynk:*` settings come from one typed object bound from the `Roslynk` configuration section and read once at startup, with nullable values so an absent key takes the default and the bridge and daemon resolve the port from the same object (Fixes #142)
 - `get_diagnostics` with `summaryOnly` and no severity flags summarises errors, warnings and infos; hidden diagnostics are listed only with `includeHidden=true`, while the header counts still count every severity (Fixes #137)
 - open_solution echoes solutionId with forward slashes so it can be reused verbatim in JSON (Fixes #107)
 - find_references and find_dead_code no longer treat a plain disposable local declaration as a Dispose reference (Fixes #88)

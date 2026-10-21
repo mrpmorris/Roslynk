@@ -1,5 +1,6 @@
 using Morris.Roslynk;
 using Morris.Roslynk.Infrastructure.Observability;
+using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Mcp;
 using Morris.Roslynk.Mcp.Hosting;
 using Morris.Roslynk.Mcp.Observability;
@@ -26,12 +27,17 @@ WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationO
 // Windows Service Control Manager; otherwise it registers nothing.
 builder.Services.AddWindowsService(options => options.ServiceName = "Roslynk");
 
-builder.AddLoopbackOnlyKestrel();
+// Every Roslynk setting comes from this one object, bound from the 'Roslynk' section and read once here.
+// Changing any value requires a daemon restart (there is no IOptionsMonitor).
+RoslynkSettings settings = RoslynkSettings.Load();
+
+builder.AddLoopbackOnlyKestrel(settings.EffectivePort);
 builder.AddRoslynkObservability();
 
 builder.Services.AddRoslynk(
-	ResponseBudgetConfiguration.FromConfiguration(builder.Configuration),
-	LoadWaitConfiguration.FromConfiguration(builder.Configuration));
+	new ResponseBudget(settings.EffectiveMaxChars),
+	settings.EffectiveLoadWaitTimeout);
+builder.Services.AddSingleton(settings);
 builder.Services.AddHostedService<IdleEvictionService>();
 
 builder.Services

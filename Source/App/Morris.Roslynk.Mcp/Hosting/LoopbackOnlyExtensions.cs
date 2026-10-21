@@ -8,10 +8,15 @@ public static class LoopbackOnlyExtensions
 {
 	public const int DefaultPort = 6502;
 
-	public static WebApplicationBuilder AddLoopbackOnlyKestrel(this WebApplicationBuilder builder)
+	/// <summary>
+	/// Binds the host to loopback on <paramref name="port"/>, or on the configured 'Roslynk:Port' when
+	/// no port is supplied. The daemon passes <see cref="RoslynkSettings.EffectivePort"/> so the bound
+	/// port and the port the bridge dials come from one object.
+	/// </summary>
+	public static WebApplicationBuilder AddLoopbackOnlyKestrel(this WebApplicationBuilder builder, int? port = null)
 	{
-		int port = builder.Configuration.GetValue("Roslynk:Port", DefaultPort);
-		builder.WebHost.ConfigureKestrel(options => options.ListenLocalhost(port));
+		int resolvedPort = port ?? builder.Configuration.GetValue("Roslynk:Port", DefaultPort);
+		builder.WebHost.ConfigureKestrel(options => options.ListenLocalhost(resolvedPort));
 		return builder;
 	}
 }

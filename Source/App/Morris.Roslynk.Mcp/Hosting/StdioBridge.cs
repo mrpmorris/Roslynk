@@ -14,7 +14,8 @@ public static class StdioBridge
 {
 	public static async Task RunAsync()
 	{
-		int port = ResolvePort();
+		// Same loader and object shape as the daemon, so bridge and daemon cannot disagree on the port.
+		int port = RoslynkSettings.Load().EffectivePort;
 
 		await DaemonLauncher.EnsureRunningAsync(port, CancellationToken.None);
 
@@ -47,20 +48,5 @@ public static class StdioBridge
 
 		using IHost host = builder.Build();
 		await host.RunAsync();
-	}
-
-	/// <summary>
-	/// Resolves the daemon port from the same sources the daemon itself reads (appsettings.json next
-	/// to the executable plus environment variables), so bridge and daemon always agree.
-	/// </summary>
-	private static int ResolvePort()
-	{
-		IConfigurationRoot configuration = new ConfigurationBuilder()
-			.SetBasePath(AppContext.BaseDirectory)
-			.AddJsonFile("appsettings.json", optional: true)
-			.AddEnvironmentVariables()
-			.Build();
-
-		return configuration.GetValue("Roslynk:Port", LoopbackOnlyExtensions.DefaultPort);
 	}
 }
