@@ -39,6 +39,39 @@ public class DaemonEndpointsTests
 	}
 
 	[Fact]
+	public async Task WhenRestartIsRequested_ThenTheHostStops()
+	{
+		await using DaemonTestHost host = await DaemonTestHost.StartAsync();
+
+		using HttpResponseMessage response = await host.Client.PostAsync(
+			new Uri(host.BaseUri, DaemonEndpoints.RestartPath),
+			content: null);
+
+		Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+		await host.Stopped.WaitAsync(TimeSpan.FromSeconds(10));
+	}
+
+	[Fact]
+	public async Task WhenARestartIsAlreadyInProgress_ThenASecondRestartIsRefused()
+	{
+		await using DaemonTestHost host = await DaemonTestHost.StartAsync();
+
+		// Both requests are sent before the first one has stopped the host, so the process-wide
+		// restart marker is the only thing deciding which one wins.
+		Task<HttpResponseMessage> first = host.Client.PostAsync(new Uri(host.BaseUri, DaemonEndpoints.RestartPath), content: null);
+		Task<HttpResponseMessage> second = host.Client.PostAsync(new Uri(host.BaseUri, DaemonEndpoints.RestartPath), content: null);
+
+		using HttpResponseMessage firstResponse = await first;
+		using HttpResponseMessage secondResponse = await second;
+
+		HttpStatusCode[] statuses = [firstResponse.StatusCode, secondResponse.StatusCode];
+		Assert.Contains(HttpStatusCode.Accepted, statuses);
+		Assert.Contains(HttpStatusCode.Conflict, statuses);
+
+		await host.Stopped.WaitAsync(TimeSpan.FromSeconds(10));
+	}
+
+	[Fact]
 	public async Task WhenShutdownIsRequestedForAnotherVersion_ThenTheHostStops()
 	{
 		await using DaemonTestHost host = await DaemonTestHost.StartAsync();
@@ -88,6 +121,9 @@ public class DaemonEndpointsTests
 
 			WebApplication app = builder.Build();
 			app.MapDaemonEndpoints();
+
+			// The restart marker is process-wide, so a host must start from a clean slate.
+			DaemonEndpoints.ResetRestartState();
 
 			var host = new DaemonTestHost(app, port);
 			app.Lifetime.ApplicationStopping.Register(() => host.Stopping.TrySetResult());

@@ -22,6 +22,11 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!-- Lets the hosting tests reset process-wide endpoint state between test hosts. -->
+		<InternalsVisibleTo Include="Morris.Roslynk.McpTests" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<ProjectReference Include="..\Morris.Roslynk\Morris.Roslynk.csproj" />
 	</ItemGroup>
 

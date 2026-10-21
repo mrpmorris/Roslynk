@@ -14,6 +14,19 @@ public enum DaemonShutdownRequest
 }
 
 /// <summary>
+/// The outcome of asking a daemon to restart. <see cref="AlreadyInProgress"/> means the daemon refused
+/// because a restart of it was already accepted; <see cref="Unsupported"/> means it does not expose the
+/// restart endpoint at all (an older daemon).
+/// </summary>
+public enum DaemonRestartRequest
+{
+	Accepted,
+	Unsupported,
+	AlreadyInProgress,
+	Unreachable,
+}
+
+/// <summary>
 /// The daemon operations the version handshake needs. Production uses <see cref="HttpDaemonControl"/>;
 /// tests supply controlled fakes so every wait is driven by an observable signal.
 /// </summary>
@@ -25,6 +38,12 @@ public interface IDaemonControl
 	Task<string?> TryGetVersionAsync(int port, CancellationToken cancellationToken);
 
 	Task<DaemonShutdownRequest> TryRequestShutdownAsync(int port, string clientVersion, CancellationToken cancellationToken);
+
+	/// <summary>
+	/// Asks the daemon to restart without a version guard. Unlike <c>/shutdown</c>, this is allowed to
+	/// stop a daemon whose version already matches the caller's.
+	/// </summary>
+	Task<DaemonRestartRequest> TryRequestRestartAsync(int port, CancellationToken cancellationToken);
 
 	void StartDaemon();
 }
@@ -43,15 +62,26 @@ public sealed class DaemonHandshakeOptions
 
 	public TimeSpan ShutdownTimeout { get; init; } = TimeSpan.FromSeconds(10);
 
+	public TimeSpan RestartTimeout { get; init; } = TimeSpan.FromSeconds(10);
+
 	public TimeSpan PollInterval { get; init; } = TimeSpan.FromMilliseconds(200);
+
+	/// <summary>
+	/// Restart even a daemon whose version matches. Defaults to false: a healthy matching daemon holds
+	/// warm workspaces that exist precisely to be shared across bridge launches, so recycling it on
+	/// every launch would throw that away for no gain.
+	/// </summary>
+	public bool ForceRestart { get; init; }
 }
 
 /// <summary>
 /// The Gradle-style version handshake: a bridge reuses a daemon only when that daemon reports the same
-/// version as the bridge. A daemon of another version is asked to shut down, the bridge waits for the
-/// port to free, then starts its own; if the old daemon will not go away the handshake fails with a
-/// message naming both versions. A listener that has not answered the version endpoint yet is treated
-/// as mid-startup and given the startup window, never assumed to be a wrong version.
+/// version as the bridge. A daemon of another version is asked to restart (or, when it has no restart
+/// endpoint, to shut down), the bridge waits for the port to free, then starts its own; if the old
+/// daemon will not go away the handshake fails with a message naming both versions. A matching daemon
+/// is reused unless <see cref="DaemonHandshakeOptions.ForceRestart"/> asks for a fresh process. A
+/// listener that has not answered the version endpoint yet is treated as mid-startup and given the
+/// startup window, never assumed to be a wrong version.
 /// </summary>
 public static class DaemonHandshake
 {
@@ -80,7 +110,63 @@ public static class DaemonHandshake
 		}
 
 		if (string.Equals(version, options.ExpectedVersion, StringComparison.Ordinal))
+		{
+			if (!options.ForceRestart)
+				return;
+
+			// The daemon matches but the caller asked for a fresh process (a startup-only setting
+			// changed). /restart has no version guard, so this is allowed where /shutdown refuses.
+			DaemonRestartRequest restart = await control
+				.TryRequestRestartAsync(options.Port, cancellationToken)
+				.ConfigureAwait(false);
+
+			if (restart is DaemonRestartRequest.Accepted or DaemonRestartRequest.AlreadyInProgress)
+			{
+				if (await WaitForPortToFreeAsync(options, control, options.RestartTimeout, cancellationToken).ConfigureAwait(false))
+				{
+					await StartAndConfirmAsync(options, control, cancellationToken).ConfigureAwait(false);
+					return;
+				}
+
+				throw new InvalidOperationException(
+					$"The Roslynk daemon on port {options.Port} is version {version} and was asked to restart, but the port " +
+					$"did not free within {options.RestartTimeout.TotalSeconds:0}s. This client is version " +
+					$"{options.ExpectedVersion}; stop the process holding the port and retry.");
+			}
+
+			// Unsupported (an older daemon with no /restart) or unreachable: reuse the running daemon
+			// rather than failing, which is what this handshake did before /restart existed.
 			return;
+		}
+
+		// A mismatched daemon is replaced gracefully when it supports /restart; /shutdown is the
+		// fallback for older daemons and for any restart request that did not go through.
+		DaemonRestartRequest restartRequest = await control
+			.TryRequestRestartAsync(options.Port, cancellationToken)
+			.ConfigureAwait(false);
+
+		if (restartRequest == DaemonRestartRequest.Accepted)
+		{
+			(bool restartPortFreed, string? restartRemaining) = await WaitForShutdownAsync(
+				options,
+				control,
+				options.RestartTimeout,
+				cancellationToken).ConfigureAwait(false);
+
+			if (restartPortFreed)
+			{
+				await StartAndConfirmAsync(options, control, cancellationToken).ConfigureAwait(false);
+				return;
+			}
+
+			if (string.Equals(restartRemaining, options.ExpectedVersion, StringComparison.Ordinal))
+				return;
+
+			throw new InvalidOperationException(
+				$"The Roslynk daemon on port {options.Port} is version {restartRemaining ?? "(unknown)"}, but this client is version " +
+				$"{options.ExpectedVersion}, and the daemon did not restart within {options.RestartTimeout.TotalSeconds:0}s. " +
+				$"Stop the process holding the port and retry.");
+		}
 
 		DaemonShutdownRequest request = await control
 			.TryRequestShutdownAsync(options.Port, options.ExpectedVersion, cancellationToken)
@@ -158,6 +244,34 @@ public static class DaemonHandshake
 
 			if (!await DelayAsync(options.PollInterval, linked.Token, expiry, cancellationToken).ConfigureAwait(false))
 				return null;
+		}
+	}
+
+	/// <summary>
+	/// Polls until the port is free. Unlike <see cref="WaitForShutdownAsync"/>, a daemon that still
+	/// reports the expected version does not count as success: when a matching daemon restarts it keeps
+	/// answering until it exits, so only a freed port proves the restart happened.
+	/// </summary>
+	private static async Task<bool> WaitForPortToFreeAsync(
+		DaemonHandshakeOptions options,
+		IDaemonControl control,
+		TimeSpan window,
+		CancellationToken cancellationToken)
+	{
+		using var expiry = new CancellationTokenSource(window);
+		using var linked = CancellationTokenSource.CreateLinkedTokenSource(expiry.Token, cancellationToken);
+
+		while (true)
+		{
+			string? version = await TryGetVersionAsync(options.Port, control, linked.Token, expiry, cancellationToken).ConfigureAwait(false);
+			if (version is null && !control.IsListening(options.Port))
+				return true;
+
+			if (expiry.IsCancellationRequested)
+				return false;
+
+			if (!await DelayAsync(options.PollInterval, linked.Token, expiry, cancellationToken).ConfigureAwait(false))
+				return false;
 		}
 	}
 

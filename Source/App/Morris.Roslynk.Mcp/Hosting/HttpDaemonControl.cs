@@ -5,8 +5,8 @@ namespace Morris.Roslynk.Mcp.Hosting;
 
 /// <summary>
 /// Talks to whatever owns the daemon port: a TCP probe for "is anything listening", the version
-/// endpoint, and the shutdown request. Every call is bounded so a half-started or wedged listener
-/// cannot stall the bridge indefinitely.
+/// endpoint, and the shutdown/restart requests. Every call is bounded so a half-started or wedged
+/// listener cannot stall the bridge indefinitely.
 /// </summary>
 public sealed class HttpDaemonControl : IDaemonControl
 {
@@ -88,6 +88,32 @@ public sealed class HttpDaemonControl : IDaemonControl
 		{
 			cancellationToken.ThrowIfCancellationRequested();
 			return DaemonShutdownRequest.Unreachable;
+		}
+	}
+
+	public async Task<DaemonRestartRequest> TryRequestRestartAsync(int port, CancellationToken cancellationToken)
+	{
+		using var expiry = new CancellationTokenSource(RequestTimeout);
+		using var linked = CancellationTokenSource.CreateLinkedTokenSource(expiry.Token, cancellationToken);
+
+		try
+		{
+			Uri uri = new($"http://127.0.0.1:{port}{DaemonEndpoints.RestartPath}");
+
+			using HttpResponseMessage response = await Client.PostAsync(uri, content: null, linked.Token).ConfigureAwait(false);
+
+			return response.StatusCode switch
+			{
+				HttpStatusCode.Accepted => DaemonRestartRequest.Accepted,
+				HttpStatusCode.NotFound => DaemonRestartRequest.Unsupported,
+				HttpStatusCode.Conflict => DaemonRestartRequest.AlreadyInProgress,
+				_ => DaemonRestartRequest.Unreachable,
+			};
+		}
+		catch (Exception exception) when (exception is HttpRequestException or OperationCanceledException)
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+			return DaemonRestartRequest.Unreachable;
 		}
 	}
 
