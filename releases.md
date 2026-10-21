@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The tool ships a commented `appsettings.json.example` instead of `appsettings.json`, so every setting is discoverable and no packaged file is silently replaced on upgrade; `appsettings.json` stays optional and the daemon runs on code defaults when it is absent (Fixes #143)
 - The daemon exposes a loopback-only `POST /restart` (no version guard, unlike `/shutdown`) and the stdio bridge uses it to recycle a daemon when the version mismatches, falling back to `/shutdown` for older daemons (Fixes #144)
 - All `Roslynk:*` settings come from one typed object bound from the `Roslynk` configuration section and read once at startup, with nullable values so an absent key takes the default and the bridge and daemon resolve the port from the same object (Fixes #142)
 - `get_diagnostics` with `summaryOnly` and no severity flags summarises errors, warnings and infos; hidden diagnostics are listed only with `includeHidden=true`, while the header counts still count every severity (Fixes #137)

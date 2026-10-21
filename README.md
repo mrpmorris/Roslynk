@@ -308,7 +308,27 @@ For a foreground daemon with visible logs:
 
 Listens on `http://localhost:6502`. Point your MCP client at that URL (streamable HTTP). Ctrl+C stops it.
 
-All `Roslynk:*` settings are read once at startup from a single typed object bound from the `Roslynk` section of `appsettings.json` or `Roslynk__*` environment variables; changing any of them requires a daemon restart. The keys are `Roslynk:MaxResponseChars` (the character cap every tool result is held under; absent means 80,000, and a configured value below the 8,000 minimum is raised to it), `Roslynk:LoadWaitSeconds` (how long solution-scoped tools wait server-side for an in-flight initial load before returning `error=Indexing` with the live project count; absent means 30, and `0` means do not wait), `Roslynk:IdleEvictionMinutes` (absent means 30; zero or less disables eviction), `Roslynk:EvictionCheckMinutes` (absent means 5, floored at 1), and `Roslynk:Port` (absent means 6502). A shared daemon serves every client with one set of values — set the smallest response cap your clients need.
+### Settings
+
+All `Roslynk:*` settings come from one typed object bound from the `Roslynk` section and read once at startup, so changing any of them requires a daemon restart. Settings are read from `appsettings.json` beside the tool executable. Nothing ships that file: `appsettings.json.example` ships instead, with every key present but commented out and a one-line explanation above it. No file at all — or an untouched copy — means the daemon runs on its code defaults:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `Roslynk:Port` | 6502 | TCP port the local daemon listens on (loopback only). |
+| `Roslynk:MaxResponseChars` | 80,000 | Character cap every tool result is held under; a configured value below the 8,000 minimum is raised to it. |
+| `Roslynk:LoadWaitSeconds` | 30 | How long solution-scoped tools wait server-side for an in-flight initial load before returning `error=Indexing`; `0` means do not wait. |
+| `Roslynk:IdleEvictionMinutes` | 30 | Minutes a solution may sit unused before the daemon evicts it; 0 disables eviction. |
+| `Roslynk:EvictionCheckMinutes` | 5 | Minutes between idle-eviction sweeps; floored at 1. |
+
+To change a setting, copy or rename `appsettings.json.example` to `appsettings.json` beside the executable and uncomment what you need, then restart the daemon. The loader accepts JavaScript/C#-style comments, but VS Code flags them as errors in `.json` files unless you associate the file with JSONC in your settings:
+
+```json
+"files.associations": { "appsettings*.json": "jsonc" }
+```
+
+An `appsettings.json` beside the executable lives inside the tool's version directory (`~/.dotnet/tools/.store/roslynk/<version>/...`), so the next `dotnet tool update` extracts a fresh tool and silently loses your edit. For durable overrides use the equivalent environment variables, which the same configuration reads: `Roslynk__Port`, `Roslynk__MaxResponseChars`, `Roslynk__LoadWaitSeconds`, `Roslynk__IdleEvictionMinutes`, `Roslynk__EvictionCheckMinutes`.
+
+A shared daemon serves every client with one set of values — set the smallest response cap your clients need.
 
 ## Run (Windows)
 

@@ -13,6 +13,15 @@ public sealed class RoslynkSettings
 {
 	public const string SectionName = "Roslynk";
 
+	/// <summary>The idle window applied when 'Roslynk:IdleEvictionMinutes' is absent.</summary>
+	public const double DefaultIdleEvictionMinutes = 30.0;
+
+	/// <summary>The eviction sweep interval applied when 'Roslynk:EvictionCheckMinutes' is absent.</summary>
+	public const double DefaultEvictionCheckMinutes = 5.0;
+
+	/// <summary>The smallest eviction sweep interval; a smaller configured value is raised to it.</summary>
+	public const double MinimumEvictionCheckMinutes = 1.0;
+
 	/// <summary>The response budget in characters; absent means <see cref="ResponseBudget.DefaultMaxChars"/>.</summary>
 	public int? MaxResponseChars { get; set; }
 
@@ -66,11 +75,11 @@ public sealed class RoslynkSettings
 
 	/// <summary>The configured idle window, or 30 minutes when absent; zero or less disables eviction.</summary>
 	public TimeSpan EffectiveIdleEvictionTimeout =>
-		TimeSpan.FromMinutes(IdleEvictionMinutes ?? 30.0);
+		TimeSpan.FromMinutes(IdleEvictionMinutes ?? DefaultIdleEvictionMinutes);
 
 	/// <summary>The configured eviction check interval, or 5 minutes when absent, floored at 1 minute.</summary>
 	public TimeSpan EffectiveEvictionCheckInterval =>
-		TimeSpan.FromMinutes(Math.Max(1.0, EvictionCheckMinutes ?? 5.0));
+		TimeSpan.FromMinutes(Math.Max(MinimumEvictionCheckMinutes, EvictionCheckMinutes ?? DefaultEvictionCheckMinutes));
 
 	/// <summary>The configured port, or 6502 when absent.</summary>
 	public int EffectivePort => Port ?? LoopbackOnlyExtensions.DefaultPort;

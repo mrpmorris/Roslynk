@@ -19,6 +19,9 @@
 
 	<ItemGroup>
 		<None Include="..\..\..\README.md" Pack="true" PackagePath="\" />
+		<!-- The Web SDK does not treat a non-.json extension as a Content item, so this needs an explicit
+		     item to reach the tool package beside the executable. -->
+		<None Include="appsettings.json.example" CopyToOutputDirectory="PreserveNewest" />
 	</ItemGroup>
 
 	<ItemGroup>
