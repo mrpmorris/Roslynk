@@ -3,22 +3,27 @@
 	// Copy this example to appsettings.json to change a setting. Every setting below is commented out,
 	// so an untouched copy (or no file at all) means the daemon runs on its code defaults.
 
-	// "Roslynk": {
-	// 	// TCP port the local daemon listens on; loopback only.
-	// 	"Port": 6502,
-	// 	// Character cap for every tool result; larger results are paged or cut.
-	// 	"MaxResponseChars": 80000,
-	// 	// Seconds a solution-scoped tool waits for an in-flight initial load before returning Indexing.
-	// 	"LoadWaitSeconds": 30,
-	// 	// Minutes a solution may sit unused before the daemon evicts it; 0 disables eviction.
-	// 	"IdleEvictionMinutes": 30,
-	// 	// Minutes between idle-eviction sweeps; floored at 1.
-	// 	"EvictionCheckMinutes": 5
-	// },
-	// "Logging": {
-	// 	"LogLevel": {
-	// 		"Default": "Information",
-	// 		"Microsoft.AspNetCore": "Warning"
-	// 	}
-	// }
+	"Roslynk": {
+		// TCP port the local daemon listens on; loopback only.
+		// 	"Port": 6502,
+		
+		// Character cap for every tool result; larger results are paged or cut.
+		// 	"MaxResponseChars": 80000,
+		
+		// Seconds a solution-scoped tool waits for an in-flight initial load before returning Indexing.
+		// 	"LoadWaitSeconds": 30,
+	
+		// Minutes a solution may sit unused before the daemon evicts it; 0 disables eviction.
+		// 	"IdleEvictionMinutes": 30,
+		
+		// Minutes between idle-eviction sweeps; floored at 1.
+		// 	"EvictionCheckMinutes": 5
+		
+	},
+	"Logging": {
+	 	"LogLevel": {
+	 		"Default": "Information",
+	 		"Microsoft.AspNetCore": "Warning"
+	 	}
+	}
 }
