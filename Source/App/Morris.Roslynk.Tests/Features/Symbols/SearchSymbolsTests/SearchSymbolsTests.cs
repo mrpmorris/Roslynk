@@ -21,6 +21,21 @@ public class SearchSymbolsTests
 	}
 
 	[Fact]
+	public async Task WhenTheFilterIsSuppliedByItsPublishedName_ThenTheFilterApplies()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new SearchSymbolsTool(registry, new ProjectionService());
+
+		// Pins the public parameter name (issue #152): 'query' read as free-text search, so a caller
+		// sent {query: "objVM", kinds: ["Method"]} expecting objVM's methods and got nothing.
+		string result = await subject.SearchSymbols(TestSolutions.Simple, symbolNameFilter: "Greet");
+
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("class,Greeter", result);
+	}
+
+	[Fact]
 	public async Task WhenNothingMatchesTheQuery_ThenNoResultsAreReturned()
 	{
 		using var registry = new InstanceRegistry();

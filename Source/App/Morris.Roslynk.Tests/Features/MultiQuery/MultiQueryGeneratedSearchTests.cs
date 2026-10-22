@@ -23,7 +23,7 @@ public class MultiQueryGeneratedSearchTests
 
 		string envelope = await subject.MultiQuery(TestSolutions.Generator,
 		[
-			new(MultiQueryOp.search_symbols, MultiQueryTestHelpers.Args(("query", MultiQueryTestHelpers.Json("Unlisted")))),
+			new(MultiQueryOp.search_symbols, MultiQueryTestHelpers.Args(("symbolNameFilter", MultiQueryTestHelpers.Json("Unlisted")))),
 		]);
 
 		Assert.Contains("operations=1", envelope);

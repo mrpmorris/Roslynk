@@ -152,6 +152,30 @@ public class MultiQueryCatalogTests
 	}
 
 	[Fact]
+	public async Task WhenTheOldQueryArgumentIsSupplied_ThenItIsUnknownAndSymbolNameFilterIsNamed()
+	{
+		// Issue #152: the rename is a clean break, so the binder refuses the old key rather than
+		// accepting both, and the error names the replacement in its valid-argument list.
+		var entry = MultiQueryCatalog.Entries[SearchSymbolsTool.SearchSymbolsName];
+		var arguments = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+		{
+			["query"] = MultiQueryTestHelpers.Json("objVM"),
+		};
+
+		var exception = await Assert.ThrowsAsync<UnknownArgumentException>(() => MultiQueryCatalog.InvokeCoreAsync(
+			CreateBinderProvider(),
+			entry,
+			model: null!,
+			instance: null!,
+			allowance: null,
+			arguments,
+			CancellationToken.None));
+
+		Assert.Equal("Unknown argument 'query' for search_symbols. Valid: symbolNameFilter, kinds, startItem, maxSize.", exception.Message);
+		Assert.Equal(ErrorCode.UnknownArgument, RoslynkTool.ToError(exception).Code);
+	}
+
+	[Fact]
 	public async Task WhenMaxSizeIsPassedAsAString_ThenTheBinderCoercesIt()
 	{
 		var entry = MultiQueryCatalog.Entries[GetSymbolBodyTool.GetSymbolBodyName];
@@ -204,7 +228,7 @@ public class MultiQueryCatalogTests
 		var entry = MultiQueryCatalog.Entries[SearchSymbolsTool.SearchSymbolsName];
 		var arguments = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
 		{
-			["query"] = MultiQueryTestHelpers.Json("Greet"),
+			["symbolNameFilter"] = MultiQueryTestHelpers.Json("Greet"),
 			["kinds"] = MultiQueryTestHelpers.Json("[\"Method\"]"),
 		};
 
@@ -226,7 +250,7 @@ public class MultiQueryCatalogTests
 		var entry = MultiQueryCatalog.Entries[SearchSymbolsTool.SearchSymbolsName];
 		var arguments = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
 		{
-			["query"] = MultiQueryTestHelpers.Json("Greet"),
+			["symbolNameFilter"] = MultiQueryTestHelpers.Json("Greet"),
 			["kinds"] = MultiQueryTestHelpers.Json("Method"),
 		};
 

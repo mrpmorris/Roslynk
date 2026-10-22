@@ -34,7 +34,7 @@ unambiguous target. For find_definition, open the target .cs file and pick a fil
 that actually sits on an identifier usage today.
 
 Tools to cover (arg names as of tools/list):
-  search_symbols {query, maxSize}
+  search_symbols {symbolNameFilter, maxSize}
   find_definition {filePath, line, column}
   find_references {symbolName, maxSize}
   find_implementations {symbolName}

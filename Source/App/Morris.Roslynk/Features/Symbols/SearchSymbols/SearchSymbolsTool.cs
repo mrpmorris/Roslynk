@@ -33,9 +33,11 @@ public sealed class SearchSymbolsTool
 
 		Searches source symbol names, including generated declarations
 		and local functions nested under their declaring member/outer local functions.
-		A dotted query is container-qualified: the last segment matches a symbol name and the preceding
-		segments must be a whole-segment suffix of its containing type/namespace chain
-		(Widget.Compute, SimpleLibrary.Widget.Compute). A bare name stays a case-insensitive substring search.
+		symbolNameFilter matches a symbol's own name, not free text and not its members: a bare name is a
+		case-insensitive substring, and a dotted name is container-qualified - the last segment matches a
+		symbol name and the preceding segments must be a whole-segment suffix of its containing
+		type/namespace chain (Widget.Compute, SimpleLibrary.Widget.Compute). To list a type's members, use
+		get_members; a member cannot be selected by its container alone here.
 		Body: project > folder > file > namespace > type > member. Members nest under parent types;
 		type locations appear only when the type itself matches.
 		'kinds' filters the matched declarations by outline kind (namespace, class, struct, interface, enum,
@@ -51,7 +53,7 @@ public sealed class SearchSymbolsTool
 		OpenWorld = false)]
 	public async Task<string> SearchSymbols(
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
-		[Description("Case-insensitive name substring. A dotted query is a container-qualified name: the last segment names the symbol, the preceding segments a suffix of its containing type/namespace chain.")] string query,
+		[Description(ParameterDescriptions.SymbolNameFilter)] string symbolNameFilter,
 		[Description("Optional kind filter: a JSON array of kind names, e.g. [\"Method\"]. A JSON-array string such as \"[\\\"Method\\\"]\" is also accepted. Kinds (case-insensitive): namespace, class, struct, interface, enum, delegate, module, method, property, field, event, localfunction. Omit or pass [] for all kinds.")] string[]? kinds = null,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
@@ -59,13 +61,13 @@ public sealed class SearchSymbolsTool
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await SearchSymbolsCoreAsync(model, instance, query, kinds, startItem, maxSize, Budget, CancellationToken.None);
+		return await SearchSymbolsCoreAsync(model, instance, symbolNameFilter, kinds, startItem, maxSize, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> SearchSymbolsCoreAsync(
 		SolutionModel model,
 		RoslynInstance instance,
-		string query,
+		string symbolNameFilter,
 		string[]? kinds = null,
 		int startItem = 1,
 		int maxSize = 0,
@@ -81,15 +83,15 @@ public sealed class SearchSymbolsTool
 
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
-		// A dotted query is container-qualified rather than a substring of a bare name: the declaration
+		// A dotted name is container-qualified rather than a substring of a bare name: the declaration
 		// search is keyed on the leaf, and each candidate is then held to the whole-segment suffix of its
 		// containing type/namespace chain. A bare name keeps the substring behaviour it has always had.
 		SymbolSignatureQuery? containerQuery = null;
-		if (SymbolSignature.TryParse(query, out SymbolSignatureQuery parsed) && parsed.Qualified)
+		if (SymbolSignature.TryParse(symbolNameFilter, out SymbolSignatureQuery parsed) && parsed.Qualified)
 			containerQuery = parsed;
 
 		Func<string, bool> predicate = containerQuery is null
-			? name => name.Contains(query, StringComparison.OrdinalIgnoreCase)
+			? name => name.Contains(symbolNameFilter, StringComparison.OrdinalIgnoreCase)
 			: name => string.Equals(name, containerQuery.SimpleName, StringComparison.OrdinalIgnoreCase);
 
 		bool Matches(ISymbol symbol) =>

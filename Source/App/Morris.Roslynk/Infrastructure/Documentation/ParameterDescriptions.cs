@@ -15,6 +15,8 @@ internal static class ParameterDescriptions
 
 	public const string SymbolName = "Symbol name: fully qualified, or a dotted-segment suffix that uniquely matches one symbol.";
 
+	public const string SymbolNameFilter = "Case-insensitive symbol-name filter: a bare name is a substring; a dotted name is container-qualified (last segment names the symbol, preceding segments a suffix of its containing type/namespace chain).";
+
 	public const string FilePath = "Source file path.";
 
 	public const string StartItem =

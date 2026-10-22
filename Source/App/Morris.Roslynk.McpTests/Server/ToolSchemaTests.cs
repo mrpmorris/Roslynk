@@ -70,6 +70,17 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 	}
 
 	[Fact]
+	public void WhenSearchSymbolsIsPublished_ThenItsNameFilterIsSymbolNameFilter()
+	{
+		JsonElement schema = Tools.Single(tool => tool.ProtocolTool.Name == "search_symbols").ProtocolTool.InputSchema;
+
+		// Issue #152: 'query' read as free-text search, but the parameter only ever matched a symbol's
+		// own name, so {query: "objVM", kinds: ["Method"]} could never mean "the methods of objVM".
+		Assert.Contains("symbolNameFilter", Required(schema));
+		Assert.DoesNotContain("query", Properties(schema).Keys);
+	}
+
+	[Fact]
 	public void WhenGetDiagnosticsIsPublished_ThenIdsIsAnOptionalArrayOfStrings()
 	{
 		JsonElement schema = Tools.Single(tool => tool.ProtocolTool.Name == "get_diagnostics").ProtocolTool.InputSchema;
