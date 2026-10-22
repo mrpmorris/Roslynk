@@ -162,4 +162,83 @@ public class GetSolutionStatusTests
 
 		Assert.Equal("\twatchDiagnostic=a\n\twatchDiagnostic=b\n\twatchDiagnosticsTruncated=5\n", builder.ToString());
 	}
+
+	[Fact]
+	public async Task WhenNoSolutionIdIsGiven_ThenEveryLoadedSolutionIsListed()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance simple = await registry.GetOrAddAsync(TestSolutions.Simple);
+		RoslynInstance references = await registry.GetOrAddAsync(TestSolutions.References);
+		var subject = new GetSolutionStatusTool(registry);
+
+		string result = subject.GetSolutionStatus();
+
+		string[] lines = result.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+		Assert.Equal(2, lines.Length);
+		Assert.Contains(lines, line => line.StartsWith($"{simple.Key.SolutionId},", StringComparison.Ordinal));
+		Assert.Contains(lines, line => line.StartsWith($"{references.Key.SolutionId},", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public async Task WhenASolutionIdIsGiven_ThenOnlyThatSolutionIsListed()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance simple = await registry.GetOrAddAsync(TestSolutions.Simple);
+		RoslynInstance references = await registry.GetOrAddAsync(TestSolutions.References);
+		var subject = new GetSolutionStatusTool(registry);
+
+		string result = subject.GetSolutionStatus(solutionId: references.Key.SolutionId);
+
+		string line = Assert.Single(result.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+		Assert.StartsWith($"{references.Key.SolutionId},", line);
+		Assert.DoesNotContain(simple.Key.SolutionId, result);
+	}
+
+	[Fact]
+	public async Task WhenASolutionIdIsAnAbsolutePathWithBackslashes_ThenThatSolutionIsSelected()
+	{
+		// A backslash path is absolute only on Windows; elsewhere the separator has another meaning.
+		if (!OperatingSystem.IsWindows())
+			return;
+
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetSolutionStatusTool(registry);
+		string backslashPath = instance.Key.FilePath.Replace('/', '\\');
+
+		string result = subject.GetSolutionStatus(solutionId: backslashPath);
+
+		string line = Assert.Single(result.Split('\n', StringSplitOptions.RemoveEmptyEntries));
+		Assert.StartsWith($"{instance.Key.SolutionId},", line);
+	}
+
+	[Fact]
+	public async Task WhenTheSolutionIdIsNotLoaded_ThenGetSolutionStatusReturnsNotFoundWithTheLoadedIdsAsCandidates()
+	{
+		using var registry = new InstanceRegistry();
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new GetSolutionStatusTool(registry);
+		string requested = Path.Combine(Path.GetTempPath(), "not-loaded", "Other.slnx");
+
+		string result = subject.GetSolutionStatus(solutionId: requested);
+
+		Assert.Contains("error=NotFound", result);
+		Assert.Contains($"No solution is loaded for '{requested}'", result);
+		Assert.Contains($"candidate={instance.Key.SolutionId}", result);
+		Assert.DoesNotContain(",Ready,", result);
+	}
+
+	[Theory]
+	[InlineData("")]
+	[InlineData("  ")]
+	public void WhenTheSolutionIdIsEmptyOrWhitespace_ThenGetSolutionStatusReturnsInvalid(string solutionId)
+	{
+		using var registry = new InstanceRegistry();
+		var subject = new GetSolutionStatusTool(registry);
+
+		string result = subject.GetSolutionStatus(solutionId: solutionId);
+
+		Assert.Contains("error=Invalid", result);
+		Assert.Contains("solutionId", result);
+	}
 }

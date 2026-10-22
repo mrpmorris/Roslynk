@@ -24,6 +24,7 @@
 - The daemon roots its host content at its install directory, so starting `roslynk` from a home directory no longer recursively watches it and exhausts Linux inotify watches (Fixes #103)
 - Server instructions and tool descriptions are held to the published schemas by tests: every parameter-shaped name they mention must be a real parameter, a tool name or a documented result field, so prose can no longer name an argument the tools do not take (Fixes #120)
 - `get_symbol_body` and `get_members` map Razor `@inject` members and `BuildRenderTree` markup back to the `.razor`/`.cshtml` source through the `#line` directives instead of reporting the generated `.g.cs` path and C# (Fixes #138)
+- `get_solution_status` accepts an optional `solutionId` to report one loaded solution, returning `NotFound` with the loaded ids as candidates when nothing matches (Fixes #148)
 
 ## 2.2.0
 

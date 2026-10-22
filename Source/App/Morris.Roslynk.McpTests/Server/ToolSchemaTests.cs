@@ -30,18 +30,40 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 	}
 
 	[Fact]
-	public void WhenAToolTakesSolutionId_ThenItIsRequired()
+	public void WhenAToolTakesSolutionId_ThenItIsRequiredExceptWhereTheToolScopesAnOptionalLookup()
 	{
+		// Every data tool needs a solutionId. get_solution_status is the deliberate exception: it
+		// reports on the shared daemon itself, so omitting the id must keep listing every loaded
+		// solution exactly as before. Any other optional solutionId would change an existing call.
 		foreach (McpServerTool tool in Tools)
 		{
 			JsonElement schema = tool.ProtocolTool.InputSchema;
 			if (!Properties(schema).ContainsKey("solutionId"))
 				continue;
 
+			if (tool.ProtocolTool.Name == "get_solution_status")
+			{
+				Assert.DoesNotContain("solutionId", Required(schema));
+				continue;
+			}
+
 			Assert.True(
 				Required(schema).Contains("solutionId"),
 				$"{tool.ProtocolTool.Name} takes solutionId but does not require it.");
 		}
+	}
+
+	[Fact]
+	public void WhenGetSolutionStatusIsPublished_ThenSolutionIdIsAnOptionalString()
+	{
+		McpServerTool tool = Tools.Single(candidate => candidate.ProtocolTool.Name == "get_solution_status");
+		JsonElement schema = tool.ProtocolTool.InputSchema;
+
+		Assert.True(Properties(schema).TryGetValue("solutionId", out JsonElement solutionId), "get_solution_status does not publish 'solutionId'.");
+		Assert.Equal("string", PrimaryType(solutionId));
+		Assert.DoesNotContain("solutionId", Required(schema));
+		Assert.Contains("Optional", solutionId.GetProperty("description").GetString()!, StringComparison.Ordinal);
+		Assert.Contains("NotFound", tool.ProtocolTool.Description!, StringComparison.Ordinal);
 	}
 
 	[Fact]
