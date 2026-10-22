@@ -59,6 +59,10 @@ internal static class ItemPaging
 		ResponseBudget? budget = null,
 		Action<OutlineBuilder>? capHeaders = null)
 	{
+		// A caller writing the conventional zero-based form means "from the beginning": serve page 1
+		// rather than spend a round-trip on the off-by-one.
+		if (startItem == 0)
+			startItem = 1;
 		if (startItem < 1)
 			return new PagedRender.Invalid($"'startItem' counts items from 1 (got {startItem}).");
 		if (maxSize < 0)

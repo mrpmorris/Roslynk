@@ -153,11 +153,27 @@ public class ItemPagingTests
 	}
 
 	[Fact]
-	public void WhenStartItemIsBelowOne_ThenInvalidNamesTheParameter()
+	public void WhenStartItemIsZero_ThenPageOneIsServed()
 	{
-		PagedRender render = ItemPaging.Render(SolutionStatus.Ready, _ => { }, _ => { }, [], startItem: 0);
+		var items = new[] { OutlineItem.Single("l1", []), OutlineItem.Single("l2", []) };
+		static void RenderBody(OutlineBuilder builder)
+		{
+			builder.Line(0, "l1");
+			builder.Line(0, "l2");
+		}
 
-		Assert.Equal("'startItem' counts items from 1 (got 0).", Assert.IsType<PagedRender.Invalid>(render).Message);
+		PagedRender zero = ItemPaging.Render(SolutionStatus.Ready, _ => { }, RenderBody, items, startItem: 0);
+		PagedRender one = ItemPaging.Render(SolutionStatus.Ready, _ => { }, RenderBody, items, startItem: 1);
+
+		Assert.Equal(Assert.IsType<PagedRender.Complete>(one).Output, Assert.IsType<PagedRender.Complete>(zero).Output);
+	}
+
+	[Fact]
+	public void WhenStartItemIsNegative_ThenInvalidNamesTheParameter()
+	{
+		PagedRender render = ItemPaging.Render(SolutionStatus.Ready, _ => { }, _ => { }, [], startItem: -1);
+
+		Assert.Equal("'startItem' counts items from 1 (got -1).", Assert.IsType<PagedRender.Invalid>(render).Message);
 	}
 
 	[Fact]

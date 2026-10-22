@@ -180,6 +180,10 @@ public sealed class GetSymbolBodyTool
 			return failure(Error.Invalid(
 				$"'{requestedName}' has {parts.Count} parts; part must be 0 to {parts.Count}."));
 
+		// 0 is the conventional zero-based "from the beginning": page 1 rather than reject it.
+		if (startItem == 0)
+			startItem = 1;
+
 		if (startItem < 1)
 			return failure(Error.Invalid(
 				$"'startItem' counts the returned text's lines from 1 (got {startItem})."));

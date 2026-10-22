@@ -62,9 +62,19 @@ public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.L
 	}
 
 	[Fact]
-	public async Task WhenStartItemIsBelowOne_ThenInvalid()
+	public async Task WhenStartItemIsZero_ThenPageOneIsServed()
 	{
-		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startItem: 0);
+		string zero = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startItem: 0);
+		string one = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startItem: 1);
+
+		Assert.DoesNotContain("error=", zero);
+		Assert.Equal(one, zero);
+	}
+
+	[Fact]
+	public async Task WhenStartItemIsNegative_ThenInvalid()
+	{
+		string result = await Subject().GetSymbolBody(TestSolutions.LargeType, "Repro.Big", startItem: -1);
 
 		Assert.StartsWith("error=Invalid", result);
 		Assert.Contains("'startItem'", result);
