@@ -269,4 +269,21 @@ public class SearchSymbolsTests
 		Assert.Contains("'Methods'", exception.Message, StringComparison.Ordinal);
 		Assert.Contains("method", exception.Message, StringComparison.Ordinal);
 	}
+
+	[Fact]
+	public async Task WhenCountOnlyIsRequested_ThenCountEqualsTheNormalSearchesItemCount()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new SearchSymbolsTool(registry, new ProjectionService());
+
+		string normal = await subject.SearchSymbols(TestSolutions.Simple, "Add");
+		string counted = await subject.SearchSymbols(TestSolutions.Simple, "Add", countOnly: true);
+
+		// Every match here is a leaf under a container that carries no location of its own, so the unpaged
+		// item count is the number of leaf lines.
+		int items = normal.Split('\n').Count(line => line.TrimStart('\t').StartsWith("method,Add,", StringComparison.Ordinal));
+		Assert.True(items > 0, normal);
+		Assert.Equal($"count={items}\ncount.method={items}\n", counted);
+	}
 }

@@ -232,6 +232,25 @@ public class GetMembersTests
 		Assert.DoesNotContain(result.Split('\n'), line => line.TrimStart('\t').StartsWith("method,remove_Changed", StringComparison.Ordinal));
 	}
 
+	[Fact]
+	public async Task WhenCountOnlyIsRequested_ThenTheResultCarriesTheCountsAndNoMembers()
+	{
+		string result = await RunAsync("SimpleLibrary.Holder", countOnly: true);
+
+		// Holder: property Count (accessors are not listed as methods, #149), field _ready, method Combine.
+		Assert.Equal(
+			"resolvedType=SimpleLibrary.Holder\ncount=3\ncount.method=1\ncount.property=1\ncount.field=1\n",
+			result);
+	}
+
+	[Fact]
+	public async Task WhenMethodsAreExcludedInCountOnlyMode_ThenOnlyTheRemainingKindsAreCounted()
+	{
+		string result = await RunAsync("SimpleLibrary.Holder", includeMethods: false, countOnly: true);
+
+		Assert.Equal("resolvedType=SimpleLibrary.Holder\ncount=2\ncount.property=1\ncount.field=1\n", result);
+	}
+
 	private static async Task<string> RunAsync(
 		string symbolName,
 		bool includeInherited = false,
@@ -240,7 +259,8 @@ public class GetMembersTests
 		bool includeFields = true,
 		bool includeProperties = true,
 		bool includeEvents = true,
-		bool includeNestedTypes = true)
+		bool includeNestedTypes = true,
+		bool countOnly = false)
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
@@ -255,7 +275,8 @@ public class GetMembersTests
 			includeFields,
 			includeProperties,
 			includeEvents,
-			includeNestedTypes);
+			includeNestedTypes,
+			countOnly: countOnly);
 	}
 
 	private static IReadOnlyList<string> MemberNames(string text)

@@ -43,7 +43,7 @@ public sealed class FindReferencesTool
 		Combine with get_callers/get_callees/find_implementations/get_type_hierarchy via multi_query for
 		usage/impact analysis.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""")]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
 	[McpServerTool(
 		Name = FindReferencesName,
 		Title = "Find references to a symbol",
@@ -56,11 +56,12 @@ public sealed class FindReferencesTool
 		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		[Description(ParameterDescriptions.CountOnly)] bool countOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
-		return await FindReferencesCoreAsync(model, instance, symbolName, startItem, maxSize, Budget, cancellationToken);
+		return await FindReferencesCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget, cancellationToken);
 	}
 
 	internal async Task<string> FindReferencesCoreAsync(
@@ -69,6 +70,7 @@ public sealed class FindReferencesTool
 		string symbolName,
 		int startItem = 1,
 		int maxSize = 0,
+		bool countOnly = false,
 		ResponseBudget? budget = null,
 		CancellationToken cancellationToken = default)
 	{
@@ -159,7 +161,8 @@ public sealed class FindReferencesTool
 			items: root.Items(),
 			startItem: startItem,
 			maxSize: maxSize,
-			budget: Budget);
+			budget: Budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

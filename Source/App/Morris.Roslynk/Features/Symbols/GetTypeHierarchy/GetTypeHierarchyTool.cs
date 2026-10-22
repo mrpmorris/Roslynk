@@ -36,7 +36,7 @@ public sealed class GetTypeHierarchyTool
 		Header: resolvedType. Body sections: base, interfaces, derived (empty sections omitted).
 		Entries: <typeKind>,<fully-qualified name>; typeKind=class|struct|interface|enum|delegate.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""")]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
 	[McpServerTool(
 		Name = GetTypeHierarchyName,
 		Title = "Get a type's hierarchy",
@@ -49,11 +49,12 @@ public sealed class GetTypeHierarchyTool
 		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		[Description(ParameterDescriptions.CountOnly)] bool countOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await GetTypeHierarchyCoreAsync(model, instance, symbolName, startItem, maxSize, Budget);
+		return await GetTypeHierarchyCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget);
 	}
 
 	internal async Task<string> GetTypeHierarchyCoreAsync(
@@ -62,6 +63,7 @@ public sealed class GetTypeHierarchyTool
 		string symbolName,
 		int startItem = 1,
 		int maxSize = 0,
+		bool countOnly = false,
 		ResponseBudget? budget = null,
 		CancellationToken token = default)
 	{
@@ -140,7 +142,8 @@ public sealed class GetTypeHierarchyTool
 			items,
 			startItem,
 			maxSize,
-			budget);
+			budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

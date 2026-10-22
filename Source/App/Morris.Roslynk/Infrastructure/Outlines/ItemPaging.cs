@@ -1,6 +1,7 @@
 namespace Morris.Roslynk.Infrastructure.Outlines;
 
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Morris.Roslynk.Infrastructure.Resolution;
 
 /// <summary>
 /// One item of a paged result: the line(s) that carry the data, plus the container lines open above them.
@@ -20,7 +21,8 @@ public sealed record OutlineItem((int Depth, string Text)[] Lines, string[] Cont
 /// </summary>
 public abstract record PagedRender
 {
-	/// <summary>The complete result — no paging headers, the body the tool has always written.</summary>
+	/// <summary>The complete result — no paging headers, the body the tool has always written. For
+	/// <c>countOnly</c> it is the headers plus count=/count.&lt;kind&gt;= and no body.</summary>
 	public sealed record Complete(string Output) : PagedRender;
 
 	/// <summary>One page: the tool's headers plus count=/truncated=Y and, when items remain, nextStartItem=.</summary>
@@ -57,12 +59,17 @@ internal static class ItemPaging
 		int startItem = 1,
 		int maxSize = AutoPageSize,
 		ResponseBudget? budget = null,
-		Action<OutlineBuilder>? capHeaders = null)
+		Action<OutlineBuilder>? capHeaders = null,
+		bool countOnly = false)
 	{
 		// A caller writing the conventional zero-based form means "from the beginning": serve page 1
 		// rather than spend a round-trip on the off-by-one.
 		if (startItem == 0)
 			startItem = 1;
+
+		if (countOnly)
+			return new PagedRender.Complete(CountOnly(status, addHeaders, capHeaders, items));
+
 		if (startItem < 1)
 			return new PagedRender.Invalid($"'startItem' counts items from 1 (got {startItem}).");
 		if (maxSize < 0)
@@ -207,6 +214,63 @@ internal static class ItemPaging
 		foreach ((int depth, string text) in lines)
 			builder.Line(depth, text);
 		return new PagedRender.Page(builder.ToString());
+	}
+
+	/// <summary>
+	/// The count-only render: the tool's headers, status, count= and one count.&lt;kind&gt;= per kind found
+	/// among the items' leaves, with no body and no paging headers. Nothing was dropped — the body was
+	/// never requested — so truncated=/nextStartItem=/partialItem= would be false signals. startItem and
+	/// maxSize are page parameters and are ignored here; a caller whose maxSize is a scan or row cap keeps
+	/// applying it before the items reach this method.
+	/// </summary>
+	private static string CountOnly(
+		SolutionStatus status,
+		Action<OutlineBuilder> addHeaders,
+		Action<OutlineBuilder>? capHeaders,
+		IReadOnlyList<OutlineItem> items)
+	{
+		var builder = new OutlineBuilder();
+		addHeaders(builder);
+		capHeaders?.Invoke(builder);
+		builder.Status(status);
+		builder.Header("count", items.Count);
+
+		// A leaf's first comma-delimited field is its kind; kind tokens are never quoted, so a line whose
+		// first field is not one of the accepted names (get_diagnostics' id, source text, line:col) is not
+		// counted by kind. get_members' nested local-function lines are leaves too, so they count. The
+		// per-kind lines follow the shared vocabulary's order, never discovery order.
+		int[] counts = new int[SymbolKinds.Accepted.Count];
+		foreach (OutlineItem item in items)
+		{
+			foreach ((int _, string text) in item.Lines)
+			{
+				int comma = text.IndexOf(',');
+				string kind = comma < 0 ? text : text[..comma];
+				int index = KindIndex(kind);
+				if (index >= 0)
+					counts[index]++;
+			}
+		}
+
+		for (int index = 0; index < counts.Length; index++)
+		{
+			if (counts[index] > 0)
+				builder.Header($"count.{SymbolKinds.Accepted[index]}", counts[index]);
+		}
+
+		return builder.ToString();
+	}
+
+	/// <summary>The accepted kind vocabulary's index for <paramref name="kind"/>, or -1 when it is not a kind.</summary>
+	private static int KindIndex(string kind)
+	{
+		for (int index = 0; index < SymbolKinds.Accepted.Count; index++)
+		{
+			if (string.Equals(SymbolKinds.Accepted[index], kind, StringComparison.Ordinal))
+				return index;
+		}
+
+		return -1;
 	}
 
 	private static string Compose(SolutionStatus status, Action<OutlineBuilder> addHeaders, Action<OutlineBuilder>? capHeaders, Action<OutlineBuilder> renderBody)

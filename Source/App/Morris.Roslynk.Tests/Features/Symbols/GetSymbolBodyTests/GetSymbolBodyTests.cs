@@ -190,12 +190,43 @@ public class GetSymbolBodyTests
 		Assert.Contains(expected, result);
 	}
 
-	private static async Task<string> RunAsync(string symbolName, bool includeLeadingTrivia = false)
+	[Fact]
+	public async Task WhenCountOnlyIsRequested_ThenTheHeadersAndLineCountAreReturnedWithoutText()
+	{
+		// startItem 99 and maxSize 1 are page parameters: countOnly ignores both rather than rejecting.
+		string result = await RunAsync("SimpleLibrary.Widget.Compute", startItem: 99, maxSize: 1, countOnly: true);
+
+		Assert.Contains("project=SimpleLibrary", result);
+		Assert.Contains("path=SimpleLibrary/Widget.cs", result);
+		Assert.Contains("count=1", result);
+		Assert.DoesNotContain("value * 2", result);
+		Assert.DoesNotContain("\n\n", result);
+	}
+
+	[Fact]
+	public async Task WhenCountOnlyIsRequestedForAPartialType_ThenEveryPartsLinesAreCounted()
+	{
+		string result = await RunAsync("SimpleLibrary.Ledger", countOnly: true);
+
+		Assert.Contains("parts=2", result);
+		Assert.Contains("count=", result);
+		Assert.DoesNotContain("public int Add", result);
+		Assert.DoesNotContain("\n\n", result);
+	}
+
+	private static async Task<string> RunAsync(
+		string symbolName,
+		bool includeLeadingTrivia = false,
+		int startItem = 1,
+		int maxSize = 0,
+		int part = 0,
+		bool countOnly = false)
 	{
 		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		var subject = new GetSymbolBodyTool(registry, new SymbolResolver(), new ProjectionService());
 
-		return await subject.GetSymbolBody(TestSolutions.Simple, symbolName, includeLeadingTrivia);
+		return await subject.GetSymbolBody(
+			TestSolutions.Simple, symbolName, includeLeadingTrivia, startItem, maxSize, part, countOnly);
 	}
 }

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Every paging tool accepts `countOnly=true`, returning the headers plus `count=` and one `count.<kind>=` line per kind present instead of the body, with no `truncated=`/`nextStartItem=` and `startItem`/`maxSize` page limits ignored (`get_diagnostics`' row cap and `find_dead_code`'s scan cap still apply) (Fixes #153)
 - `get_members` no longer lists property/event accessors as `method` leaves: each property/event appears once as its own leaf, so `includeMethods` covers ordinary methods, constructors and local functions (Fixes #149)
 - `search_symbols`' `query` parameter is renamed to `symbolNameFilter`, a breaking rename that states it matches a symbol's own name rather than free text (Fixes #152)
 - Paged tools treat `startItem=0` as page 1 instead of rejecting it; a negative `startItem` is still `error=Invalid` (Fixes #150)

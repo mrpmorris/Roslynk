@@ -31,6 +31,7 @@ public static class AccessQuery
 		Func<AccessKind, bool> include,
 		int startItem = 1,
 		int maxSize = 0,
+		bool countOnly = false,
 		ResponseBudget? budget = null,
 		CancellationToken cancellationToken = default)
 	{
@@ -176,7 +177,8 @@ public static class AccessQuery
 			items: outline.Items(),
 			startItem: startItem,
 			maxSize: maxSize,
-			budget: budget);
+			budget: budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

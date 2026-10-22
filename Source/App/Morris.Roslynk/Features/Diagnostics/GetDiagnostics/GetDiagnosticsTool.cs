@@ -47,6 +47,9 @@ public sealed class GetDiagnosticsTool
 		filePath also accepts a unique path suffix or file name; when that resolves it, resolvedPath=<solution-relative path>
 		names the canonical form. Several matching files return Ambiguous with those paths as candidates.
 		Private fixer-trigger IDs are omitted; fix the public rule instead (e.g. IDE0005).
+
+		countOnly=true returns the headers plus count=<n> and no rows; maxSize still caps the listed rows,
+		so truncated=Y means the cap stopped the listing.
 		""")]
 	[McpServerTool(
 		Name = GetDiagnosticsName,
@@ -68,6 +71,7 @@ public sealed class GetDiagnosticsTool
 		[Description("Summarize by diagnostic id.")] bool summaryOnly = false,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		[Description("Return counts only: count= and no rows, no body and no paging headers; startItem is ignored, while maxSize still caps the listed rows.")] bool countOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
@@ -258,7 +262,9 @@ public sealed class GetDiagnosticsTool
 			capHeaders: capped
 				? builder =>
 				{
-					builder.Header("count", Math.Min(totalRows, cap));
+					// countOnly: ItemPaging writes the single count= for the items; only the cap's signal is ours.
+					if (!countOnly)
+						builder.Header("count", Math.Min(totalRows, cap));
 					builder.Header("truncated", true);
 				}
 				: null,
@@ -266,7 +272,8 @@ public sealed class GetDiagnosticsTool
 			items: collected,
 			startItem: startItem,
 			maxSize: 0,
-			budget: Budget);
+			budget: Budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

@@ -31,4 +31,18 @@ public class FindDeadConditionalsTests
 		// #if DEBUG is reachable in the Debug config and its #else in the Release config, so neither is flagged.
 		Assert.DoesNotContain(",if,DEBUG", result);
 	}
+
+	[Fact]
+	public async Task WhenCountOnlyIsRequested_ThenTheHeaderAndCountAreReturnedWithoutBranches()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Conditional);
+		var subject = new FindDeadConditionalsTool(registry, new ConditionalCoverage());
+
+		string result = await subject.FindDeadConditionals(TestSolutions.Conditional, countOnly: true);
+
+		// The leaves are line:col records, not kinds, so there is no count.<kind>= line.
+		Assert.Equal("deadConditionals=1\ncount=1\n", result);
+		Assert.DoesNotContain("NEVERDEFINED", result);
+	}
 }

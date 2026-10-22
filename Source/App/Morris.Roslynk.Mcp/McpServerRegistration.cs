@@ -95,6 +95,8 @@ internal static class McpServerRegistration
 			keeping other arguments unchanged. Pages repeat enclosing containers. maxSize limits page characters
 			(0 uses the response budget). get_diagnostics instead counts maxSize listed entries (0 lists all) and
 			find_dead_code caps its scan by it. No tool drops results: everything found is reachable by paging.
+			countOnly=true returns headers only: count= plus one count.<kind>= per kind present, no body;
+			startItem/maxSize page limits are ignored, while get_diagnostics' and find_dead_code's caps still apply.
 			partialItem=<n> means an oversized item is incomplete and its remainder unretrievable:
 			narrow the query; never claim complete coverage. Unpaged oversized results stop at a whole line
 			with outputTruncated=Y, fullOutputChars=<n>.

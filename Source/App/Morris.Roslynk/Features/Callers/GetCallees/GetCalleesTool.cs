@@ -48,7 +48,7 @@ public sealed class GetCalleesTool
 		parameterTypes only for overloads declared in the callee's type (parameterless overload: '()'). Constructed generics collapse to their definitions; extension
 		methods include their 'this' parameter.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""")]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
 	[McpServerTool(
 		Name = GetCalleesName,
 		Title = "Get the members a member calls",
@@ -62,11 +62,12 @@ public sealed class GetCalleesTool
 		[Description("Exclude metadata callees (BCL/NuGet).")] bool excludeExternal = false,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		[Description(ParameterDescriptions.CountOnly)] bool countOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await GetCalleesCoreAsync(model, instance, symbolName, excludeExternal, startItem, maxSize, Budget, CancellationToken.None);
+		return await GetCalleesCoreAsync(model, instance, symbolName, excludeExternal, startItem, maxSize, countOnly, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> GetCalleesCoreAsync(
@@ -76,6 +77,7 @@ public sealed class GetCalleesTool
 		bool excludeExternal = false,
 		int startItem = 1,
 		int maxSize = 0,
+		bool countOnly = false,
 		ResponseBudget? budget = null,
 		CancellationToken token = default)
 	{
@@ -126,7 +128,8 @@ public sealed class GetCalleesTool
 			root.Items(),
 			startItem,
 			maxSize,
-			budget);
+			budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

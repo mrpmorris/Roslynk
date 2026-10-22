@@ -46,7 +46,7 @@ public sealed class GetMembersTool
 
 		Includes all accessibilities. Filter with nameFilter/include*; use get_symbol_body for bodies.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""")]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
 	[McpServerTool(
 		Name = GetMembersName,
 		Title = "Get a type's members",
@@ -66,11 +66,12 @@ public sealed class GetMembersTool
 		[Description("Include nested types.")] bool includeNestedTypes = true,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		[Description(ParameterDescriptions.CountOnly)] bool countOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await GetMembersCoreAsync(model, instance, symbolName, includeInherited, nameFilter, includeMethods, includeFields, includeProperties, includeEvents, includeNestedTypes, startItem, maxSize, Budget, CancellationToken.None);
+		return await GetMembersCoreAsync(model, instance, symbolName, includeInherited, nameFilter, includeMethods, includeFields, includeProperties, includeEvents, includeNestedTypes, startItem, maxSize, countOnly, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> GetMembersCoreAsync(
@@ -86,6 +87,7 @@ public sealed class GetMembersTool
 		bool includeNestedTypes = true,
 		int startItem = 1,
 		int maxSize = 0,
+		bool countOnly = false,
 		ResponseBudget? budget = null,
 		CancellationToken token = default)
 	{
@@ -230,7 +232,8 @@ public sealed class GetMembersTool
 			collected,
 			startItem,
 			maxSize,
-			budget);
+			budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

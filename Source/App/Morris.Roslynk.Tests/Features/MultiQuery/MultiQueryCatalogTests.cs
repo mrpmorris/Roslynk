@@ -147,7 +147,7 @@ public class MultiQueryCatalogTests
 			arguments,
 			CancellationToken.None));
 
-		Assert.Equal("Unknown argument 'budget' for get_symbol_body. Valid: symbolName, includeLeadingTrivia, startItem, maxSize, part.", exception.Message);
+		Assert.Equal("Unknown argument 'budget' for get_symbol_body. Valid: symbolName, includeLeadingTrivia, startItem, maxSize, part, countOnly.", exception.Message);
 		Assert.Equal(ErrorCode.UnknownArgument, RoslynkTool.ToError(exception).Code);
 	}
 
@@ -171,7 +171,7 @@ public class MultiQueryCatalogTests
 			arguments,
 			CancellationToken.None));
 
-		Assert.Equal("Unknown argument 'query' for search_symbols. Valid: symbolNameFilter, kinds, startItem, maxSize.", exception.Message);
+		Assert.Equal("Unknown argument 'query' for search_symbols. Valid: symbolNameFilter, kinds, startItem, maxSize, countOnly.", exception.Message);
 		Assert.Equal(ErrorCode.UnknownArgument, RoslynkTool.ToError(exception).Code);
 	}
 

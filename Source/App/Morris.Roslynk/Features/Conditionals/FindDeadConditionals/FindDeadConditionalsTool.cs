@@ -35,7 +35,7 @@ public sealed class FindDeadConditionalsTool
 		Header: deadConditionals=<n>. Body grouped by file; leaves: <line:col>,<directive>,<condition>.
 		directive=if|elif|else; condition is the raw expression or '(else)'.
 		Use find_dead_code for unreferenced symbols.
-		""")]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
 	[McpServerTool(
 		Name = FindDeadConditionalsName,
 		Title = "Find never-compiled #if branches",
@@ -47,11 +47,12 @@ public sealed class FindDeadConditionalsTool
 		[Description(ParameterDescriptions.SolutionId)] string solutionId,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		[Description(ParameterDescriptions.CountOnly)] bool countOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await FindDeadConditionalsCoreAsync(model, instance, startItem, maxSize, Budget);
+		return await FindDeadConditionalsCoreAsync(model, instance, startItem, maxSize, countOnly, Budget);
 	}
 
 	internal async Task<string> FindDeadConditionalsCoreAsync(
@@ -59,6 +60,7 @@ public sealed class FindDeadConditionalsTool
 		RoslynInstance instance,
 		int startItem = 1,
 		int maxSize = 0,
+		bool countOnly = false,
 		ResponseBudget? budget = null,
 		CancellationToken token = default)
 	{
@@ -97,7 +99,8 @@ public sealed class FindDeadConditionalsTool
 			items,
 			startItem,
 			maxSize,
-			budget);
+			budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

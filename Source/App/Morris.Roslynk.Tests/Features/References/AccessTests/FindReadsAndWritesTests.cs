@@ -180,6 +180,22 @@ public class FindReadsAndWritesTests
 		await registry.GetOrAddAsync(TestSolutions.Access);
 	}
 
+	[Fact]
+	public async Task WhenCountOnlyIsRequested_ThenAccessCountsAreReturnedWithoutLocations()
+	{
+		(FindReadsTool reads, _, InstanceRegistry registry) = await CreateAsync();
+		using (registry)
+		{
+			string result = await reads.FindReads(TestSolutions.Access, "AccessSpace.Counter.Total", countOnly: true);
+
+			Assert.Contains("resolvedSymbol=AccessSpace.Counter.Total", result);
+			Assert.Contains("count=", result);
+			Assert.Contains("count.method=", result);
+			Assert.DoesNotContain("17:14", result);
+			Assert.DoesNotContain("\n\n", result);
+		}
+	}
+
 	[Theory]
 	[InlineData("N.T.M:p", "N.T.M", "p")]
 	[InlineData("N.T.M(int, string):p", "N.T.M(int, string)", "p")]

@@ -26,4 +26,7 @@ internal static class ParameterDescriptions
 
 	public const string CheckOnly =
 		"Preview only.";
+
+	public const string CountOnly =
+		"Return counts only: count= and count.<kind>= lines, no body and no paging headers; startItem and maxSize are ignored.";
 }

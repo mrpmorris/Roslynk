@@ -37,7 +37,7 @@ public sealed class FindImplementationsTool
 		Returns resolvedSymbol (including method/indexer parameter types).
 		Body: project > folder > file > namespace; leaves: <typeKind>,<typeName>,<loc>.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""")]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
 	[McpServerTool(
 		Name = FindImplementationsName,
 		Title = "Find implementations",
@@ -50,11 +50,12 @@ public sealed class FindImplementationsTool
 		[Description("Interface/abstract symbol name.")] string symbolName,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		[Description(ParameterDescriptions.CountOnly)] bool countOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await FindImplementationsCoreAsync(model, instance, symbolName, startItem, maxSize, Budget, CancellationToken.None);
+		return await FindImplementationsCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> FindImplementationsCoreAsync(
@@ -63,6 +64,7 @@ public sealed class FindImplementationsTool
 		string symbolName,
 		int startItem = 1,
 		int maxSize = 0,
+		bool countOnly = false,
 		ResponseBudget? budget = null,
 		CancellationToken token = default)
 	{
@@ -105,7 +107,8 @@ public sealed class FindImplementationsTool
 			root.Items(),
 			startItem,
 			maxSize,
-			budget);
+			budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

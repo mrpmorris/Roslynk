@@ -16,4 +16,6 @@ internal static class MultiQueryTestHelpers
 	public static JsonElement Json(string value) => JsonSerializer.SerializeToElement(value);
 
 	public static JsonElement Json(int value) => JsonSerializer.SerializeToElement(value);
+
+	public static JsonElement Json(bool value) => JsonSerializer.SerializeToElement(value);
 }

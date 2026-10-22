@@ -33,7 +33,7 @@ public sealed class FindReadsTool
 		Finds reads, including compound/increment/ref, using the shared access contract.
 		Body follows find_references with one location per leaf.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""")]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
 	[McpServerTool(
 		Name = FindReadsName,
 		Title = "Find reads of a field, property or parameter",
@@ -46,11 +46,12 @@ public sealed class FindReadsTool
 		[Description(OutlineDescriptions.AccessSymbolName)] string symbolName,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		[Description(ParameterDescriptions.CountOnly)] bool countOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
-		return await FindReadsCoreAsync(model, instance, symbolName, startItem, maxSize, Budget, cancellationToken);
+		return await FindReadsCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget, cancellationToken);
 	}
 
 	internal Task<string> FindReadsCoreAsync(
@@ -59,7 +60,8 @@ public sealed class FindReadsTool
 		string symbolName,
 		int startItem = 1,
 		int maxSize = 0,
+		bool countOnly = false,
 		ResponseBudget? budget = null,
 		CancellationToken cancellationToken = default) =>
-		AccessQuery.RunAsync(model, instance, SymbolResolver, ProjectionService, symbolName, AccessKindText.IsRead, startItem, maxSize, budget, cancellationToken);
+		AccessQuery.RunAsync(model, instance, SymbolResolver, ProjectionService, symbolName, AccessKindText.IsRead, startItem, maxSize, countOnly, budget, cancellationToken);
 }

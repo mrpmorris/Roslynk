@@ -43,7 +43,7 @@ public sealed class GetCallersTool
 
 		Body: project > folder > file > namespace > containing type; leaves name callers and declaration locations.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""")]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
 	[McpServerTool(
 		Name = GetCallersName,
 		Title = "Get callers of a method",
@@ -56,11 +56,12 @@ public sealed class GetCallersTool
 		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		[Description(ParameterDescriptions.CountOnly)] bool countOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await GetCallersCoreAsync(model, instance, symbolName, startItem, maxSize, Budget, CancellationToken.None);
+		return await GetCallersCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> GetCallersCoreAsync(
@@ -69,6 +70,7 @@ public sealed class GetCallersTool
 		string symbolName,
 		int startItem = 1,
 		int maxSize = 0,
+		bool countOnly = false,
 		ResponseBudget? budget = null,
 		CancellationToken token = default)
 	{
@@ -137,7 +139,8 @@ public sealed class GetCallersTool
 			root.Items(),
 			startItem,
 			maxSize,
-			budget);
+			budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

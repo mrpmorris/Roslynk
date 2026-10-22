@@ -54,6 +54,9 @@ public sealed class GetSymbolBodyTool
 		Past-end startItem returns Invalid with count.
 		Paging requires one part; multiple parts without part= returns Invalid.
 		Oversized parts omit text with omitted=Y, truncated=Y, omittedParts=<k>; fetch with part=<n>, then page.
+
+		countOnly=true returns the headers plus count=<n> (returned-text lines; every part's lines when
+		part=0 spans several parts) and no text; startItem and maxSize are ignored.
 		""")]
 	[McpServerTool(
 		Name = GetSymbolBodyName,
@@ -69,11 +72,12 @@ public sealed class GetSymbolBodyTool
 		[Description("First returned-text line (1-based).")] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
 		[Description("Declaration part (1-based); 0 returns all, omitting oversized parts.")] int part = 0,
+		[Description("Return counts only: count=<returned-text lines>, no body and no paging headers; startItem and maxSize are ignored.")] bool countOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
-		return await GetSymbolBodyCoreAsync(model, instance, symbolName, includeLeadingTrivia, startItem, maxSize, part, Budget, cancellationToken);
+		return await GetSymbolBodyCoreAsync(model, instance, symbolName, includeLeadingTrivia, startItem, maxSize, part, countOnly, Budget, cancellationToken);
 	}
 
 	internal async Task<string> GetSymbolBodyCoreAsync(
@@ -84,6 +88,7 @@ public sealed class GetSymbolBodyTool
 		int startItem = 1,
 		int maxSize = 0,
 		int part = 0,
+		bool countOnly = false,
 		ResponseBudget? budget = null,
 		CancellationToken cancellationToken = default)
 	{
@@ -112,7 +117,7 @@ public sealed class GetSymbolBodyTool
 			if (declared.Count > 1)
 				return Failure(SymbolAmbiguity.Ambiguous(symbolName, declared));
 			if (declared.Count == 1)
-				return await RenderBodyAsync([declared[0]], symbolName, model, model.Solution, solutionDirectory, Failure, includeLeadingTrivia, startItem, maxSize, part, budget, cancellationToken);
+				return await RenderBodyAsync([declared[0]], symbolName, model, model.Solution, solutionDirectory, Failure, includeLeadingTrivia, startItem, maxSize, part, countOnly, budget, cancellationToken);
 
 			if (metadata.Count > 0)
 			{
@@ -129,7 +134,7 @@ public sealed class GetSymbolBodyTool
 			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		ProjectionSymbol resolved = groups[0][0];
-		return await RenderBodyAsync([resolved.Symbol], symbolName, model, resolved.Projection.Solution, solutionDirectory, Failure, includeLeadingTrivia, startItem, maxSize, part, budget, cancellationToken);
+		return await RenderBodyAsync([resolved.Symbol], symbolName, model, resolved.Projection.Solution, solutionDirectory, Failure, includeLeadingTrivia, startItem, maxSize, part, countOnly, budget, cancellationToken);
 	}
 
 	/// <summary>
@@ -148,6 +153,7 @@ public sealed class GetSymbolBodyTool
 		int startItem,
 		int maxSize,
 		int part,
+		bool countOnly,
 		ResponseBudget? budget,
 		CancellationToken cancellationToken)
 	{
@@ -173,7 +179,7 @@ public sealed class GetSymbolBodyTool
 
 		// Paging validation comes after resolution: a bad part on a nonexistent symbol is NotFound, the more
 		// useful answer. From here on every rejection names the argument that caused it.
-		if (maxSize < 0)
+		if (!countOnly && maxSize < 0)
 			return failure(Error.Invalid($"'maxSize' must be at least 0 (got {maxSize}). There is no unlimited mode: the response budget is the ceiling, so page a long declaration with startItem."));
 
 		if (part < 0 || part > parts.Count)
@@ -184,11 +190,11 @@ public sealed class GetSymbolBodyTool
 		if (startItem == 0)
 			startItem = 1;
 
-		if (startItem < 1)
+		if (!countOnly && startItem < 1)
 			return failure(Error.Invalid(
 				$"'startItem' counts the returned text's lines from 1 (got {startItem})."));
 
-		if (startItem > 1 && parts.Count > 1 && part == 0)
+		if (!countOnly && startItem > 1 && parts.Count > 1 && part == 0)
 			return failure(Error.Invalid(
 				$"'{requestedName}' is declared in {parts.Count} parts; pass part=<n> to page one of them."));
 
@@ -203,7 +209,34 @@ public sealed class GetSymbolBodyTool
 					builder.Header("part", part);
 					AddLocationHeaders(builder, selected, symbol, requestedName);
 				};
-			return PagedText(addHeaders, selected.Text, model.Status, startItem, maxSize, budget, failure);
+			return PagedText(addHeaders, selected.Text, model.Status, startItem, maxSize, budget, failure, countOnly);
+		}
+
+		if (countOnly)
+		{
+			// The whole-symbol listing is normally a whole-or-omitted overview. Count-only asks how many
+			// returned-text lines every part holds, so the parts' line items go through the shared pager's
+			// count path under the same headers the listing would carry.
+			var items = new List<OutlineItem>();
+			foreach (Part item in parts)
+				items.AddRange(LineItems(item.Text));
+
+			PagedRender counted = ItemPaging.Render(
+				model.Status,
+				builder =>
+				{
+					AddResolvedHeader(builder, symbol, requestedName);
+					builder.Header("parts", parts.Count);
+				},
+				_ => { },
+				items,
+				countOnly: true);
+			return counted switch
+			{
+				PagedRender.Complete complete => complete.Output,
+				PagedRender.Invalid invalid => failure(Error.Invalid(invalid.Message)),
+				_ => throw new InvalidOperationException($"Unexpected paged render {counted.GetType().Name}."),
+			};
 		}
 
 		int ceiling = (budget ?? ResponseBudget.Default).MaxChars;
@@ -271,7 +304,7 @@ public sealed class GetSymbolBodyTool
 	/// line. Items are the text's lines, so the shared pager's chain machinery degenerates to plain line
 	/// paging with partialItem standing in for partialLine.
 	/// </summary>
-	private static string PagedText(Action<OutlineBuilder> addHeaders, string text, SolutionStatus status, int startItem, int maxSize, ResponseBudget? budget, Func<Error, string> failure)
+	private static string PagedText(Action<OutlineBuilder> addHeaders, string text, SolutionStatus status, int startItem, int maxSize, ResponseBudget? budget, Func<Error, string> failure, bool countOnly)
 	{
 		PagedRender render = ItemPaging.Render(
 			status,
@@ -280,7 +313,8 @@ public sealed class GetSymbolBodyTool
 			LineItems(text),
 			startItem,
 			maxSize,
-			budget);
+			budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

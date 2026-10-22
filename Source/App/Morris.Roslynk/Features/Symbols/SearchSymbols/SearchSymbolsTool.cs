@@ -43,7 +43,7 @@ public sealed class SearchSymbolsTool
 		'kinds' filters the matched declarations by outline kind (namespace, class, struct, interface, enum,
 		delegate, module, method, property, field, event, localfunction), case-insensitively; an unknown kind
 		name is error=Invalid rather than an empty result.
-		""")]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
 	[McpServerTool(
 		Name = SearchSymbolsName,
 		Title = "Search symbols by name",
@@ -57,11 +57,12 @@ public sealed class SearchSymbolsTool
 		[Description("Optional kind filter: a JSON array of kind names, e.g. [\"Method\"]. A JSON-array string such as \"[\\\"Method\\\"]\" is also accepted. Kinds (case-insensitive): namespace, class, struct, interface, enum, delegate, module, method, property, field, event, localfunction. Omit or pass [] for all kinds.")] string[]? kinds = null,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
 		[Description(ParameterDescriptions.MaxSize)] int maxSize = 0,
+		[Description(ParameterDescriptions.CountOnly)] bool countOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await SearchSymbolsCoreAsync(model, instance, symbolNameFilter, kinds, startItem, maxSize, Budget, CancellationToken.None);
+		return await SearchSymbolsCoreAsync(model, instance, symbolNameFilter, kinds, startItem, maxSize, countOnly, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> SearchSymbolsCoreAsync(
@@ -71,6 +72,7 @@ public sealed class SearchSymbolsTool
 		string[]? kinds = null,
 		int startItem = 1,
 		int maxSize = 0,
+		bool countOnly = false,
 		ResponseBudget? budget = null,
 		CancellationToken token = default)
 	{
@@ -146,7 +148,8 @@ public sealed class SearchSymbolsTool
 			items: root.Items(),
 			startItem: startItem,
 			maxSize: maxSize,
-			budget: budget);
+			budget: budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

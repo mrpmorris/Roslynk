@@ -242,6 +242,86 @@ public class ItemPagingTests
 		Assert.Equal("class,C\n\tmember,N\n", RawBody(Assert.IsType<PagedRender.Page>(continuation).Output));
 	}
 
+	[Fact]
+	public void WhenCountOnlyHasNoItems_ThenTheResultIsCountZeroAndStartItemIsIgnored()
+	{
+		PagedRender render = ItemPaging.Render(
+			SolutionStatus.Ready,
+			builder => builder.Header("resolvedType", "Ns.C"),
+			_ => { },
+			[],
+			startItem: 7,
+			maxSize: 1,
+			countOnly: true);
+
+		string output = Assert.IsType<PagedRender.Complete>(render).Output;
+
+		// startItem 7 is past an empty set and maxSize is 1: both are page parameters, ignored by countOnly.
+		Assert.Equal("resolvedType=Ns.C\ncount=0\n", output);
+		Assert.DoesNotContain("\n\n", output);
+	}
+
+	[Fact]
+	public void WhenCountOnlyCountsMixedKinds_ThenPerKindLinesFollowTheVocabularyOrder()
+	{
+		var items = new[]
+		{
+			OutlineItem.Single("property,Count,3:5", []),
+			new OutlineItem([(0, "method,Combine"), (1, "localfunction,Helper")], []),
+			OutlineItem.Single("field,_ready,4:5", []),
+			OutlineItem.Single("CS0246,9:3,A message", []),
+		};
+
+		PagedRender render = ItemPaging.Render(SolutionStatus.Ready, _ => { }, _ => { }, items, countOnly: true);
+
+		string output = Assert.IsType<PagedRender.Complete>(render).Output;
+
+		// count= is the item total (4), while the per-kind lines count leaves: the member item carries a
+		// nested local function, so both of its leaves are counted, and the diagnostic line - whose first
+		// field is an id, not a kind - is not counted by kind.
+		Assert.Equal(
+			"count=4\ncount.method=1\ncount.property=1\ncount.field=1\ncount.localfunction=1\n",
+			output);
+	}
+
+	[Fact]
+	public void WhenCountOnlyIsSet_ThenNoPagingHeadersOrBlankLineAppear()
+	{
+		var items = Enumerable.Range(1, 5)
+			.Select(index => OutlineItem.Single($"method,M{index}", []))
+			.ToArray();
+
+		PagedRender render = ItemPaging.Render(
+			SolutionStatus.Building, _ => { }, _ => { }, items, startItem: 2, maxSize: 1, countOnly: true);
+
+		string output = Assert.IsType<PagedRender.Complete>(render).Output;
+
+		Assert.Equal("status=Building\ncount=5\ncount.method=5\n", output);
+		Assert.DoesNotContain("truncated=", output);
+		Assert.DoesNotContain("nextStartItem=", output);
+		Assert.DoesNotContain("partialItem=", output);
+		Assert.DoesNotContain("\n\n", output);
+	}
+
+	[Fact]
+	public void WhenCountOnlyHasACapHeader_ThenTheCapAddsNoSecondCount()
+	{
+		var items = new[] { OutlineItem.Single("method,A", []), OutlineItem.Single("method,B", []) };
+
+		PagedRender render = ItemPaging.Render(
+			SolutionStatus.Ready,
+			_ => { },
+			_ => { },
+			items,
+			capHeaders: builder => builder.Header("truncated", true),
+			countOnly: true);
+
+		string output = Assert.IsType<PagedRender.Complete>(render).Output;
+
+		Assert.Equal("truncated=Y\ncount=2\ncount.method=2\n", output);
+		Assert.Single(output.Split('\n'), line => line.StartsWith("count=", StringComparison.Ordinal));
+	}
+
 	/// <summary>The body of a rendered page: everything after the headers' blank line.</summary>
 	private static string RawBody(string page)
 	{

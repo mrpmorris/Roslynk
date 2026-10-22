@@ -507,6 +507,44 @@ public class GetDiagnosticsTests
 		Assert.DoesNotContain("CS0029", result);
 	}
 
+	[Fact]
+	public async Task WhenCountOnlyIsRequested_ThenTheHeadersAndCountAreReturnedWithoutRows()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+
+		string result = await subject.GetDiagnostics(
+			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, countOnly: true);
+
+		// The fixture lives under Source, where warnings are errors: CS0169 and CS0029 are both errors.
+		// The header counts stay complete; the body - and therefore the blank line - is absent.
+		Assert.Equal("2", HeaderOf(result, "errors"));
+		Assert.Equal("0", HeaderOf(result, "warnings"));
+		Assert.Equal("0", HeaderOf(result, "infos"));
+		Assert.NotEmpty(HeaderOf(result, "hidden"));
+		Assert.Equal("2", HeaderOf(result, "count"));
+		Assert.DoesNotContain("\n\n", result);
+	}
+
+	[Fact]
+	public async Task WhenCountOnlyIsCapped_ThenTruncatedIsKeptAndCountAppearsOnce()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+
+		string result = await subject.GetDiagnostics(
+			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, maxSize: 1, countOnly: true);
+
+		// The row cap still drops a candidate, so truncated=Y stays; count= is written once, by the pager.
+		Assert.Equal("2", HeaderOf(result, "errors"));
+		Assert.Equal("Y", HeaderOf(result, "truncated"));
+		Assert.Equal("1", HeaderOf(result, "count"));
+		Assert.DoesNotContain("\n\n", result);
+		Assert.Single(result.Split('\n'), line => line.StartsWith("count=", StringComparison.Ordinal));
+	}
+
 	private static string HeaderOf(string result, string name)
 	{
 		foreach (string line in result.Split('\n'))

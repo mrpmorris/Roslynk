@@ -198,6 +198,26 @@ public class MultiQueryTests
 		Assert.Contains("resolvedType=SimpleLibrary.Greeter", envelope);
 	}
 
+	[Fact]
+	public async Task WhenAnOperationRequestsCountOnly_ThenItsSlotIsASmallCompleteResult()
+	{
+		(MultiQueryTool subject, _) = await CreateAsync();
+		var operations = new List<MultiQueryOperation>
+		{
+			new(MultiQueryOp.get_members, Args(("symbolName", Json("SimpleLibrary.Holder")), ("countOnly", MultiQueryTestHelpers.Json(true)))),
+		};
+
+		string envelope = await subject.MultiQuery(TestSolutions.Simple, operations);
+
+		Assert.Contains("slot=1 tool=get_members", envelope);
+		Assert.Contains("resolvedType=SimpleLibrary.Holder", envelope);
+		// Holder: property Count (accessors are not method leaves since #149), field _ready, method Combine.
+		Assert.Contains("count=3", envelope);
+		Assert.Contains("count.method=1", envelope);
+		Assert.DoesNotContain("field,_ready", envelope);
+		Assert.DoesNotContain("retry=", envelope);
+	}
+
 	private static IReadOnlyDictionary<string, JsonElement> Args(params (string Key, JsonElement Value)[] pairs) =>
 		MultiQueryTestHelpers.Args(pairs);
 

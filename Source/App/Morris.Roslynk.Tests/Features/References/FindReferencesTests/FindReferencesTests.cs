@@ -127,4 +127,24 @@ public class FindReferencesTests
 		Assert.DoesNotContain("error=", resolved);
 	}
 
+	[Fact]
+	public async Task WhenCountOnlyIsRequested_ThenCountsAndPerKindLinesAreReturnedWithoutReferences()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
+
+		string normal = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Widget.Compute");
+		string counted = await subject.FindReferences(TestSolutions.Simple, "SimpleLibrary.Widget.Compute", countOnly: true);
+
+		// The reference sits inside UseCompute, so the normal body has one method leaf.
+		int items = normal.Split('\n').Count(line => line.TrimStart('\t').StartsWith("method,UseCompute", StringComparison.Ordinal));
+		Assert.True(items > 0, normal);
+		Assert.Contains("resolvedSymbol=SimpleLibrary.Widget.Compute", counted);
+		Assert.Contains($"count={items}", counted);
+		Assert.Contains($"count.method={items}", counted);
+		Assert.DoesNotContain("UseCompute", counted);
+		Assert.DoesNotContain("\n\n", counted);
+	}
+
 }

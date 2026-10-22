@@ -309,6 +309,23 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 		}
 	}
 
+	[Fact]
+	public void WhenEveryPagingToolIsPublished_ThenItPublishesAnOptionalCountOnlyBoolean()
+	{
+		foreach (McpServerTool tool in Tools)
+		{
+			JsonElement properties = tool.ProtocolTool.InputSchema.GetProperty("properties");
+			if (!properties.TryGetProperty("startItem", out _))
+				continue;
+
+			Assert.True(
+				properties.TryGetProperty("countOnly", out JsonElement countOnly),
+				$"'{tool.ProtocolTool.Name}' pages but publishes no 'countOnly'.");
+			Assert.Equal("boolean", PrimaryType(countOnly));
+			Assert.DoesNotContain("countOnly", Required(tool.ProtocolTool.InputSchema));
+		}
+	}
+
 	private static IEnumerable<(string ToolName, MethodInfo Method)> ToolMethods()
 	{
 		foreach (Type type in typeof(ServicesRegistration).Assembly.GetTypes())

@@ -68,6 +68,9 @@ public sealed class FindDeadCodeTool
 
 		maxSize caps the scan: count is candidates found; truncated=Y may mean the cap stopped scanning.
 		Omit maxSize for a complete scan.
+
+		countOnly=true returns the headers plus count=<n> and no leaves; maxSize still caps the scan,
+		so truncated=Y means the cap stopped the scan.
 		""")]
 	[McpServerTool(
 		Name = FindDeadCodeName,
@@ -82,11 +85,12 @@ public sealed class FindDeadCodeTool
 		[Description("Include unreferenced public/protected members (the API surface).")] bool includePublic = false,
 		[Description("Scan cap; omit for a complete scan.")] int maxSize = 0,
 		[Description(ParameterDescriptions.StartItem)] int startItem = 1,
+		[Description("Return counts only: count= and no leaves, no body and no paging headers; startItem is ignored, while maxSize still caps the scan.")] bool countOnly = false,
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		SolutionModel model = await instance.ReadModelAsync();
-		return await FindDeadCodeCoreAsync(model, instance, scope, includePublic, maxSize, startItem, Budget, CancellationToken.None);
+		return await FindDeadCodeCoreAsync(model, instance, scope, includePublic, maxSize, startItem, countOnly, Budget, CancellationToken.None);
 	}
 
 	internal async Task<string> FindDeadCodeCoreAsync(
@@ -96,6 +100,7 @@ public sealed class FindDeadCodeTool
 		bool includePublic = false,
 		int maxSize = 0,
 		int startItem = 1,
+		bool countOnly = false,
 		ResponseBudget? budget = null,
 		CancellationToken token = default)
 	{
@@ -171,7 +176,9 @@ public sealed class FindDeadCodeTool
 			capHeaders: capped
 				? builder =>
 				{
-					builder.Header("count", results.Count);
+					// countOnly: ItemPaging writes the single count= for the items; only the cap's signal is ours.
+					if (!countOnly)
+						builder.Header("count", results.Count);
 					builder.Header("truncated", true);
 				}
 				: null,
@@ -179,7 +186,8 @@ public sealed class FindDeadCodeTool
 			items: root.Items(),
 			startItem: startItem,
 			maxSize: maxSize,
-			budget: budget);
+			budget: budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,
