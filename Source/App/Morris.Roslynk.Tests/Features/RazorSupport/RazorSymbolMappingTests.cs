@@ -61,8 +61,9 @@ public class RazorSymbolMappingTests
 		Assert.DoesNotContain("_razor.g.cs", result);
 		Assert.Contains(result.Split('\n'), line => line.TrimStart('	') == "Panel.razor");
 		Assert.Contains(result.Split('\n'), line => line.TrimStart('	') == "property,Clock,1:1-1:28");
-		Assert.Contains(result.Split('\n'), line => line.TrimStart('	') == "method,get_Clock,1:1-1:28");
-		Assert.Contains(result.Split('\n'), line => line.TrimStart('	') == "method,set_Clock,1:1-1:28,IClockService");
+		// The accessors are represented by the property leaf, never as method leaves.
+		Assert.DoesNotContain(result.Split('\n'), line => line.TrimStart('\t').StartsWith("method,get_Clock", StringComparison.Ordinal));
+		Assert.DoesNotContain(result.Split('\n'), line => line.TrimStart('\t').StartsWith("method,set_Clock", StringComparison.Ordinal));
 	}
 
 	[Fact]

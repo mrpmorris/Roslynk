@@ -40,7 +40,9 @@ public sealed class GetMembersTool
 		referenced assemblies). Razor-generated members are placed under their .razor/.cshtml file with
 		the mapped location (@inject directive lines included). Leaves: <memberKind>,<name>,<loc>, plus
 		pipe-delimited parameter types for methods with parameters. Metadata loc is empty. Local functions
-		nest under their member in declaration order, one level per nesting.
+		nest under their member in declaration order, one level per nesting. Property/event accessors are
+		not listed as methods: each property/event appears once, as its own leaf, and includeMethods covers
+		ordinary methods, constructors and local functions only.
 
 		Includes all accessibilities. Filter with nameFilter/include*; use get_symbol_body for bodies.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
@@ -57,7 +59,7 @@ public sealed class GetMembersTool
 		[Description(ParameterDescriptions.SymbolName)] string symbolName,
 		[Description("Include inherited members.")] bool includeInherited = false,
 		[Description("Case-insensitive name filter: trailing '*' means prefix; otherwise substring. Null matches all.")] string? nameFilter = null,
-		[Description("Include methods.")] bool includeMethods = true,
+		[Description("Include methods (ordinary methods and constructors; property/event accessors are represented by their property/event leaf).")] bool includeMethods = true,
 		[Description("Include fields.")] bool includeFields = true,
 		[Description("Include properties.")] bool includeProperties = true,
 		[Description("Include events.")] bool includeEvents = true,
@@ -153,6 +155,11 @@ public sealed class GetMembersTool
 		{
 			foreach (ISymbol member in Collect(typeInstance, includeInherited)
 				.Where(member => !member.IsImplicitlyDeclared)
+				// Property and event accessors are methods in Roslyn, but they are represented once by the
+				// property/event leaf, so includeMethods covers ordinary methods, constructors and local
+				// functions only. AssociatedSymbol also covers explicit interface implementations and
+				// inherited accessors.
+				.Where(member => member is not IMethodSymbol { AssociatedSymbol: not null })
 				.Where(KindIncluded)
 				.Where(member => NameMatches(member.Name)))
 			{
@@ -272,20 +279,12 @@ public sealed class GetMembersTool
 
 		// A Razor-generated declaration that crosses #line regions (@inject properties, BuildRenderTree)
 		// has no single mapped span, so it is placed under the .razor/.cshtml file its first mapped
-		// region names, with that region's location. A property/event accessor has no mapping of its own,
-		// so it is placed by its associated property/event, as an @code member's accessor is.
+		// region names, with that region's location.
 		if (!span.HasMappedPath && RazorMapping.IsRazorGeneratedDocument(tree))
 		{
-			SyntaxReference target = reference;
-			if (member is IMethodSymbol { AssociatedSymbol: { } associated }
-				&& associated.DeclaringSyntaxReferences.FirstOrDefault() is { } associatedReference)
-			{
-				target = associatedReference;
-			}
-
-			SourceText generated = await target.SyntaxTree.GetTextAsync(cancellationToken);
+			SourceText generated = await reference.SyntaxTree.GetTextAsync(cancellationToken);
 			IReadOnlyList<RazorSourceRange> mapped = await RazorMapping.MapToRazorSourceAsync(
-				solution, target.SyntaxTree, target.Span, generated, cancellationToken);
+				solution, reference.SyntaxTree, reference.Span, generated, cancellationToken);
 			if (mapped.Count > 0)
 			{
 				RazorSourceRange first = mapped[0];

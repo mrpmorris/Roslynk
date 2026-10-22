@@ -148,6 +148,90 @@ public class GetMembersTests
 		Assert.Equal("string|string", fields[3]);
 	}
 
+	[Fact]
+	public async Task WhenAMetadataTypeIsListedWithoutProperties_ThenNoAccessorMethodsAreReturned()
+	{
+		string result = await RunAsync(
+			"System.String",
+			includeProperties: false,
+			includeEvents: false,
+			includeFields: false,
+			includeNestedTypes: false);
+
+		Assert.Contains("method,Substring", result);
+		// Constructors are ordinary methods for this flag and must survive the accessor exclusion.
+		Assert.Contains("method,.ctor,", result);
+		Assert.DoesNotContain(result.Split('\n'), line => line.TrimStart('\t').StartsWith("method,get_", StringComparison.Ordinal));
+		Assert.DoesNotContain(result.Split('\n'), line => line.TrimStart('\t').StartsWith("method,set_", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public async Task WhenASourceTypeHasAProperty_ThenItsLeafRepresentsItAndNoAccessorMethodsAreReturned()
+	{
+		string result = await RunAsync("SimpleLibrary.Holder");
+
+		Assert.Contains("property,Count,", result);
+		Assert.Contains("method,Combine,", result);
+		Assert.DoesNotContain("\tmethod,get_Count,", result);
+		Assert.DoesNotContain("\tmethod,set_Count,", result);
+	}
+
+	[Fact]
+	public async Task WhenMethodsAreIncludedAndPropertiesAreExcluded_ThenOnlyOrdinaryMethodsRemain()
+	{
+		string result = await RunAsync("SimpleLibrary.Holder", includeProperties: false);
+
+		Assert.Contains("\tmethod,Combine,", result);
+		Assert.DoesNotContain("\tproperty,", result);
+		Assert.DoesNotContain(result.Split('\n'), line => line.TrimStart('\t').StartsWith("method,get_", StringComparison.Ordinal));
+		Assert.DoesNotContain(result.Split('\n'), line => line.TrimStart('\t').StartsWith("method,set_", StringComparison.Ordinal));
+	}
+
+	[Fact]
+	public async Task WhenASourceTypeHasExplicitPropertyAndEventAccessors_ThenOnlyTheirLeavesAreReturned()
+	{
+		string solution = TestSolutions.CreateScratchSimpleSolution();
+		string library = Path.Combine(Path.GetDirectoryName(solution)!, "SimpleLibrary");
+		await File.WriteAllTextAsync(Path.Combine(library, "AccessorProbe.cs"), """
+			namespace SimpleLibrary;
+
+			public class AccessorProbe
+			{
+				public AccessorProbe(int value)
+				{
+					_value = value;
+				}
+
+				public int Value
+				{
+					get => _value;
+					set => _value = value;
+				}
+
+				public event System.EventHandler? Changed;
+
+				private int _value;
+
+				public void Raise() => Changed?.Invoke(this, System.EventArgs.Empty);
+			}
+			""");
+
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(solution);
+		var subject = new GetMembersTool(registry, new SymbolResolver(), new ProjectionService());
+
+		string result = await subject.GetMembers(solution, "SimpleLibrary.AccessorProbe");
+
+		Assert.Contains("property,Value,", result);
+		Assert.Contains("event,Changed,", result);
+		Assert.Contains("\tmethod,.ctor,", result);
+		Assert.Contains("\tmethod,Raise,", result);
+		Assert.DoesNotContain(result.Split('\n'), line => line.TrimStart('\t').StartsWith("method,get_Value", StringComparison.Ordinal));
+		Assert.DoesNotContain(result.Split('\n'), line => line.TrimStart('\t').StartsWith("method,set_Value", StringComparison.Ordinal));
+		Assert.DoesNotContain(result.Split('\n'), line => line.TrimStart('\t').StartsWith("method,add_Changed", StringComparison.Ordinal));
+		Assert.DoesNotContain(result.Split('\n'), line => line.TrimStart('\t').StartsWith("method,remove_Changed", StringComparison.Ordinal));
+	}
+
 	private static async Task<string> RunAsync(
 		string symbolName,
 		bool includeInherited = false,

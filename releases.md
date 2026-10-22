@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `get_members` no longer lists property/event accessors as `method` leaves: each property/event appears once as its own leaf, so `includeMethods` covers ordinary methods, constructors and local functions (Fixes #149)
 - `search_symbols`' `query` parameter is renamed to `symbolNameFilter`, a breaking rename that states it matches a symbol's own name rather than free text (Fixes #152)
 - Paged tools treat `startItem=0` as page 1 instead of rejecting it; a negative `startItem` is still `error=Invalid` (Fixes #150)
 - The tool ships a commented `appsettings.json.example` instead of `appsettings.json`, so every setting is discoverable and no packaged file is silently replaced on upgrade; `appsettings.json` stays optional and the daemon runs on code defaults when it is absent (Fixes #143)
