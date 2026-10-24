@@ -26,11 +26,21 @@ public sealed class SolutionWorkspace : IDisposable
 
 	private readonly IReadOnlyList<string> FixedLoadDiagnostics;
 
+	private readonly IReadOnlyList<string> FixedLoadWarnings;
+
 	/// <summary>
-	/// The load's messages: those fixed at load, plus the tracked analyzers' messages that still apply (a
-	/// skipped generator DLL drops out once it is built and attached).
+	/// The load's failures: those fixed at load, plus the tracked analyzers' messages that still apply (a
+	/// skipped generator DLL drops out once it is built and attached). NuGet restore warnings are not
+	/// failures and are listed by <see cref="LoadWarnings"/> instead.
 	/// </summary>
 	public IReadOnlyList<string> LoadDiagnostics => [.. FixedLoadDiagnostics, .. TrackedAnalyzers.Messages];
+
+	/// <summary>
+	/// Restore warnings the load reported as workspace failures, as <c>&lt;code&gt;: &lt;message&gt;</c>
+	/// (NU1902/NU1903/NU1510 …). The project loaded; see <see cref="RestoreLogs"/> for how a failure's text
+	/// is matched against the warning entries the restore wrote to the projects' <c>project.assets.json</c>.
+	/// </summary>
+	public IReadOnlyList<string> LoadWarnings => FixedLoadWarnings;
 
 	/// <summary>
 	/// The analyzer DLLs kept fresh after load: skipped ones that were missing, and those built by a project
@@ -45,12 +55,14 @@ public sealed class SolutionWorkspace : IDisposable
 		MSBuildWorkspace workspace,
 		Solution solution,
 		IReadOnlyList<string> loadDiagnostics,
+		IReadOnlyList<string> loadWarnings,
 		TrackedAnalyzers trackedAnalyzers,
 		RazorGenerationState razor)
 	{
 		Workspace = workspace;
 		Solution = solution;
 		FixedLoadDiagnostics = loadDiagnostics;
+		FixedLoadWarnings = loadWarnings;
 		TrackedAnalyzers = trackedAnalyzers;
 		Razor = razor;
 	}
@@ -64,6 +76,7 @@ public sealed class SolutionWorkspace : IDisposable
 			throw new ArgumentNullException(nameof(solutionPath));
 
 		var loadDiagnostics = new ConcurrentBag<string>();
+		var workspaceFailures = new ConcurrentBag<WorkspaceDiagnostic>();
 
 		using (Activity? loadActivity = RoslynkActivitySource.Instance.StartActivity("load_solution"))
 		{
@@ -77,7 +90,7 @@ public sealed class SolutionWorkspace : IDisposable
 			MSBuildWorkspace workspace = MSBuildWorkspace.Create();
 			Solution solution;
 
-			using (workspace.RegisterWorkspaceFailedHandler(e => loadDiagnostics.Add(e.Diagnostic.Message)))
+			using (workspace.RegisterWorkspaceFailedHandler(e => workspaceFailures.Add(e.Diagnostic)))
 			{
 				using (Activity? openActivity = RoslynkActivitySource.Instance.StartActivity("open_solution_async"))
 				{
@@ -127,6 +140,23 @@ public sealed class SolutionWorkspace : IDisposable
 					openActivity?.SetTag(ActivityTags.ProjectCountTag, solution.Projects.Count());
 				}
 
+				// A restore warning reaches this load as a WorkspaceDiagnostic of Kind=Failure: neither the
+				// kind nor the text separates it from a real failure. The restore that preceded the load wrote
+				// every entry's code and level to the projects' project.assets.json, so classify the collected
+				// messages against those warning entries now that the files exist. With no failure there is
+				// nothing to classify, so the assets files are not read at all.
+				IReadOnlyList<string> loadWarnings = [];
+				if (!workspaceFailures.IsEmpty)
+				{
+					IReadOnlyDictionary<string, string> restoreWarnings = RestoreLogs.ReadWarnings(
+						solution.Projects.Select(project => project.FilePath),
+						Path.GetDirectoryName(solutionPath));
+
+					(loadWarnings, IReadOnlyList<string> failures) = RestoreLogs.Split(workspaceFailures, restoreWarnings);
+					foreach (string failure in failures)
+						loadDiagnostics.Add(failure);
+				}
+
 				// Shadow-copy remap MUST precede the Razor augmentation: AugmentAsync requests compilations,
 				// which run source generators and therefore load every analyzer reference. If the references
 				// still use MSBuildWorkspace's default loader at that point, the originals in bin/obj get
@@ -146,7 +176,7 @@ public sealed class SolutionWorkspace : IDisposable
 				}
 
 				loadActivity?.SetTag(ActivityTags.ProjectCountTag, solution.Projects.Count());
-				return new SolutionWorkspace(workspace, solution, loadDiagnostics.ToArray(), trackedAnalyzers, razor);
+				return new SolutionWorkspace(workspace, solution, loadDiagnostics.ToArray(), loadWarnings, trackedAnalyzers, razor);
 			}
 		}
 	}

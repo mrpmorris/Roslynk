@@ -138,6 +138,38 @@ public class GetSolutionStatusTests
 	}
 
 	[Fact]
+	public void WhenRestoreWarningsAreRendered_ThenEachIsOneIndentedLoadWarningLine()
+	{
+		var builder = new OutlineBuilder();
+
+		GetSolutionStatusTool.AppendMessages(
+			builder,
+			"loadWarning",
+			["NU1903: Package 'X' has a known high severity vulnerability", "NU1510: PackageReference Y will not be pruned"],
+			limit: null);
+
+		Assert.Equal(
+			"	loadWarning=NU1510: PackageReference Y will not be pruned\n	loadWarning=NU1903: Package 'X' has a known high severity vulnerability\n",
+			builder.ToString());
+	}
+
+	[Fact]
+	public void WhenThereAreMoreRestoreWarningsThanTheLimit_ThenTheRestAreCountedAsLoadWarningsTruncated()
+	{
+		string[] warnings = Enumerable.Range(0, GetSolutionStatusTool.MaxLoadDiagnostics + 3)
+			.Select(i => $"NU1903: warning {i:D3}")
+			.ToArray();
+		var builder = new OutlineBuilder();
+
+		GetSolutionStatusTool.AppendMessages(builder, "loadWarning", warnings, GetSolutionStatusTool.MaxLoadDiagnostics);
+
+		string[] lines = builder.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries);
+		Assert.Equal(GetSolutionStatusTool.MaxLoadDiagnostics + 1, lines.Length);
+		Assert.Equal("	loadWarning=NU1903: warning 000", lines[0]);
+		Assert.Equal("	loadWarningsTruncated=3", lines[^1]);
+	}
+
+	[Fact]
 	public void WhenTheLimitIsDescribed_ThenTheTextMatchesTheConstant()
 	{
 		Assert.Equal(GetSolutionStatusTool.MaxLoadDiagnosticsText, GetSolutionStatusTool.MaxLoadDiagnostics.ToString());

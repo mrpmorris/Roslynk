@@ -15,4 +15,12 @@ public class LoadAsyncTests
 		Assert.Equal("SimpleLibrary", project.Name);
 		Assert.Contains(project.Documents, document => document.Name == "Greeter.cs");
 	}
+
+	[Fact]
+	public async Task WhenLoadingASolutionWithoutRestoreWarnings_ThenNoLoadWarningsAreReported()
+	{
+		using SolutionWorkspace subject = await SolutionWorkspace.LoadAsync(TestSolutions.Simple);
+
+		Assert.Empty(subject.LoadWarnings);
+	}
 }

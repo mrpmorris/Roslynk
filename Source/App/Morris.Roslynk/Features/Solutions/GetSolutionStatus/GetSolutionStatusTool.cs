@@ -3,6 +3,7 @@ using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
+using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Features.Solutions.GetSolutionStatus;
 
@@ -29,8 +30,11 @@ public sealed class GetSolutionStatusTool
 		loaded tracks Building progress; total='?' until known after initial loading.
 
 		Ready solutions add indented loadDiagnostic=<message> for analyzer/generator load failures,
-		project evaluation failures or missing SDKs, which may explain compiler errors.
-		Other states omit messages. Up to 20 per solution, then loadDiagnosticsTruncated=<n>.
+		project evaluation failures or missing SDKs, which may explain compiler errors, then
+		loadWarning=<code>: <message> for NuGet restore warnings (NU1902/NU1903/NU1510 ...) that
+		MSBuild reports as failures although the project loaded.
+		Other states omit messages. Up to 20 of each per solution, then loadDiagnosticsTruncated=<n>
+		and loadWarningsTruncated=<n>.
 
 		Any state adds indented watchDiagnostic=<message> when the file watcher failed in a way a
 		reload would not fix (e.g. the OS watch limit): changes on disk may then not be picked up.
@@ -106,7 +110,11 @@ public sealed class GetSolutionStatusTool
 
 			// Messages are final only once the load is done; a Building/Updating/Faulted solution may still be adding them.
 			if (model.Status == SolutionStatus.Ready)
-				AppendMessages(builder, "loadDiagnostic", instance.Workspace?.LoadDiagnostics ?? [], messageLimit);
+			{
+				SolutionWorkspace? workspace = instance.Workspace;
+				AppendMessages(builder, "loadDiagnostic", workspace?.LoadDiagnostics ?? [], messageLimit);
+				AppendMessages(builder, "loadWarning", workspace?.LoadWarnings ?? [], messageLimit);
+			}
 
 			WatchDiagnosticsSnapshot watch = instance.WatchDiagnostics;
 			AppendMessages(builder, "watchDiagnostic", watch.Messages, messageLimit, watch.Dropped);
