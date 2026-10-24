@@ -77,22 +77,24 @@ public sealed class GetDiagnosticsTool
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		return await QueryExecution.QueryAsync(
 			instance,
-			(model, token) => GetDiagnosticsCoreAsync(
-				model,
-				instance,
-				includeErrors,
-				includeWarnings,
-				includeInfo,
-				includeHidden,
-				includeAnalyzers,
-				projectName,
-				filePath,
-				ids,
-				summaryOnly,
-				startItem,
-				maxSize,
-				countOnly,
-				token),
+			(model, token) =>
+				GetDiagnosticsCoreAsync(
+					model: model,
+					instance: instance,
+					includeErrors: includeErrors,
+					includeWarnings: includeWarnings,
+					includeInfo: includeInfo,
+					includeHidden: includeHidden,
+					includeAnalyzers: includeAnalyzers,
+					projectName: projectName,
+					filePath: filePath,
+					ids: ids,
+					summaryOnly: summaryOnly,
+					startItem: startItem,
+					maxSize: maxSize,
+					countOnly: countOnly,
+					cancellationToken: token
+				),
 			cancellationToken);
 	}
 

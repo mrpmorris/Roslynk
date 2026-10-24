@@ -72,7 +72,23 @@ public sealed class GetMembersTool
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		return await QueryExecution.QueryAsync(
 			instance,
-			(model, _) => GetMembersCoreAsync(model, instance, symbolName, includeInherited, nameFilter, includeMethods, includeFields, includeProperties, includeEvents, includeNestedTypes, startItem, maxSize, countOnly, Budget, CancellationToken.None),
+			(model, _) =>
+				GetMembersCoreAsync(
+					model: model,
+					instance: instance,
+					symbolName: symbolName,
+					includeInherited: includeInherited,
+					nameFilter: nameFilter,
+					includeMethods: includeMethods,
+					includeFields: includeFields,
+					includeProperties: includeProperties,
+					includeEvents: includeEvents,
+					includeNestedTypes: includeNestedTypes,
+					startItem: startItem,
+					maxSize: maxSize,
+					countOnly: countOnly,
+					Budget: Budget
+				),
 			cancellationToken);
 	}
 
@@ -90,7 +106,7 @@ public sealed class GetMembersTool
 		int startItem = 1,
 		int maxSize = 0,
 		bool countOnly = false,
-		ResponseBudget? budget = null,
+		ResponseBudget? Budget = null,
 		CancellationToken token = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
@@ -234,7 +250,7 @@ public sealed class GetMembersTool
 			collected,
 			startItem,
 			maxSize,
-			budget,
+			Budget,
 			countOnly: countOnly);
 		return render switch
 		{

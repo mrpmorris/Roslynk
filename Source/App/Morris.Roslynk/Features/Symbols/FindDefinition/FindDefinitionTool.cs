@@ -53,7 +53,14 @@ public sealed class FindDefinitionTool
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		return await QueryExecution.QueryAsync(
 			instance,
-			(model, _) => FindDefinitionCoreAsync(model, instance, filePath, line, column, CancellationToken.None),
+			(model, _) =>
+				FindDefinitionCoreAsync(
+					model: model,
+					instance: instance,
+					filePath: filePath,
+					line: line,
+					column: column
+				),
 			cancellationToken);
 	}
 

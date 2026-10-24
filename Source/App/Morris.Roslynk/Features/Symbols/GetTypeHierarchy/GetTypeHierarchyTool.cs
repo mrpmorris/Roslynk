@@ -55,7 +55,16 @@ public sealed class GetTypeHierarchyTool
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		return await QueryExecution.QueryAsync(
 			instance,
-			(model, _) => GetTypeHierarchyCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget),
+			(model, _) =>
+				GetTypeHierarchyCoreAsync(
+					model: model,
+					instance: instance,
+					symbolName: symbolName,
+					startItem: startItem,
+					maxSize: maxSize,
+					countOnly: countOnly,
+					Budget: Budget
+				),
 			cancellationToken);
 	}
 
@@ -66,7 +75,7 @@ public sealed class GetTypeHierarchyTool
 		int startItem = 1,
 		int maxSize = 0,
 		bool countOnly = false,
-		ResponseBudget? budget = null,
+		ResponseBudget? Budget = null,
 		CancellationToken token = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
@@ -144,7 +153,7 @@ public sealed class GetTypeHierarchyTool
 			items,
 			startItem,
 			maxSize,
-			budget,
+			Budget,
 			countOnly: countOnly);
 		return render switch
 		{

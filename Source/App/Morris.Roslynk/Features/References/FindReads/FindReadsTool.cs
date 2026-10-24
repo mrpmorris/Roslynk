@@ -52,7 +52,17 @@ public sealed class FindReadsTool
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		return await QueryExecution.QueryAsync(
 			instance,
-			(model, token) => FindReadsCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget, token),
+			(model, token) =>
+				FindReadsCoreAsync(
+					model: model,
+					instance: instance,
+					symbolName: symbolName,
+					startItem: startItem,
+					maxSize: maxSize,
+					countOnly: countOnly,
+					Budget: Budget,
+					cancellationToken: token
+				),
 			cancellationToken);
 	}
 
@@ -63,7 +73,7 @@ public sealed class FindReadsTool
 		int startItem = 1,
 		int maxSize = 0,
 		bool countOnly = false,
-		ResponseBudget? budget = null,
+		ResponseBudget? Budget = null,
 		CancellationToken cancellationToken = default) =>
-		AccessQuery.RunAsync(model, instance, SymbolResolver, ProjectionService, symbolName, AccessKindText.IsRead, startItem, maxSize, countOnly, budget, cancellationToken);
+		AccessQuery.RunAsync(model, instance, SymbolResolver, ProjectionService, symbolName, AccessKindText.IsRead, startItem, maxSize, countOnly, Budget, cancellationToken);
 }

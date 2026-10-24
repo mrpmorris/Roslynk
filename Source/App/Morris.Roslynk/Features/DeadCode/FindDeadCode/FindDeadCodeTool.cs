@@ -91,7 +91,17 @@ public sealed class FindDeadCodeTool
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		return await QueryExecution.QueryAsync(
 			instance,
-			(model, _) => FindDeadCodeCoreAsync(model, instance, scope, includePublic, maxSize, startItem, countOnly, Budget, CancellationToken.None),
+			(model, _) =>
+				FindDeadCodeCoreAsync(
+					model: model,
+					instance: instance,
+					scope: scope,
+					includePublic: includePublic,
+					maxSize: maxSize,
+					startItem: startItem,
+					countOnly: countOnly,
+					Budget: Budget
+				),
 			cancellationToken);
 	}
 
@@ -103,7 +113,7 @@ public sealed class FindDeadCodeTool
 		int maxSize = 0,
 		int startItem = 1,
 		bool countOnly = false,
-		ResponseBudget? budget = null,
+		ResponseBudget? Budget = null,
 		CancellationToken token = default)
 	{
 		if (model.Solution is null)
@@ -188,7 +198,7 @@ public sealed class FindDeadCodeTool
 			items: root.Items(),
 			startItem: startItem,
 			maxSize: maxSize,
-			budget: budget,
+			budget: Budget,
 			countOnly: countOnly);
 		return render switch
 		{
