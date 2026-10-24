@@ -85,8 +85,10 @@ public sealed partial class GetExpressionInfoTool
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
-		SolutionModel model = await instance.ReadModelAsync();
-		return await GetExpressionInfoCoreAsync(model, instance, filePath, line, column, CancellationToken.None);
+		return await QueryExecution.QueryAsync(
+			instance,
+			(model, _) => GetExpressionInfoCoreAsync(model, instance, filePath, line, column, CancellationToken.None),
+			cancellationToken);
 	}
 
 	internal async Task<string> GetExpressionInfoCoreAsync(SolutionModel model, RoslynInstance instance, string filePath, int line, int column, CancellationToken token = default)

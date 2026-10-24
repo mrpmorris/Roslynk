@@ -76,8 +76,10 @@ public sealed class GetSymbolBodyTool
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
-		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
-		return await GetSymbolBodyCoreAsync(model, instance, symbolName, includeLeadingTrivia, startItem, maxSize, part, countOnly, Budget, cancellationToken);
+		return await QueryExecution.QueryAsync(
+			instance,
+			(model, token) => GetSymbolBodyCoreAsync(model, instance, symbolName, includeLeadingTrivia, startItem, maxSize, part, countOnly, Budget, token),
+			cancellationToken);
 	}
 
 	internal async Task<string> GetSymbolBodyCoreAsync(

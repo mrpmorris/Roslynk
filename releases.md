@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Read-only tools run through a shared snapshot guard that returns `error=Stale` (with the current `snapshot=<id>`) when the solution changes mid-query or the query is cancelled, and `multi_query` rejects the whole batch rather than mixing generations; write tools stay on the write pipeline (Fixes #165)
 - Semantic write tools (`rename_symbol`, `rename_parameter`, `change_signature`, `extract_method`, `remove_unused_usings`, `apply_code_fix`, `apply_code_action`) keep each rewritten file's BOM-declared encoding instead of rewriting it as UTF-8 without a BOM, so a `.cs`/`.razor` file with a UTF-8 BOM keeps it and a BOM-less file still gains none (Fixes #162)
 - Every paging tool accepts `countOnly=true`, returning the headers plus `count=` and one `count.<kind>=` line per kind present instead of the body, with no `truncated=`/`nextStartItem=` and `startItem`/`maxSize` page limits ignored (`get_diagnostics`' row cap and `find_dead_code`'s scan cap still apply) (Fixes #153)
 - `get_members` no longer lists property/event accessors as `method` leaves: each property/event appears once as its own leaf, so `includeMethods` covers ordinary methods, constructors and local functions (Fixes #149)

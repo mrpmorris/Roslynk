@@ -54,8 +54,10 @@ public sealed class FindImplementationsTool
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
-		SolutionModel model = await instance.ReadModelAsync();
-		return await FindImplementationsCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget, CancellationToken.None);
+		return await QueryExecution.QueryAsync(
+			instance,
+			(model, _) => FindImplementationsCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget, CancellationToken.None),
+			cancellationToken);
 	}
 
 	internal async Task<string> FindImplementationsCoreAsync(
