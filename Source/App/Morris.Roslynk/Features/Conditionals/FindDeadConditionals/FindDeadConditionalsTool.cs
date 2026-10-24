@@ -55,30 +55,30 @@ public sealed class FindDeadConditionalsTool
 			instance,
 			(model, _) =>
 				FindDeadConditionalsCoreAsync(
-					model: model,
-					instance: instance,
-					startItem: startItem,
-					maxSize: maxSize,
-					countOnly: countOnly,
+					Model: model,
+					Instance: instance,
+					StartItem: startItem,
+					MaxSize: maxSize,
+					CountOnly: countOnly,
 					Budget: Budget
 				),
 			cancellationToken);
 	}
 
 	internal async Task<string> FindDeadConditionalsCoreAsync(
-		SolutionModel model,
-		RoslynInstance instance,
-		int startItem = 1,
-		int maxSize = 0,
-		bool countOnly = false,
+		SolutionModel Model,
+		RoslynInstance Instance,
+		int StartItem = 1,
+		int MaxSize = 0,
+		bool CountOnly = false,
 		ResponseBudget? Budget = null,
-		CancellationToken token = default)
+		CancellationToken Token = default)
 	{
-		if (model.Solution is null)
-			return OutlineError.Format(Error.Indexing(instance.LoadedProjects), model.Status);
+		if (Model.Solution is null)
+			return OutlineError.Format(Error.Indexing(Instance.LoadedProjects), Model.Status);
 
-		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
-		IReadOnlyList<DeadConditional> dead = await ConditionalCoverage.FindNeverBuiltAsync(model.Solution);
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(Model.Solution);
+		IReadOnlyList<DeadConditional> dead = await ConditionalCoverage.FindNeverBuiltAsync(Model.Solution);
 
 		IEnumerable<IGrouping<string, DeadConditional>> byFile = dead
 			.GroupBy(item => SolutionRelativePath.Of(solutionDirectory, item.FilePath) ?? item.FilePath)
@@ -94,7 +94,7 @@ public sealed class FindDeadConditionalsTool
 			}
 		}
 
-		// Items for the shared pager: one entry each, its file line as the open container.
+		// Items for the shared pager: one entry each, its file Line as the open container.
 		var items = new List<OutlineItem>();
 		foreach (IGrouping<string, DeadConditional> file in byFile)
 		{
@@ -103,19 +103,19 @@ public sealed class FindDeadConditionalsTool
 		}
 
 		PagedRender render = ItemPaging.Render(
-			model.Status,
+			Model.Status,
 			addHeaders: builder => builder.Header("deadConditionals", dead.Count),
 			renderBody: RenderBody,
 			items,
-			startItem,
-			maxSize,
+			StartItem,
+			MaxSize,
 			Budget,
-			countOnly: countOnly);
+			countOnly: CountOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,
 			PagedRender.Page paged => paged.Output,
-			PagedRender.Invalid invalid => OutlineError.Format(Error.Invalid(invalid.Message), model.Status),
+			PagedRender.Invalid invalid => OutlineError.Format(Error.Invalid(invalid.Message), Model.Status),
 			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
 		};
 	}

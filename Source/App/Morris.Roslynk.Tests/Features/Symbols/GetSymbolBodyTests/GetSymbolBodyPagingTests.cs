@@ -168,7 +168,7 @@ public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.L
 	{
 		// No maxSize: the page is char-bounded by the tool's budget alone.
 		string result = await Fixture.CoreWithAllowance(10_000)
-			.GetSymbolBodyCoreAsync(Fixture.Model, Fixture.Instance, "Repro.Big", budget: new ResponseBudget(10_000));
+			.GetSymbolBodyCoreAsync(Fixture.Model, Fixture.Instance, "Repro.Big", Budget: new ResponseBudget(10_000));
 
 		Assert.True(result.Length <= 10_000, $"Result was {result.Length} chars; the budget is 10,000.");
 		Assert.Contains("truncated=Y\n", result);
@@ -188,7 +188,7 @@ public class GetSymbolBodyPagingTests : IClassFixture<GetSymbolBodyPagingTests.L
 	public async Task WhenASingleLineExceedsTheWholeBudget_ThenPartialItemNamesIt()
 	{
 		string result = await Fixture.CoreWithAllowance(10_000)
-			.GetSymbolBodyCoreAsync(Fixture.Model, Fixture.Instance, "Repro.LongLine.Value", budget: new ResponseBudget(10_000));
+			.GetSymbolBodyCoreAsync(Fixture.Model, Fixture.Instance, "Repro.LongLine.Value", Budget: new ResponseBudget(10_000));
 
 		Assert.Contains("truncated=Y\n", result);
 		Assert.Contains("count=1\n", result);

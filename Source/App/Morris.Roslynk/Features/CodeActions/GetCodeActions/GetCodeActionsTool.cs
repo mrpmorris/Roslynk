@@ -56,14 +56,14 @@ public sealed class GetCodeActionsTool
 			instance,
 			(model, token) =>
 				GetCodeActionsCoreAsync(
-					model: model,
-					instance: instance,
-					filePath: filePath,
-					line: line,
-					column: column,
-					endLine: endLine,
-					endColumn: endColumn,
-					cancellationToken: token
+					Model: model,
+					Instance: instance,
+					FilePath: filePath,
+					Line: line,
+					Column: column,
+					EndLine: endLine,
+					EndColumn: endColumn,
+					CancellationToken: token
 				),
 			cancellationToken);
 	}
@@ -73,38 +73,38 @@ public sealed class GetCodeActionsTool
 	/// only, so a publication mid-flight cannot mix two generations into one action list.
 	/// </summary>
 	internal async Task<string> GetCodeActionsCoreAsync(
-		SolutionModel model,
-		RoslynInstance instance,
-		string filePath,
-		int line,
-		int column,
-		int? endLine,
-		int? endColumn,
-		CancellationToken cancellationToken = default)
+		SolutionModel Model,
+		RoslynInstance Instance,
+		string FilePath,
+		int Line,
+		int Column,
+		int? EndLine,
+		int? EndColumn,
+		CancellationToken CancellationToken = default)
 	{
-		if (model.Solution is null)
-			return OutlineError.Format(Error.Indexing(instance.LoadedProjects), model.Status);
+		if (Model.Solution is null)
+			return OutlineError.Format(Error.Indexing(Instance.LoadedProjects), Model.Status);
 
 		(RazorSourceDocument? source, Error? pathError) = await RazorSourceDocument.ResolveWithErrorAsync(
-			model.Solution,
-			filePath,
-			$"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document.",
-			cancellationToken);
+			Model.Solution,
+			FilePath,
+			$"'{FilePath}' is not a solution-compiled .cs, .razor or .cshtml document.",
+			CancellationToken);
 		if (pathError is Error error)
-			return OutlineError.Format(error, model.Status);
+			return OutlineError.Format(error, Model.Status);
 		if (source?.Document.FilePath is null)
-			return OutlineError.Format(Error.NotFound($"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document."), model.Status);
+			return OutlineError.Format(Error.NotFound($"'{FilePath}' is not a solution-compiled .cs, .razor or .cshtml document."), Model.Status);
 
 		Document document = source.Document;
-		SourceText text = await source.GetSourceTextAsync(cancellationToken);
-		TextSpan? mapped = await source.MapToDocumentAsync(CodeActionService.SpanFor(text, line, column, endLine, endColumn), cancellationToken);
+		SourceText text = await source.GetSourceTextAsync(CancellationToken);
+		TextSpan? mapped = await source.MapToDocumentAsync(CodeActionService.SpanFor(text, Line, Column, EndLine, EndColumn), CancellationToken);
 		if (mapped is not TextSpan span)
-			return OutlineError.Format(Error.NotSupported($"{line}:{column} in '{filePath}' is not inside C# code (an @code block, expression or directive)."), model.Status);
+			return OutlineError.Format(Error.NotSupported($"{Line}:{Column} in '{FilePath}' is not inside C# code (an @code block, expression or directive)."), Model.Status);
 
-		IReadOnlyList<DiscoveredAction> actions = await CodeActionService.DiscoverAsync(document, span, cancellationToken);
+		IReadOnlyList<DiscoveredAction> actions = await CodeActionService.DiscoverAsync(document, span, CancellationToken);
 
 		var builder = new OutlineBuilder();
-		builder.Status(model.Status);
+		builder.Status(Model.Status);
 		if (source.ResolvedBySuffix)
 			builder.Header("resolvedPath", source.ResolvedPath);
 		builder.BeginBody();

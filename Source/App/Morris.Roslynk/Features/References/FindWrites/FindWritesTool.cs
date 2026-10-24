@@ -54,26 +54,26 @@ public sealed class FindWritesTool
 			instance,
 			(model, token) =>
 				FindWritesCoreAsync(
-					model: model,
-					instance: instance,
-					symbolName: symbolName,
-					startItem: startItem,
-					maxSize: maxSize,
-					countOnly: countOnly,
+					Model: model,
+					Instance: instance,
+					SymbolName: symbolName,
+					StartItem: startItem,
+					MaxSize: maxSize,
+					CountOnly: countOnly,
 					Budget: Budget,
-					cancellationToken: token
+					CancellationToken: token
 				),
 			cancellationToken);
 	}
 
 	internal Task<string> FindWritesCoreAsync(
-		SolutionModel model,
-		RoslynInstance instance,
-		string symbolName,
-		int startItem = 1,
-		int maxSize = 0,
-		bool countOnly = false,
+		SolutionModel Model,
+		RoslynInstance Instance,
+		string SymbolName,
+		int StartItem = 1,
+		int MaxSize = 0,
+		bool CountOnly = false,
 		ResponseBudget? Budget = null,
-		CancellationToken cancellationToken = default) =>
-		AccessQuery.RunAsync(model, instance, SymbolResolver, ProjectionService, symbolName, AccessKindText.IsWrite, startItem, maxSize, countOnly, Budget, cancellationToken);
+		CancellationToken CancellationToken = default) =>
+		AccessQuery.RunAsync(Model, Instance, SymbolResolver, ProjectionService, SymbolName, AccessKindText.IsWrite, StartItem, MaxSize, CountOnly, Budget, CancellationToken);
 }

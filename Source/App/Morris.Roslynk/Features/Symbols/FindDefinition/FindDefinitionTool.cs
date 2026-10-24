@@ -55,28 +55,28 @@ public sealed class FindDefinitionTool
 			instance,
 			(model, _) =>
 				FindDefinitionCoreAsync(
-					model: model,
-					instance: instance,
-					filePath: filePath,
-					line: line,
-					column: column
+					Model: model,
+					Instance: instance,
+					FilePath: filePath,
+					Line: line,
+					Column: column
 				),
 			cancellationToken);
 	}
 
-	internal async Task<string> FindDefinitionCoreAsync(SolutionModel model, RoslynInstance instance, string filePath, int line, int column, CancellationToken token = default)
+	internal async Task<string> FindDefinitionCoreAsync(SolutionModel Model, RoslynInstance Instance, string FilePath, int Line, int Column, CancellationToken Token = default)
 	{
-		string Failure(Error error) => OutlineError.Format(error, model.Status);
+		string Failure(Error error) => OutlineError.Format(error, Model.Status);
 
-		if (model.Solution is null)
-			return Failure(Error.Indexing(instance.LoadedProjects));
+		if (Model.Solution is null)
+			return Failure(Error.Indexing(Instance.LoadedProjects));
 
-		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(Model.Solution);
 
 		DocumentPathResolution fileResolution = DocumentPathResolution.Of(
-			model.Solution,
-			filePath,
-			$"'{filePath}' is not a C# document compiled in the solution.");
+			Model.Solution,
+			FilePath,
+			$"'{FilePath}' is not a C# document compiled in the solution.");
 		ResolvedDocumentPath resolvedPath = fileResolution.Resolved!;
 		if (fileResolution.Error is Error pathError)
 			return Failure(pathError);
@@ -85,13 +85,13 @@ public sealed class FindDefinitionTool
 		// to no symbol in the base projection but binds in the projection where that branch is active, and a
 		// copy whose parameter types failed to bind must not win over one where they bind. A bound answer
 		// stops the walk, so a position that binds in the first projection costs exactly one resolution.
-		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(Model.Solution);
 		ISymbol? symbol = null;
-		Solution resolvedSolution = model.Solution;
+		Solution resolvedSolution = Model.Solution;
 		int bestErrors = int.MaxValue;
 		foreach (Projection projection in projections)
 		{
-			ISymbol? resolved = await SymbolResolver.ResolveAtPositionAsync(projection.Solution, resolvedPath.AbsolutePath, line, column);
+			ISymbol? resolved = await SymbolResolver.ResolveAtPositionAsync(projection.Solution, resolvedPath.AbsolutePath, Line, Column);
 			if (resolved is null)
 				continue;
 
@@ -108,7 +108,7 @@ public sealed class FindDefinitionTool
 		}
 
 		if (symbol is null)
-			return Failure(Error.NotFound($"No symbol resolved at {filePath} ({line}, {column})."));
+			return Failure(Error.NotFound($"No symbol resolved at {FilePath} ({Line}, {Column})."));
 
 		var builder = new OutlineBuilder();
 		builder.Header("fullName", SymbolResolver.SignatureName(symbol));

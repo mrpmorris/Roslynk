@@ -64,45 +64,45 @@ public sealed class GetCallersTool
 			instance,
 			(model, _) =>
 				GetCallersCoreAsync(
-					model: model,
-					instance: instance,
-					symbolName: symbolName,
-					startItem: startItem,
-					maxSize: maxSize,
-					countOnly: countOnly,
+					Model: model,
+					Instance: instance,
+					SymbolName: symbolName,
+					StartItem: startItem,
+					MaxSize: maxSize,
+					CountOnly: countOnly,
 					Budget: Budget
 				),
 			cancellationToken);
 	}
 
 	internal async Task<string> GetCallersCoreAsync(
-		SolutionModel model,
-		RoslynInstance instance,
-		string symbolName,
-		int startItem = 1,
-		int maxSize = 0,
-		bool countOnly = false,
+		SolutionModel Model,
+		RoslynInstance Instance,
+		string SymbolName,
+		int StartItem = 1,
+		int MaxSize = 0,
+		bool CountOnly = false,
 		ResponseBudget? Budget = null,
-		CancellationToken token = default)
+		CancellationToken Token = default)
 	{
-		string Failure(Error error) => OutlineError.Format(error, model.Status);
+		string Failure(Error error) => OutlineError.Format(error, Model.Status);
 
-		if (model.Solution is null)
-			return Failure(Error.Indexing(instance.LoadedProjects));
+		if (Model.Solution is null)
+			return Failure(Error.Indexing(Instance.LoadedProjects));
 
-		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(Model.Solution);
 
-		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
-		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName, token);
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(Model.Solution);
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, SymbolName, Token);
 
 		if (groups.Count == 0)
 		{
-			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
-			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", candidates.Count > 0 ? candidates : null));
+			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(Model.Solution, SymbolName);
+			return Failure(Error.NotFound($"No symbol matched '{SymbolName}'.", candidates.Count > 0 ? candidates : null));
 		}
 
 		if (groups.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
+			return Failure(SymbolAmbiguity.Ambiguous(SymbolName, groups.Select(group => group[0].Symbol)));
 
 		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
 
@@ -118,10 +118,10 @@ public sealed class GetCallersTool
 		{
 			Solution solution = projectionSymbol.Projection.Solution;
 
-			foreach (SymbolCallerInfo caller in await SymbolFinder.FindCallersAsync(projectionSymbol.Symbol, solution, token))
+			foreach (SymbolCallerInfo caller in await SymbolFinder.FindCallersAsync(projectionSymbol.Symbol, solution, Token))
 			{
 				if (SpuriousDisposeReferences.IsDisposeMethod(caller.CalledSymbol)
-					&& await SpuriousDisposeReferences.AreAllSpuriousAsync(caller.Locations, token))
+					&& await SpuriousDisposeReferences.AreAllSpuriousAsync(caller.Locations, Token))
 				{
 					continue;
 				}
@@ -133,7 +133,7 @@ public sealed class GetCallersTool
 				projectionSymbol.Symbol,
 				projectionSymbol.Projection,
 				isBaseProjection: ReferenceEquals(projectionSymbol.Projection, resolved[0].Projection),
-				token))
+				Token))
 			{
 				callers.Add(caller, solution);
 			}
@@ -144,14 +144,14 @@ public sealed class GetCallersTool
 			SymbolPlacement.Place(root, caller, callerSolution, solutionDirectory);
 
 		PagedRender render = ItemPaging.Render(
-			model.Status,
+			Model.Status,
 			builder => builder.Header("resolvedSymbol", SymbolResolver.SignatureName(resolved[0].Symbol)),
 			builder => root.Render(builder),
 			root.Items(),
-			startItem,
-			maxSize,
+			StartItem,
+			MaxSize,
 			Budget,
-			countOnly: countOnly);
+			countOnly: CountOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

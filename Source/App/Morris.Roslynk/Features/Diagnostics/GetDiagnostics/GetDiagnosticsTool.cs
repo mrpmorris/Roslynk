@@ -79,21 +79,21 @@ public sealed class GetDiagnosticsTool
 			instance,
 			(model, token) =>
 				GetDiagnosticsCoreAsync(
-					model: model,
-					instance: instance,
-					includeErrors: includeErrors,
-					includeWarnings: includeWarnings,
-					includeInfo: includeInfo,
-					includeHidden: includeHidden,
-					includeAnalyzers: includeAnalyzers,
-					projectName: projectName,
-					filePath: filePath,
-					ids: ids,
-					summaryOnly: summaryOnly,
-					startItem: startItem,
-					maxSize: maxSize,
-					countOnly: countOnly,
-					cancellationToken: token
+					Model: model,
+					Instance: instance,
+					IncludeErrors: includeErrors,
+					IncludeWarnings: includeWarnings,
+					IncludeInfo: includeInfo,
+					IncludeHidden: includeHidden,
+					IncludeAnalyzers: includeAnalyzers,
+					ProjectName: projectName,
+					FilePath: filePath,
+					Ids: ids,
+					SummaryOnly: summaryOnly,
+					StartItem: startItem,
+					MaxSize: maxSize,
+					CountOnly: countOnly,
+					CancellationToken: token
 				),
 			cancellationToken);
 	}
@@ -103,69 +103,69 @@ public sealed class GetDiagnosticsTool
 	/// its own status from that model rather than re-reading the live one mid-flight.
 	/// </summary>
 	internal async Task<string> GetDiagnosticsCoreAsync(
-		SolutionModel model,
-		RoslynInstance instance,
-		bool includeErrors,
-		bool includeWarnings,
-		bool includeInfo,
-		bool includeHidden,
-		bool includeAnalyzers,
-		string? projectName,
-		string? filePath,
-		string[]? ids,
-		bool summaryOnly,
-		int startItem,
-		int maxSize,
-		bool countOnly,
-		CancellationToken cancellationToken = default)
+		SolutionModel Model,
+		RoslynInstance Instance,
+		bool IncludeErrors,
+		bool IncludeWarnings,
+		bool IncludeInfo,
+		bool IncludeHidden,
+		bool IncludeAnalyzers,
+		string? ProjectName,
+		string? FilePath,
+		string[]? Ids,
+		bool SummaryOnly,
+		int StartItem,
+		int MaxSize,
+		bool CountOnly,
+		CancellationToken CancellationToken = default)
 	{
-		if (model.Solution is null)
-			return OutlineError.Format(Error.Indexing(instance.LoadedProjects), model.Status);
+		if (Model.Solution is null)
+			return OutlineError.Format(Error.Indexing(Instance.LoadedProjects), Model.Status);
 
-		Solution current = model.Solution;
+		Solution current = Model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(current);
 
 		// Content filters narrow what is counted and listed. They are resolved (and validated) before any
-		// work is queued - a scope that is not in the solution is a NotFound naming values this tool accepts,
+		// work is queued - a Scope that is not in the solution is a NotFound naming values this tool accepts,
 		// not an expensive compile followed by an empty result - and applied to the result after the build, so
-		// the memoized per-project results and the instance-level cache are reused instead of being recomputed
+		// the memoized per-project results and the Instance-level cache are reused instead of being recomputed
 		// per filter.
-		string? projectNameFilter = NormalizeProjectName(projectName);
+		string? projectNameFilter = NormalizeProjectName(ProjectName);
 		if (projectNameFilter is not null)
 			projectNameFilter = CanonicalProjectName(current, projectNameFilter);
-		bool fileFilterRequested = !string.IsNullOrWhiteSpace(filePath);
+		bool fileFilterRequested = !string.IsNullOrWhiteSpace(FilePath);
 		DocumentPathResolution fileResolution = fileFilterRequested
 			? DocumentPathResolution.Of(
 				current,
-				filePath,
-				$"No file '{filePath!.Trim()}' is compiled or loaded in the solution; pass a path relative to the solution folder or an absolute path.")
+				FilePath,
+				$"No file '{FilePath!.Trim()}' is compiled or loaded in the solution; pass a path relative to the solution folder or an absolute path.")
 			: new(null, null);
 		ResolvedDocumentPath? resolvedFile = fileResolution.Resolved;
 		string? fullFilePath = resolvedFile?.AbsolutePath;
-		HashSet<string>? idSet = IdsOrNull(ids);
+		HashSet<string>? idSet = IdsOrNull(Ids);
 
 		if (projectNameFilter is string name && !ProjectNameExists(current, name))
 			return OutlineError.Format(
 				Error.NotFound(
 					$"No project named '{name}' is loaded; pass the name as outlines show it, with or without the .csproj extension.",
 					ProjectNameCandidates(current, name)),
-				model.Status);
+				Model.Status);
 
 		if (fileResolution.Error is Error fileError)
-			return OutlineError.Format(fileError, model.Status);
+			return OutlineError.Format(fileError, Model.Status);
 
 		// Fence writes, drain in-flight ones, then build (or reuse the cached result when nothing changed).
-		string cacheKey = $"{includeAnalyzers}";
-		DiagnosticsResult diagnostics = await instance.RequestDiagnosticsAsync(
+		string cacheKey = $"{IncludeAnalyzers}";
+		DiagnosticsResult diagnostics = await Instance.RequestDiagnosticsAsync(
 			cacheKey,
-			(solution, token) => DiagnosticsService.GetAllDiagnosticsAsync(solution, includeAnalyzers, token));
+			(solution, Token) => DiagnosticsService.GetAllDiagnosticsAsync(solution, IncludeAnalyzers, Token));
 
 		Solution compiled = diagnostics.Solution;
 
 		// The Razor compiler's own diagnostics come from Roslynk's in-process generator run, not the compilation.
-		IReadOnlyList<Diagnostic> razor = instance.Workspace?.Razor.Diagnostics(compiled) ?? [];
+		IReadOnlyList<Diagnostic> razor = Instance.Workspace?.Razor.Diagnostics(compiled) ?? [];
 
-		// Analyzers report private trigger ids alongside the public rule (IDE0005's, for one). They have no
+		// Analyzers report private trigger Ids alongside the public rule (IDE0005's, for one). They have no
 		// message and nothing to act on, so they are dropped before the counts as well as the body.
 		List<Diagnostic> all = diagnostics.Diagnostics
 			.Concat(razor)
@@ -179,19 +179,19 @@ public sealed class GetDiagnosticsTool
 			: all.Where(diagnostic => MatchesFilter(diagnostic, compiled, solutionDirectory, projectNameFilter, fullFilePath, idSet)).ToList();
 
 		var wanted = new HashSet<DiagnosticSeverity>();
-		if (includeErrors)
+		if (IncludeErrors)
 			wanted.Add(DiagnosticSeverity.Error);
-		if (includeWarnings)
+		if (IncludeWarnings)
 			wanted.Add(DiagnosticSeverity.Warning);
-		if (includeInfo)
+		if (IncludeInfo)
 			wanted.Add(DiagnosticSeverity.Info);
-		if (includeHidden)
+		if (IncludeHidden)
 			wanted.Add(DiagnosticSeverity.Hidden);
 
-		int cap = maxSize > 0 ? maxSize : maxSize < 0 ? 0 : int.MaxValue;
+		int cap = MaxSize > 0 ? MaxSize : MaxSize < 0 ? 0 : int.MaxValue;
 		List<Diagnostic> items;
 		IReadOnlyList<IdSummary> summaries;
-		if (summaryOnly)
+		if (SummaryOnly)
 		{
 			items = [];
 			summaries = SummarizeById(filtered, wanted, compiled, solutionDirectory);
@@ -205,12 +205,12 @@ public sealed class GetDiagnosticsTool
 				solutionDirectory);
 		}
 
-		int totalRows = summaryOnly ? summaries.Count : items.Count;
+		int totalRows = SummaryOnly ? summaries.Count : items.Count;
 		bool capped = totalRows > cap;
 
 		void RenderBody(OutlineBuilder target, List<OutlineItem>? collect)
 		{
-			if (summaryOnly)
+			if (SummaryOnly)
 			{
 				foreach (IdSummary summary in summaries.Take(cap))
 				{
@@ -262,7 +262,7 @@ public sealed class GetDiagnosticsTool
 							target.Line(severityDepth + 1, entry);
 							if (collect is not null)
 							{
-								// The chain is the project line, folder line, file line and severity label the
+								// The chain is the project Line, folder Line, file Line and severity label the
 								// entry renders under.
 								string fileLabel = FileOf(diagnostic, solutionDirectory);
 								(string? folder, string fileName) = OutlinePath.Split(fileLabel);
@@ -283,13 +283,13 @@ public sealed class GetDiagnosticsTool
 		RenderBody(new OutlineBuilder(), collected);
 
 		PagedRender render = ItemPaging.Render(
-			model.Status,
+			Model.Status,
 			builder =>
 			{
 				if (projectNameFilter is string echoedProject)
 					builder.Header("filter", $"projectName:{echoedProject}");
 				if (fullFilePath is not null)
-					builder.Header("filter", $"filePath:{filePath!.Trim()}");
+					builder.Header("filter", $"filePath:{FilePath!.Trim()}");
 				if (resolvedFile is { ResolvedBySuffix: true })
 					builder.Header("resolvedPath", resolvedFile.RelativePath);
 				if (idSet is not null)
@@ -305,22 +305,22 @@ public sealed class GetDiagnosticsTool
 				? builder =>
 				{
 					// countOnly: ItemPaging writes the single count= for the items; only the cap's signal is ours.
-					if (!countOnly)
+					if (!CountOnly)
 						builder.Header("count", Math.Min(totalRows, cap));
 					builder.Header("truncated", true);
 				}
 				: null,
 			renderBody: builder => RenderBody(builder, null),
 			items: collected,
-			startItem: startItem,
+			startItem: StartItem,
 			maxSize: 0,
 			budget: Budget,
-			countOnly: countOnly);
+			countOnly: CountOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,
 			PagedRender.Page paged => paged.Output,
-			PagedRender.Invalid invalid => OutlineError.Format(Error.Invalid(invalid.Message), model.Status),
+			PagedRender.Invalid invalid => OutlineError.Format(Error.Invalid(invalid.Message), Model.Status),
 			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
 		};
 	}
