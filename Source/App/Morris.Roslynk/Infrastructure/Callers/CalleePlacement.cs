@@ -24,9 +24,19 @@ public static class CalleePlacement
 	public static void Place(SymbolNode root, ISymbol callee, Solution solution, string? solutionDirectory)
 	{
 		Location? location = callee.Locations.FirstOrDefault(candidate => candidate.IsInSource);
+		SyntaxTree? tree = location?.SourceTree;
+
+		// Same as SymbolPlacement: the display span follows a #line mapping into the .razor/.cshtml source
+		// while the tree's FilePath names the virtual generated document, so the file comes from the span
+		// that carries the position. A location with no mapped path has no Razor origin and keeps its tree
+		// path. The project grouping still comes from the tree.
+		FileLinePositionSpan? span = location is null ? null : location.GetDisplaySpan();
+		string? path = null;
+		if (span is FileLinePositionSpan display)
+			path = string.IsNullOrEmpty(display.Path) ? tree?.FilePath : display.Path;
 
 		SymbolNode node;
-		if (location?.SourceTree is SyntaxTree tree && location.SourceTree.FilePath is string path)
+		if (tree is not null && path is not null)
 		{
 			SymbolNode start = ProjectName.Of(solution, tree) is string project ? root.Child(project) : root;
 			node = start.ChildPath(GeneratedSource.MarkPath(SolutionRelativePath.Of(solutionDirectory, path)!, solution, tree));
@@ -57,17 +67,16 @@ public static class CalleePlacement
 			? method.Parameters.Length == 0 ? "()" : ParameterTypes.Of(method)
 			: null;
 
-		if (location is null)
+		if (span is not FileLinePositionSpan located)
 		{
 			node.Child(parameters is null ? $"{key}," : $"{key},,{parameters}");
 			return;
 		}
 
-		FileLinePositionSpan span = location.GetDisplaySpan();
-		int line = span.StartLinePosition.Line + 1;
-		int column = span.StartLinePosition.Character + 1;
-		int endLine = span.EndLinePosition.Line + 1;
-		int endColumn = span.EndLinePosition.Character + 1;
+		int line = located.StartLinePosition.Line + 1;
+		int column = located.StartLinePosition.Character + 1;
+		int endLine = located.EndLinePosition.Line + 1;
+		int endColumn = located.EndLinePosition.Character + 1;
 
 		if (parameters is null)
 			node.Child(key).AddLocation(line, column, endLine, endColumn);

@@ -19,11 +19,23 @@ public static class SymbolPlacement
 	public static void Place(SymbolNode root, ISymbol symbol, Solution solution, string? solutionDirectory)
 	{
 		Location? location = symbol.Locations.FirstOrDefault(candidate => candidate.IsInSource);
-		string file = location?.SourceTree?.FilePath is string path
-			? GeneratedSource.MarkPath(SolutionRelativePath.Of(solutionDirectory, path)!, solution, location.SourceTree)
-			: MetadataBucket;
+		SyntaxTree? tree = location?.SourceTree;
 
-		SymbolNode start = location?.SourceTree is SyntaxTree tree && ProjectName.Of(solution, tree) is string project
+		// The leaf's line and column come from the display span, which follows a #line mapping into the
+		// .razor/.cshtml source, while the tree's FilePath names the virtual generated document. Taking the
+		// file from the tree would name a path that does not exist on disk, so the path comes from the same
+		// span as the position. A location with no mapped path has no Razor origin (BuildRenderTree's
+		// generated body) and keeps its tree path. The project grouping still comes from the tree.
+		FileLinePositionSpan? span = location is null ? null : location.GetDisplaySpan();
+		string? path = null;
+		if (span is FileLinePositionSpan display)
+			path = string.IsNullOrEmpty(display.Path) ? tree?.FilePath : display.Path;
+
+		string file = path is null
+			? MetadataBucket
+			: GeneratedSource.MarkPath(SolutionRelativePath.Of(solutionDirectory, path)!, solution, tree);
+
+		SymbolNode start = tree is not null && ProjectName.Of(solution, tree) is string project
 			? root.Child(project)
 			: root;
 
@@ -42,15 +54,12 @@ public static class SymbolPlacement
 
 		SymbolNode leaf = node.Child($"{SymbolKindText.Of(symbol)},{OutlineBuilder.Field(symbol.Name)}");
 
-		if (location is not null)
-		{
-			FileLinePositionSpan span = location.GetDisplaySpan();
+		if (span is FileLinePositionSpan located)
 			leaf.AddLocation(
-				span.StartLinePosition.Line + 1,
-				span.StartLinePosition.Character + 1,
-				span.EndLinePosition.Line + 1,
-				span.EndLinePosition.Character + 1);
-		}
+				located.StartLinePosition.Line + 1,
+				located.StartLinePosition.Character + 1,
+				located.EndLinePosition.Line + 1,
+				located.EndLinePosition.Character + 1);
 	}
 
 	internal static string NamespaceOf(ISymbol symbol)
