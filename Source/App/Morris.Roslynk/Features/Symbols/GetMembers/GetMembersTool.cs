@@ -74,64 +74,64 @@ public sealed class GetMembersTool
 			instance,
 			(model, _) =>
 				GetMembersCoreAsync(
-					Model: model,
-					Instance: instance,
-					SymbolName: symbolName,
-					IncludeInherited: includeInherited,
-					NameFilter: nameFilter,
-					IncludeMethods: includeMethods,
-					IncludeFields: includeFields,
-					IncludeProperties: includeProperties,
-					IncludeEvents: includeEvents,
-					IncludeNestedTypes: includeNestedTypes,
-					StartItem: startItem,
-					MaxSize: maxSize,
-					CountOnly: countOnly,
-					Budget: Budget
+					model: model,
+					instance: instance,
+					symbolName: symbolName,
+					includeInherited: includeInherited,
+					nameFilter: nameFilter,
+					includeMethods: includeMethods,
+					includeFields: includeFields,
+					includeProperties: includeProperties,
+					includeEvents: includeEvents,
+					includeNestedTypes: includeNestedTypes,
+					startItem: startItem,
+					maxSize: maxSize,
+					countOnly: countOnly,
+					budget: Budget
 				),
 			cancellationToken);
 	}
 
 	internal async Task<string> GetMembersCoreAsync(
-		SolutionModel Model,
-		RoslynInstance Instance,
-		string SymbolName,
-		bool IncludeInherited = false,
-		string? NameFilter = null,
-		bool IncludeMethods = true,
-		bool IncludeFields = true,
-		bool IncludeProperties = true,
-		bool IncludeEvents = true,
-		bool IncludeNestedTypes = true,
-		int StartItem = 1,
-		int MaxSize = 0,
-		bool CountOnly = false,
-		ResponseBudget? Budget = null,
-		CancellationToken Token = default)
+		SolutionModel model,
+		RoslynInstance instance,
+		string symbolName,
+		bool includeInherited = false,
+		string? nameFilter = null,
+		bool includeMethods = true,
+		bool includeFields = true,
+		bool includeProperties = true,
+		bool includeEvents = true,
+		bool includeNestedTypes = true,
+		int startItem = 1,
+		int maxSize = 0,
+		bool countOnly = false,
+		ResponseBudget? budget = null,
+		CancellationToken token = default)
 	{
-		string Failure(Error error) => OutlineError.Format(error, Model.Status);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
-		if (Model.Solution is null)
-			return Failure(Error.Indexing(Instance.LoadedProjects));
+		if (model.Solution is null)
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
-		string? solutionDirectory = SolutionRelativePath.DirectoryOf(Model.Solution);
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		// Resolve the type in every projection so members declared in a branch inactive in the loaded
 		// configuration are included; the strictest matching level any projection reached decides for all
 		// of them, and grouping by fully-qualified name keeps the same type across projections one. The
 		// copy kept as the representative is the best bound, so its parameter types are the ones echoed.
-		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(Model.Solution);
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
 		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(
 			SymbolResolver,
 			projections,
-			SymbolName,
+			symbolName,
 			includeMetadata: true,
 			accept: symbol => symbol is INamedTypeSymbol);
 
 		if (groups.Count == 0)
-			return Failure(Error.NotFound($"No type matched '{SymbolName}'."));
+			return Failure(Error.NotFound($"No type matched '{symbolName}'."));
 		if (groups.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(SymbolName, groups.Select(group => group[0].Symbol)));
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		// Holding the symbols, so an ambiguous match can emit candidates that are distinguishable from each
 		// other and accepted back verbatim.
@@ -148,35 +148,35 @@ public sealed class GetMembersTool
 
 		bool NameMatches(string name)
 		{
-			if (string.IsNullOrEmpty(NameFilter))
+			if (string.IsNullOrEmpty(nameFilter))
 				return true;
-			if (NameFilter.EndsWith('*'))
-				return name.StartsWith(NameFilter[..^1], StringComparison.OrdinalIgnoreCase);
+			if (nameFilter.EndsWith('*'))
+				return name.StartsWith(nameFilter[..^1], StringComparison.OrdinalIgnoreCase);
 
-			return name.Contains(NameFilter, StringComparison.OrdinalIgnoreCase);
+			return name.Contains(nameFilter, StringComparison.OrdinalIgnoreCase);
 		}
 
 		bool KindIncluded(ISymbol member) =>
 			member.Kind switch
 			{
-				SymbolKind.Method => IncludeMethods,
-				SymbolKind.Field => IncludeFields,
-				SymbolKind.Property => IncludeProperties,
-				SymbolKind.Event => IncludeEvents,
-				SymbolKind.NamedType => IncludeNestedTypes,
+				SymbolKind.Method => includeMethods,
+				SymbolKind.Field => includeFields,
+				SymbolKind.Property => includeProperties,
+				SymbolKind.Event => includeEvents,
+				SymbolKind.NamedType => includeNestedTypes,
 				_ => true,
 			};
 
-		// Union members across every projection Instance of the type, deduped by stable identity so a member
+		// Union members across every projection instance of the type, deduped by stable identity so a member
 		// in shared code is listed once while a member declared only in an inactive branch still appears;
 		// the copy kept is the one whose signature binds best, so its parameter types are the ones echoed.
 		var memberCopies = new DeclarationCopies<Solution>();
 		foreach ((INamedTypeSymbol typeInstance, Solution typeSolution) in typeInstances)
 		{
-			foreach (ISymbol member in Collect(typeInstance, IncludeInherited)
+			foreach (ISymbol member in Collect(typeInstance, includeInherited)
 				.Where(member => !member.IsImplicitlyDeclared)
 				// Property and event accessors are methods in Roslyn, but they are represented once by the
-				// property/event leaf, so IncludeMethods covers ordinary methods, constructors and local
+				// property/event leaf, so includeMethods covers ordinary methods, constructors and local
 				// functions only. AssociatedSymbol also covers explicit interface implementations and
 				// inherited accessors.
 				.Where(member => member is not IMethodSymbol { AssociatedSymbol: not null })
@@ -187,13 +187,13 @@ public sealed class GetMembersTool
 			}
 		}
 
-		var entries = new List<(string? Project, string File, int Order, string Line, IReadOnlyList<(int Depth, string Line)> LocalFunctions)>();
+		var entries = new List<(string? Project, string File, int Order, string Line, IReadOnlyList<(int Depth, string line)> LocalFunctions)>();
 		foreach ((ISymbol member, Solution memberSolution) in memberCopies.Items)
 		{
-			(string? project, string file, int order, string Line) = await RenderAsync(member, memberSolution, solutionDirectory, Token);
-			var localFunctions = new List<(int Depth, string Line)>();
-			await AddLocalFunctionsAsync(localFunctions, member, depth: 1, memberSolution, solutionDirectory, Token);
-			entries.Add((project, file, order, Line, localFunctions));
+			(string? project, string file, int order, string line) = await RenderAsync(member, memberSolution, solutionDirectory, token);
+			var localFunctions = new List<(int Depth, string line)>();
+			await AddLocalFunctionsAsync(localFunctions, member, depth: 1, memberSolution, solutionDirectory, token);
+			entries.Add((project, file, order, line, localFunctions));
 		}
 
 		var byProject = entries
@@ -206,9 +206,9 @@ public sealed class GetMembersTool
 			foreach (var project in byProject)
 			{
 				int fileDepth = 0;
-				if (project.Key is string ProjectName)
+				if (project.Key is string projectName)
 				{
-					target.Line(0, ProjectName);
+					target.Line(0, projectName);
 					fileDepth = 1;
 				}
 
@@ -222,7 +222,7 @@ public sealed class GetMembersTool
 
 						if (collect is not null)
 						{
-							// The chain is the project Line, folder Line and file Line the member renders
+							// The chain is the project line, folder line and file line the member renders
 							// under; its local functions ride with it as deeper lines of the same item.
 							(string? folder, string fileName) = OutlinePath.Split(entry.File);
 							string[] context;
@@ -244,14 +244,14 @@ public sealed class GetMembersTool
 		RenderBody(new OutlineBuilder(), collected);
 
 		PagedRender render = ItemPaging.Render(
-			Model.Status,
+			model.Status,
 			builder => builder.Header("resolvedType", SymbolResolver.SignatureName(type)),
 			builder => RenderBody(builder, null),
 			collected,
-			StartItem,
-			MaxSize,
-			Budget,
-			countOnly: CountOnly);
+			startItem,
+			maxSize,
+			budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

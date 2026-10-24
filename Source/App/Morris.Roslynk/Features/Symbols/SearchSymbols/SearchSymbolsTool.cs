@@ -65,47 +65,47 @@ public sealed class SearchSymbolsTool
 			instance,
 			(model, _) =>
 				SearchSymbolsCoreAsync(
-					Model: model,
-					Instance: instance,
-					SymbolNameFilter: symbolNameFilter,
-					Kinds: kinds,
-					StartItem: startItem,
-					MaxSize: maxSize,
-					CountOnly: countOnly,
-					Budget: Budget
+					model: model,
+					instance: instance,
+					symbolNameFilter: symbolNameFilter,
+					kinds: kinds,
+					startItem: startItem,
+					maxSize: maxSize,
+					countOnly: countOnly,
+					budget: Budget
 				),
 			cancellationToken);
 	}
 
 	internal async Task<string> SearchSymbolsCoreAsync(
-		SolutionModel Model,
-		RoslynInstance Instance,
-		string SymbolNameFilter,
-		string[]? Kinds = null,
-		int StartItem = 1,
-		int MaxSize = 0,
-		bool CountOnly = false,
-		ResponseBudget? Budget = null,
-		CancellationToken Token = default)
+		SolutionModel model,
+		RoslynInstance instance,
+		string symbolNameFilter,
+		string[]? kinds = null,
+		int startItem = 1,
+		int maxSize = 0,
+		bool countOnly = false,
+		ResponseBudget? budget = null,
+		CancellationToken token = default)
 	{
 		// Validate the filter before doing any work: an unknown kind name is the caller's mistake and must
 		// be named, not turned into an empty result that looks like "no such symbol".
-		HashSet<string>? kindFilter = SymbolKinds.Parse(Kinds);
+		HashSet<string>? kindFilter = SymbolKinds.Parse(kinds);
 
-		if (Model.Solution is null)
-			return OutlineError.Format(Error.Indexing(Instance.LoadedProjects), Model.Status);
+		if (model.Solution is null)
+			return OutlineError.Format(Error.Indexing(instance.LoadedProjects), model.Status);
 
-		string? solutionDirectory = SolutionRelativePath.DirectoryOf(Model.Solution);
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		// A dotted name is container-qualified rather than a substring of a bare name: the declaration
 		// search is keyed on the leaf, and each candidate is then held to the whole-segment suffix of its
 		// containing type/namespace chain. A bare name keeps the substring behaviour it has always had.
 		SymbolSignatureQuery? containerQuery = null;
-		if (SymbolSignature.TryParse(SymbolNameFilter, out SymbolSignatureQuery parsed) && parsed.Qualified)
+		if (SymbolSignature.TryParse(symbolNameFilter, out SymbolSignatureQuery parsed) && parsed.Qualified)
 			containerQuery = parsed;
 
 		Func<string, bool> predicate = containerQuery is null
-			? name => name.Contains(SymbolNameFilter, StringComparison.OrdinalIgnoreCase)
+			? name => name.Contains(symbolNameFilter, StringComparison.OrdinalIgnoreCase)
 			: name => string.Equals(name, containerQuery.SimpleName, StringComparison.OrdinalIgnoreCase);
 
 		bool Matches(ISymbol symbol) =>
@@ -114,11 +114,11 @@ public sealed class SearchSymbolsTool
 		// Search every projection so declarations that compile only in a branch inactive in the loaded
 		// configuration are included; dedupe by fully-qualified name across projections, keeping the
 		// best-bound copy of each declaration so a degraded rendering never wins.
-		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(Model.Solution, Token);
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution, token);
 		var matched = new DeclarationCopies<Solution>();
 		foreach (Projection projection in projections)
 		{
-			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(projection.Solution, predicate, Token))
+			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(projection.Solution, predicate, token))
 			{
 				if (Matches(symbol))
 					matched.Add(symbol, projection.Solution);
@@ -126,7 +126,7 @@ public sealed class SearchSymbolsTool
 
 			// Roslyn's declaration search covers source-generated documents only when a hand-written
 			// declaration in the same project also matches, so the generated ones are asked for directly.
-			foreach (ISymbol symbol in await SourceGeneratedDeclarations.FindAsync(projection.Solution, predicate, Token))
+			foreach (ISymbol symbol in await SourceGeneratedDeclarations.FindAsync(projection.Solution, predicate, token))
 			{
 				if (Matches(symbol))
 					matched.Add(symbol, projection.Solution);
@@ -134,15 +134,15 @@ public sealed class SearchSymbolsTool
 
 			// Local functions are not in the declaration index, so they are found by walking the syntax
 			// (source-generated documents included).
-			foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(projection.Solution, predicate, Token))
+			foreach (IMethodSymbol local in await LocalFunctions.FindAllAsync(projection.Solution, predicate, token))
 			{
 				if (Matches(local))
 					matched.Add(local, projection.Solution);
 			}
 		}
 
-		// The result set is every match of the requested Kinds; the response budget and MaxSize bound what
-		// one page carries, so a long result pages with StartItem instead of losing matches to a cap.
+		// The result set is every match of the requested kinds; the response budget and maxSize bound what
+		// one page carries, so a long result pages with startItem instead of losing matches to a cap.
 		// count= names the filtered set's size.
 		IReadOnlyList<(ISymbol Symbol, Solution Solution)> page = matched.Items
 			.Where(item => SymbolKinds.Matches(item.Symbol, kindFilter))
@@ -153,20 +153,20 @@ public sealed class SearchSymbolsTool
 			SymbolPlacement.Place(root, symbol, symbolSolution, solutionDirectory);
 
 		PagedRender render = ItemPaging.Render(
-			Model.Status,
+			model.Status,
 			builder => { },
 			capHeaders: null,
 			renderBody: builder => root.Render(builder),
 			items: root.Items(),
-			startItem: StartItem,
-			maxSize: MaxSize,
-			budget: Budget,
-			countOnly: CountOnly);
+			startItem: startItem,
+			maxSize: maxSize,
+			budget: budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,
 			PagedRender.Page paged => paged.Output,
-			PagedRender.Invalid invalid => OutlineError.Format(Error.Invalid(invalid.Message), Model.Status),
+			PagedRender.Invalid invalid => OutlineError.Format(Error.Invalid(invalid.Message), model.Status),
 			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
 		};
 	}

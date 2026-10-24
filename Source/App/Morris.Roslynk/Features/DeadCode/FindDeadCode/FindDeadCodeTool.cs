@@ -93,33 +93,33 @@ public sealed class FindDeadCodeTool
 			instance,
 			(model, _) =>
 				FindDeadCodeCoreAsync(
-					Model: model,
-					Instance: instance,
-					Scope: scope,
-					IncludePublic: includePublic,
-					MaxSize: maxSize,
-					StartItem: startItem,
-					CountOnly: countOnly,
-					Budget: Budget
+					model: model,
+					instance: instance,
+					scope: scope,
+					includePublic: includePublic,
+					maxSize: maxSize,
+					startItem: startItem,
+					countOnly: countOnly,
+					budget: Budget
 				),
 			cancellationToken);
 	}
 
 	internal async Task<string> FindDeadCodeCoreAsync(
-		SolutionModel Model,
-		RoslynInstance Instance,
-		string? Scope = null,
-		bool IncludePublic = false,
-		int MaxSize = 0,
-		int StartItem = 1,
-		bool CountOnly = false,
-		ResponseBudget? Budget = null,
-		CancellationToken Token = default)
+		SolutionModel model,
+		RoslynInstance instance,
+		string? scope = null,
+		bool includePublic = false,
+		int maxSize = 0,
+		int startItem = 1,
+		bool countOnly = false,
+		ResponseBudget? budget = null,
+		CancellationToken token = default)
 	{
-		if (Model.Solution is null)
-			return OutlineError.Format(Error.Indexing(Instance.LoadedProjects), Model.Status);
+		if (model.Solution is null)
+			return OutlineError.Format(Error.Indexing(instance.LoadedProjects), model.Status);
 
-		Solution solution = Model.Solution;
+		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
 		HashSet<ProjectId> testProjects = IdentifyTestProjects(solution);
@@ -136,12 +136,12 @@ public sealed class FindDeadCodeTool
 			IMethodSymbol? entryPoint = compilation.GetEntryPoint(CancellationToken.None);
 			foreach (ISymbol symbol in EnumerateDeclarations(compilation.GlobalNamespace))
 			{
-				if (!IsCandidate(symbol, entryPoint, IncludePublic))
+				if (!IsCandidate(symbol, entryPoint, includePublic))
 					continue;
 
-				// Scope is a namespace/type prefix, so it is matched against the parameterless name; the
+				// scope is a namespace/type prefix, so it is matched against the parameterless name; the
 				// dedupe key carries the signature so two unused overloads are two findings, not one.
-				if (Scope is not null && !SymbolResolver.FullyQualifiedName(symbol).StartsWith(Scope, StringComparison.OrdinalIgnoreCase))
+				if (scope is not null && !SymbolResolver.FullyQualifiedName(symbol).StartsWith(scope, StringComparison.OrdinalIgnoreCase))
 					continue;
 
 				found.Add(symbol, solution);
@@ -152,12 +152,12 @@ public sealed class FindDeadCodeTool
 		candidates.Sort((left, right) => string.Compare(
 			SymbolResolver.SignatureName(left), SymbolResolver.SignatureName(right), StringComparison.Ordinal));
 
-		int cap = MaxSize > 0 ? MaxSize : int.MaxValue;
+		int cap = maxSize > 0 ? maxSize : int.MaxValue;
 		var results = new List<Candidate>();
 		bool truncated = false;
 		foreach (ISymbol symbol in candidates)
 		{
-			Candidate? candidate = await EvaluateAsync(solution, symbol, testProjects, solutionDirectory, Token);
+			Candidate? candidate = await EvaluateAsync(solution, symbol, testProjects, solutionDirectory, token);
 			if (candidate is null)
 				continue;
 
@@ -183,28 +183,28 @@ public sealed class FindDeadCodeTool
 		}
 
 		PagedRender render = ItemPaging.Render(
-			Model.Status,
+			model.Status,
 			builder => { },
 			capHeaders: capped
 				? builder =>
 				{
 					// countOnly: ItemPaging writes the single count= for the items; only the cap's signal is ours.
-					if (!CountOnly)
+					if (!countOnly)
 						builder.Header("count", results.Count);
 					builder.Header("truncated", true);
 				}
 				: null,
 			renderBody: builder => root.Render(builder),
 			items: root.Items(),
-			startItem: StartItem,
-			maxSize: MaxSize,
-			budget: Budget,
-			countOnly: CountOnly);
+			startItem: startItem,
+			maxSize: maxSize,
+			budget: budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,
 			PagedRender.Page paged => paged.Output,
-			PagedRender.Invalid invalid => OutlineError.Format(Error.Invalid(invalid.Message), Model.Status),
+			PagedRender.Invalid invalid => OutlineError.Format(Error.Invalid(invalid.Message), model.Status),
 			_ => throw new InvalidOperationException($"Unexpected paged render {render.GetType().Name}."),
 		};
 	}

@@ -54,26 +54,26 @@ public sealed class FindReadsTool
 			instance,
 			(model, token) =>
 				FindReadsCoreAsync(
-					Model: model,
-					Instance: instance,
-					SymbolName: symbolName,
-					StartItem: startItem,
-					MaxSize: maxSize,
-					CountOnly: countOnly,
-					Budget: Budget,
-					CancellationToken: token
+					model: model,
+					instance: instance,
+					symbolName: symbolName,
+					startItem: startItem,
+					maxSize: maxSize,
+					countOnly: countOnly,
+					budget: Budget,
+					cancellationToken: token
 				),
 			cancellationToken);
 	}
 
 	internal Task<string> FindReadsCoreAsync(
-		SolutionModel Model,
-		RoslynInstance Instance,
-		string SymbolName,
-		int StartItem = 1,
-		int MaxSize = 0,
-		bool CountOnly = false,
-		ResponseBudget? Budget = null,
-		CancellationToken CancellationToken = default) =>
-		AccessQuery.RunAsync(Model, Instance, SymbolResolver, ProjectionService, SymbolName, AccessKindText.IsRead, StartItem, MaxSize, CountOnly, Budget, CancellationToken);
+		SolutionModel model,
+		RoslynInstance instance,
+		string symbolName,
+		int startItem = 1,
+		int maxSize = 0,
+		bool countOnly = false,
+		ResponseBudget? budget = null,
+		CancellationToken cancellationToken = default) =>
+		AccessQuery.RunAsync(model, instance, SymbolResolver, ProjectionService, symbolName, AccessKindText.IsRead, startItem, maxSize, countOnly, budget, cancellationToken);
 }

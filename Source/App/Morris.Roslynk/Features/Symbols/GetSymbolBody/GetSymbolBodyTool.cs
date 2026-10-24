@@ -80,44 +80,44 @@ public sealed class GetSymbolBodyTool
 			instance,
 			(model, token) =>
 				GetSymbolBodyCoreAsync(
-					Model: model,
-					Instance: instance,
-					SymbolName: symbolName,
-					IncludeLeadingTrivia: includeLeadingTrivia,
-					StartItem: startItem,
-					MaxSize: maxSize,
-					Part: part,
-					CountOnly: countOnly,
-					Budget: Budget,
-					CancellationToken: token
+					model: model,
+					instance: instance,
+					symbolName: symbolName,
+					includeLeadingTrivia: includeLeadingTrivia,
+					startItem: startItem,
+					maxSize: maxSize,
+					part: part,
+					countOnly: countOnly,
+					budget: Budget,
+					cancellationToken: token
 				),
 			cancellationToken);
 	}
 
 	internal async Task<string> GetSymbolBodyCoreAsync(
-		SolutionModel Model,
-		RoslynInstance Instance,
-		string SymbolName,
-		bool IncludeLeadingTrivia = false,
-		int StartItem = 1,
-		int MaxSize = 0,
-		int Part = 0,
-		bool CountOnly = false,
-		ResponseBudget? Budget = null,
-		CancellationToken CancellationToken = default)
+		SolutionModel model,
+		RoslynInstance instance,
+		string symbolName,
+		bool includeLeadingTrivia = false,
+		int startItem = 1,
+		int maxSize = 0,
+		int part = 0,
+		bool countOnly = false,
+		ResponseBudget? budget = null,
+		CancellationToken cancellationToken = default)
 	{
-		string Failure(Error error) => OutlineError.Format(error, Model.Status);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
-		if (Model.Solution is null)
-			return Failure(Error.Indexing(Instance.LoadedProjects));
+		if (model.Solution is null)
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
-		string? solutionDirectory = SolutionRelativePath.DirectoryOf(Model.Solution);
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		// Resolve across every projection so a symbol declared only in a branch inactive in the loaded
 		// configuration is still found; grouping is signature-aware, so overloads stay separate groups.
-		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(Model.Solution, CancellationToken);
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution, cancellationToken);
 		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups =
-			await ProjectionService.ResolveAsync(SymbolResolver, projections, SymbolName, CancellationToken);
+			await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName, cancellationToken);
 
 		if (groups.Count == 0)
 		{
@@ -125,30 +125,30 @@ public sealed class GetSymbolBodyTool
 			// simply cannot show a body for, which is NotSupported rather than NotFound — unless the name is a
 			// metadata spelling of something the solution declares in source, which does have a body.
 			IReadOnlyList<ISymbol> metadata =
-				await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(Model.Solution, SymbolName, CancellationToken);
+				await SymbolResolver.FindByFullyQualifiedNameWithMetadataAsync(model.Solution, symbolName, cancellationToken);
 
 			List<ISymbol> declared = metadata.Where(symbol => DeclarationReferences(symbol).Any()).ToList();
 			if (declared.Count > 1)
-				return Failure(SymbolAmbiguity.Ambiguous(SymbolName, declared));
+				return Failure(SymbolAmbiguity.Ambiguous(symbolName, declared));
 			if (declared.Count == 1)
-				return await RenderBodyAsync([declared[0]], SymbolName, Model, Model.Solution, solutionDirectory, Failure, IncludeLeadingTrivia, StartItem, MaxSize, Part, CountOnly, Budget, CancellationToken);
+				return await RenderBodyAsync([declared[0]], symbolName, model, model.Solution, solutionDirectory, Failure, includeLeadingTrivia, startItem, maxSize, part, countOnly, budget, cancellationToken);
 
 			if (metadata.Count > 0)
 			{
 				string assembly = metadata[0].ContainingAssembly is { } owner ? $" It comes from '{owner.Name}'." : "";
 				return Failure(Error.NotSupported(
-					$"'{SymbolName}' has no source declaration, so it has no body to return.{assembly} Use get_symbol for its signature."));
+					$"'{symbolName}' has no source declaration, so it has no body to return.{assembly} Use get_symbol for its signature."));
 			}
 
-			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(Model.Solution, SymbolName);
-			return Failure(Error.NotFound($"No symbol matched '{SymbolName}'.", suggestions.Count > 0 ? suggestions : null));
+			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
+			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", suggestions.Count > 0 ? suggestions : null));
 		}
 
 		if (groups.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(SymbolName, groups.Select(group => group[0].Symbol)));
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		ProjectionSymbol resolved = groups[0][0];
-		return await RenderBodyAsync([resolved.Symbol], SymbolName, Model, resolved.Projection.Solution, solutionDirectory, Failure, IncludeLeadingTrivia, StartItem, MaxSize, Part, CountOnly, Budget, CancellationToken);
+		return await RenderBodyAsync([resolved.Symbol], symbolName, model, resolved.Projection.Solution, solutionDirectory, Failure, includeLeadingTrivia, startItem, maxSize, part, countOnly, budget, cancellationToken);
 	}
 
 	/// <summary>

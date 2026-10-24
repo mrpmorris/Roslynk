@@ -64,60 +64,60 @@ public sealed class FindReferencesTool
 			instance,
 			(model, token) =>
 				FindReferencesCoreAsync(
-					Model: model,
-					Instance: instance,
-					SymbolName: symbolName,
-					StartItem: startItem,
-					MaxSize: maxSize,
-					CountOnly: countOnly,
-					Budget: Budget,
-					CancellationToken: token
+					model: model,
+					instance: instance,
+					symbolName: symbolName,
+					startItem: startItem,
+					maxSize: maxSize,
+					countOnly: countOnly,
+					budget: Budget,
+					cancellationToken: token
 				),
 			cancellationToken);
 	}
 
 	internal async Task<string> FindReferencesCoreAsync(
-		SolutionModel Model,
-		RoslynInstance Instance,
-		string SymbolName,
-		int StartItem = 1,
-		int MaxSize = 0,
-		bool CountOnly = false,
-		ResponseBudget? Budget = null,
-		CancellationToken CancellationToken = default)
+		SolutionModel model,
+		RoslynInstance instance,
+		string symbolName,
+		int startItem = 1,
+		int maxSize = 0,
+		bool countOnly = false,
+		ResponseBudget? budget = null,
+		CancellationToken cancellationToken = default)
 	{
-		string Failure(Error error) => OutlineError.Format(error, Model.Status);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
-		if (Model.Solution is null)
-			return Failure(Error.Indexing(Instance.LoadedProjects));
+		if (model.Solution is null)
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
-		Solution solution = Model.Solution;
+		Solution solution = model.Solution;
 		string? solutionDirectory = SolutionRelativePath.DirectoryOf(solution);
 
 		// Run against every projection (per-TFM projects + #if-toggle variants) so references in conditionally
 		// compiled branches that are inactive in the loaded configuration are still found.
-		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(solution, CancellationToken);
-		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, SymbolName, CancellationToken);
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(solution, cancellationToken);
+		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName, cancellationToken);
 
 		if (groups.Count == 0)
 		{
-			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(solution, SymbolName);
-			return Failure(Error.NotFound($"No symbol matched '{SymbolName}'.", candidates.Count > 0 ? candidates : null));
+			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(solution, symbolName);
+			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", candidates.Count > 0 ? candidates : null));
 		}
 
 		if (groups.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(SymbolName, groups.Select(group => group[0].Symbol)));
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		IReadOnlyList<ProjectionSymbol> resolved = groups[0];
 		ISymbol representative = resolved[0].Symbol;
 
-		// Union references from each projection Instance of the symbol, deduped by file + span so a reference
+		// Union references from each projection instance of the symbol, deduped by file + span so a reference
 		// in shared (non-conditional) code is reported once even though it is seen in several projections.
 		var seen = new HashSet<string>(StringComparer.Ordinal);
 		var hits = new List<(Location Location, Solution Solution)>();
 		foreach (ProjectionSymbol projectionSymbol in resolved)
 		{
-			foreach (ReferencedSymbol referenced in await SymbolFinder.FindReferencesAsync(projectionSymbol.Symbol, projectionSymbol.Projection.Solution, CancellationToken))
+			foreach (ReferencedSymbol referenced in await SymbolFinder.FindReferencesAsync(projectionSymbol.Symbol, projectionSymbol.Projection.Solution, cancellationToken))
 			{
 				bool dispose = SpuriousDisposeReferences.IsDisposeMethod(projectionSymbol.Symbol);
 
@@ -126,9 +126,9 @@ public sealed class FindReferencesTool
 					if (!reference.Location.IsInSource)
 						continue;
 
-					// Roslyn 5.9 reports a plain disposable local declaration at its type Token as a Dispose
+					// Roslyn 5.9 reports a plain disposable local declaration at its type token as a Dispose
 					// reference; such a location is not a reference, while a real using or call is.
-					if (dispose && await SpuriousDisposeReferences.IsSpuriousAsync(reference.Location, CancellationToken))
+					if (dispose && await SpuriousDisposeReferences.IsSpuriousAsync(reference.Location, cancellationToken))
 						continue;
 
 					FileLinePositionSpan referenceSpan = reference.Location.GetDisplaySpan();
@@ -139,14 +139,14 @@ public sealed class FindReferencesTool
 			}
 		}
 
-		// The result set is every hit; the response budget and MaxSize bound what one page carries, so a
-		// long result pages with StartItem instead of losing hits to a cap. count= names the set's size.
+		// The result set is every hit; the response budget and maxSize bound what one page carries, so a
+		// long result pages with startItem instead of losing hits to a cap. count= names the set's size.
 		IReadOnlyList<(Location Location, Solution Solution)> page = hits;
 
 		var root = new SymbolNode();
 		foreach ((Location location, Solution locationSolution) in page)
 		{
-			EnclosingPath enclosing = await EnclosingDeclaration.ResolveAsync(locationSolution, location, CancellationToken);
+			EnclosingPath enclosing = await EnclosingDeclaration.ResolveAsync(locationSolution, location, cancellationToken);
 			FileLinePositionSpan span = location.GetDisplaySpan();
 
 			SymbolNode fileParent = location.SourceTree is SyntaxTree tree && ProjectName.Of(locationSolution, tree) is string project
@@ -166,15 +166,15 @@ public sealed class FindReferencesTool
 		}
 
 		PagedRender render = ItemPaging.Render(
-			Model.Status,
+			model.Status,
 			builder => builder.Header("resolvedSymbol", SymbolResolver.SignatureName(representative)),
 			capHeaders: null,
 			renderBody: builder => root.Render(builder),
 			items: root.Items(),
-			startItem: StartItem,
-			maxSize: MaxSize,
-			budget: Budget,
-			countOnly: CountOnly);
+			startItem: startItem,
+			maxSize: maxSize,
+			budget: budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,

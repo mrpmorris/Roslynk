@@ -89,72 +89,72 @@ public sealed partial class GetExpressionInfoTool
 			instance,
 			(model, _) =>
 				GetExpressionInfoCoreAsync(
-					Model: model,
-					Instance: instance,
-					FilePath: filePath,
-					Line: line,
-					Column: column
+					model: model,
+					instance: instance,
+					filePath: filePath,
+					line: line,
+					column: column
 				),
 			cancellationToken);
 	}
 
-	internal async Task<string> GetExpressionInfoCoreAsync(SolutionModel Model, RoslynInstance Instance, string FilePath, int Line, int Column, CancellationToken Token = default)
+	internal async Task<string> GetExpressionInfoCoreAsync(SolutionModel model, RoslynInstance instance, string filePath, int line, int column, CancellationToken token = default)
 	{
-		string Failure(Error error) => OutlineError.Format(error, Model.Status);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
-		if (Model.Solution is null)
-			return Failure(Error.Indexing(Instance.LoadedProjects));
+		if (model.Solution is null)
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
 		(RazorSourceDocument? baseDocument, Error? pathError) = await RazorSourceDocument.ResolveWithErrorAsync(
-			Model.Solution,
-			FilePath,
-			$"'{FilePath}' is not a C#, Razor or CSHTML document compiled in the solution.",
-			Token);
+			model.Solution,
+			filePath,
+			$"'{filePath}' is not a C#, Razor or CSHTML document compiled in the solution.",
+			token);
 		if (pathError is Error error)
 			return Failure(error);
 		RazorSourceDocument document = baseDocument!;
 		string? resolvedPath = document.ResolvedBySuffix ? document.ResolvedPath : null;
 
-		SourceText sourceText = await document.GetSourceTextAsync(Token);
-		if (Line < 1 || Line > sourceText.Lines.Count)
-			return Failure(Error.NotFound($"Line {Line} is outside '{FilePath}', which has {sourceText.Lines.Count} lines."));
+		SourceText sourceText = await document.GetSourceTextAsync(token);
+		if (line < 1 || line > sourceText.Lines.Count)
+			return Failure(Error.NotFound($"line {line} is outside '{filePath}', which has {sourceText.Lines.Count} lines."));
 
-		TextLine textLine = sourceText.Lines[Line - 1];
-		if (Column < 1 || Column - 1 > textLine.End - textLine.Start)
-			return Failure(Error.NotFound($"Column {Column} is outside Line {Line} of '{FilePath}'."));
+		TextLine textLine = sourceText.Lines[line - 1];
+		if (column < 1 || column - 1 > textLine.End - textLine.Start)
+			return Failure(Error.NotFound($"column {column} is outside line {line} of '{filePath}'."));
 
-		int sourcePosition = textLine.Start + Column - 1;
+		int sourcePosition = textLine.Start + column - 1;
 
 		// Try each projection in turn: code in a branch inactive in the loaded configuration is disabled trivia
 		// in the base projection and only becomes an expression where that branch is active.
-		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(Model.Solution, Token);
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution, token);
 		foreach (Projection projection in projections)
 		{
-			RazorSourceDocument? source = ReferenceEquals(projection.Solution, Model.Solution)
+			RazorSourceDocument? source = ReferenceEquals(projection.Solution, model.Solution)
 				? document
-				: await RazorSourceDocument.ResolveAsync(projection.Solution, FilePath, Token);
+				: await RazorSourceDocument.ResolveAsync(projection.Solution, filePath, token);
 			if (source is null)
 				continue;
 
-			TextSpan? mapped = await source.MapToDocumentAsync(new TextSpan(sourcePosition, 0), Token);
+			TextSpan? mapped = await source.MapToDocumentAsync(new TextSpan(sourcePosition, 0), token);
 			if (mapped is null)
 				continue;
 
-			SyntaxNode? root = await source.Document.GetSyntaxRootAsync(Token);
-			SemanticModel? semanticModel = await source.Document.GetSemanticModelAsync(Token);
+			SyntaxNode? root = await source.Document.GetSyntaxRootAsync(token);
+			SemanticModel? semanticModel = await source.Document.GetSemanticModelAsync(token);
 			if (root is null || semanticModel is null)
 				continue;
 
 			ExpressionSyntax? expression = FindExpression(root, mapped.Value.Start);
 			if (expression is not null)
-				return Describe(Model.Solution, semanticModel, expression, Token, resolvedPath);
+				return Describe(model.Solution, semanticModel, expression, token, resolvedPath);
 
-			if (FindDeclaredName(root, semanticModel, mapped.Value.Start, Token) is (SyntaxToken name, ISymbol declared))
-				return DescribeDeclaration(Model.Solution, semanticModel, name, declared, Token, resolvedPath);
+			if (FindDeclaredName(root, semanticModel, mapped.Value.Start, token) is (SyntaxToken name, ISymbol declared))
+				return DescribeDeclaration(model.Solution, semanticModel, name, declared, token, resolvedPath);
 		}
 
 		return Failure(Error.NotFound(
-			$"No expression or declared name at {FilePath} ({Line}, {Column}). Place the position on an identifier, "
+			$"No expression or declared name at {filePath} ({line}, {column}). Place the position on an identifier, "
 			+ "literal, member access, invocation or other expression, or on the name a declaration introduces; "
 			+ "keywords, punctuation, comments and whitespace are neither."));
 	}

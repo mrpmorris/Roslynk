@@ -54,42 +54,42 @@ public sealed class GetSymbolTool
 			instance,
 			(model, token) =>
 				GetSymbolCoreAsync(
-					Model: model,
-					Instance: instance,
-					SymbolName: symbolName,
-					CancellationToken: token
+					model: model,
+					instance: instance,
+					symbolName: symbolName,
+					cancellationToken: token
 				),
 			cancellationToken);
 	}
 
-	internal async Task<string> GetSymbolCoreAsync(SolutionModel Model, RoslynInstance Instance, string SymbolName, CancellationToken CancellationToken = default)
+	internal async Task<string> GetSymbolCoreAsync(SolutionModel model, RoslynInstance instance, string symbolName, CancellationToken cancellationToken = default)
 	{
-		string Failure(Error error) => OutlineError.Format(error, Model.Status);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
-		if (Model.Solution is null)
-			return Failure(Error.Indexing(Instance.LoadedProjects));
+		if (model.Solution is null)
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
-		string? solutionDirectory = SolutionRelativePath.DirectoryOf(Model.Solution);
+		string? solutionDirectory = SolutionRelativePath.DirectoryOf(model.Solution);
 
 		// Resolve across every projection (with metadata fallback) so a symbol declared only in a branch
 		// inactive in the loaded configuration is still found; the strictest matching level any projection
 		// reached decides for all of them, and grouping is by stable identity, keeping the best-bound copy
 		// of each declaration so its spelling is the one echoed.
-		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(Model.Solution);
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
 		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups =
-			await ProjectionService.ResolveAsync(SymbolResolver, projections, SymbolName, includeMetadata: true, accept: null, CancellationToken);
+			await ProjectionService.ResolveAsync(SymbolResolver, projections, symbolName, includeMetadata: true, accept: null, cancellationToken);
 
 		if (groups.Count == 0)
 		{
-			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(Model.Solution, SymbolName);
-			return Failure(Error.NotFound($"No symbol matched '{SymbolName}'.", suggestions.Count > 0 ? suggestions : null));
+			IReadOnlyList<string> suggestions = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
+			return Failure(Error.NotFound($"No symbol matched '{symbolName}'.", suggestions.Count > 0 ? suggestions : null));
 		}
 
 		if (groups.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(SymbolName, groups.Select(group => group[0].Symbol)));
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		ProjectionSymbol match = groups[0][0];
-		return await DetailLeanAsync(match.Symbol, match.Projection.Solution, solutionDirectory, SymbolName, CancellationToken);
+		return await DetailLeanAsync(match.Symbol, match.Projection.Solution, solutionDirectory, symbolName, cancellationToken);
 	}
 
 	private async Task<string> DetailLeanAsync(ISymbol symbol, Solution solution, string? solutionDirectory, string requestedName, CancellationToken cancellationToken)

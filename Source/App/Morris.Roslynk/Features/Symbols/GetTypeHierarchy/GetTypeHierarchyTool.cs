@@ -57,48 +57,48 @@ public sealed class GetTypeHierarchyTool
 			instance,
 			(model, _) =>
 				GetTypeHierarchyCoreAsync(
-					Model: model,
-					Instance: instance,
-					SymbolName: symbolName,
-					StartItem: startItem,
-					MaxSize: maxSize,
-					CountOnly: countOnly,
-					Budget: Budget
+					model: model,
+					instance: instance,
+					symbolName: symbolName,
+					startItem: startItem,
+					maxSize: maxSize,
+					countOnly: countOnly,
+					budget: Budget
 				),
 			cancellationToken);
 	}
 
 	internal async Task<string> GetTypeHierarchyCoreAsync(
-		SolutionModel Model,
-		RoslynInstance Instance,
-		string SymbolName,
-		int StartItem = 1,
-		int MaxSize = 0,
-		bool CountOnly = false,
-		ResponseBudget? Budget = null,
-		CancellationToken Token = default)
+		SolutionModel model,
+		RoslynInstance instance,
+		string symbolName,
+		int startItem = 1,
+		int maxSize = 0,
+		bool countOnly = false,
+		ResponseBudget? budget = null,
+		CancellationToken token = default)
 	{
-		string Failure(Error error) => OutlineError.Format(error, Model.Status);
+		string Failure(Error error) => OutlineError.Format(error, model.Status);
 
-		if (Model.Solution is null)
-			return Failure(Error.Indexing(Instance.LoadedProjects));
+		if (model.Solution is null)
+			return Failure(Error.Indexing(instance.LoadedProjects));
 
-		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(Model.Solution);
+		IReadOnlyList<Projection> projections = await ProjectionService.BuildAsync(model.Solution);
 		IReadOnlyList<IReadOnlyList<ProjectionSymbol>> groups = await ProjectionService.ResolveAsync(
 			SymbolResolver,
 			projections,
-			SymbolName,
+			symbolName,
 			includeMetadata: false,
 			accept: symbol => symbol is INamedTypeSymbol);
 
 		if (groups.Count == 0)
 		{
-			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(Model.Solution, SymbolName);
-			return Failure(Error.NotFound($"No type matched '{SymbolName}'.", candidates.Count > 0 ? candidates : null));
+			IReadOnlyList<string> candidates = await SymbolResolver.SuggestAsync(model.Solution, symbolName);
+			return Failure(Error.NotFound($"No type matched '{symbolName}'.", candidates.Count > 0 ? candidates : null));
 		}
 
 		if (groups.Count > 1)
-			return Failure(SymbolAmbiguity.Ambiguous(SymbolName, groups.Select(group => group[0].Symbol)));
+			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		IReadOnlyList<ProjectionSymbol> resolvedType = groups[0];
 		var type = (INamedTypeSymbol)resolvedType[0].Symbol;
@@ -129,7 +129,7 @@ public sealed class GetTypeHierarchyTool
 			.OrderBy(SymbolResolver.FullyQualifiedName, StringComparer.Ordinal)
 			.ToList();
 
-		// Items for the shared pager: one per entry, its section header as the open container Line.
+		// Items for the shared pager: one per entry, its section header as the open container line.
 		var items = new List<OutlineItem>();
 		void Collect(string title, IReadOnlyList<INamedTypeSymbol> types)
 		{
@@ -142,7 +142,7 @@ public sealed class GetTypeHierarchyTool
 		Collect("derived", derived);
 
 		PagedRender render = ItemPaging.Render(
-			Model.Status,
+			model.Status,
 			builder => builder.Header("resolvedType", SymbolResolver.SignatureName(type)),
 			builder =>
 			{
@@ -151,10 +151,10 @@ public sealed class GetTypeHierarchyTool
 				Section(builder, "derived", derived);
 			},
 			items,
-			StartItem,
-			MaxSize,
-			Budget,
-			countOnly: CountOnly);
+			startItem,
+			maxSize,
+			budget,
+			countOnly: countOnly);
 		return render switch
 		{
 			PagedRender.Complete complete => complete.Output,
