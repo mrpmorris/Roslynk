@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Read-only tools run through a shared snapshot guard that returns `error=Stale` (with the current `snapshot=<id>`) when the solution changes mid-query or the query is cancelled, and `multi_query` rejects the whole batch rather than mixing generations; write tools stay on the write pipeline (Fixes #165)
 - `get_solution_status` reports NuGet restore warnings (NU1902/NU1903/NU1510 ...) as `loadWarning=<code>: <message>` instead of `loadDiagnostic=`, by matching each load failure's text against the Warning-level entries the restore wrote to the projects' `project.assets.json` (Fixes #163)
 - `search_symbols`, `get_callees`, `get_callers` and `find_implementations` report a symbol declared in a `.razor`/`.cshtml` file under that file with its mapped position instead of the virtual generated `.g.cs` path, which has no file on disk (Fixes #164)
 - Semantic write tools (`rename_symbol`, `rename_parameter`, `change_signature`, `extract_method`, `remove_unused_usings`, `apply_code_fix`, `apply_code_action`) keep each rewritten file's BOM-declared encoding instead of rewriting it as UTF-8 without a BOM, so a `.cs`/`.razor` file with a UTF-8 BOM keeps it and a BOM-less file still gains none (Fixes #162)

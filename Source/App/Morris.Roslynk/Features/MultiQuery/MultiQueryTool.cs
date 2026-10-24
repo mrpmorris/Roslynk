@@ -167,6 +167,22 @@ public sealed class MultiQueryTool
 				bodies[index] = await ExecuteOperationAsync(pinnedModel, pinnedInstance, catalog, operations[index], index).ConfigureAwait(false))
 			.ConfigureAwait(false);
 
+		// Generation check: every operation has run against the pinned snapshot, but the instance may have
+		// published a newer Solution meanwhile. A batch must never mix generations, so a superseded pin
+		// refuses the whole envelope as Stale - before any slot is rendered - rather than delivering slots
+		// computed against an older snapshot. The existing expectSnapshot check refuses a continuation
+		// before execution; this one catches a change that landed while the batch itself was running.
+		if (pinnedModel.Solution is not null
+			&& !ReferenceEquals(pinnedInstance.CurrentModel.Solution, pinnedModel.Solution))
+		{
+			SolutionModel current = pinnedInstance.CurrentModel;
+			return OutlineError.Format(
+				Error.Stale(
+					$"The solution moved on while this batch ran (batch snapshot {pinnedModel.Id.ToString("N")}, current {current.Id.ToString("N")}). Re-run the whole batch rather than stitching two generations."),
+				current.Status)
+				+ $"snapshot={current.Id.ToString("N")}\n";
+		}
+
 		// Costs: frame + body for a delivered slot, one small header entry for a dropped one.
 		int[] cost = new int[operations.Count];
 		for (int index = 0; index < operations.Count; index++)

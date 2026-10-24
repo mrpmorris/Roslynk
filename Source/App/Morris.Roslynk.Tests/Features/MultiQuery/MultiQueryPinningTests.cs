@@ -11,9 +11,10 @@ using Morris.Roslynk.Infrastructure.Resolution;
 namespace Morris.Roslynk.Tests.Features.MultiQuery;
 
 /// <summary>
-/// The pinning proof and the framing round-trip, against real fixture solutions:
-/// - pinning is proven at the ExecuteBatchAsync seam with a deliberately stale model (output agreement alone
-///   cannot distinguish pinning from re-reading);
+/// The batch snapshot guard and the framing round-trip, against real fixture solutions:
+/// - a superseded pinned model is proven at the ExecuteBatchAsync seam (output agreement alone cannot
+///   distinguish pinning from re-reading): the batch now refuses the whole envelope as Stale, before any
+///   slot is rendered, instead of serving slots from two generations;
 /// - the round-trip test feeds a solution file whose verbatim source contains envelope-framing lookalikes
 ///   (stale GUIDs) and asserts the bodies recover byte-exact. The n+1 integrity check's fault path is
 ///   proven separately in MultiQueryLimitTests with a stub that embeds the CURRENT boundary.
@@ -21,14 +22,16 @@ namespace Morris.Roslynk.Tests.Features.MultiQuery;
 public class MultiQueryPinningTests
 {
 	[Fact]
-	public async Task WhenThePinnedModelIsStale_ThenSlotsReflectThePinnedSnapshotNotTheCurrentOne()
+	public async Task WhenThePinnedModelIsSuperseded_ThenTheWholeBatchIsStaleRatherThanMixingGenerations()
 	{
-		var registry = new InstanceRegistry();
+		using var registry = new InstanceRegistry();
 		await registry.GetOrAddAsync(TestSolutions.Simple);
 		RoslynInstance instance = await registry.GetOrBeginAsync(TestSolutions.Simple);
 		SolutionModel pinned = await instance.ReadModelAsync();
 
-		// A real write advances the instance to a fresh model; the pinned model still shows the old source.
+		// A real write advances the instance to a fresh Solution while the batch still holds the pinned
+		// one. This reverses the old expectation that such slots were served from the pinned snapshot: a
+		// batch must never mix generations, so the whole envelope is refused instead.
 		await ApplyRealEditAsync(instance);
 
 		var provider = new ServiceCollection()
@@ -47,10 +50,55 @@ public class MultiQueryPinningTests
 				new MultiQueryOperation(MultiQueryOp.get_members, MultiQueryTestHelpers.Args(("symbolName", MultiQueryTestHelpers.Json("SimpleLibrary.Widget")))),
 			]);
 
-		// PRE-write state in both slots: the old source (three methods) rather than the emptied class.
-		Assert.Contains("method,Compute", envelope);
-		Assert.Contains("method,UseCompute", envelope);
-		Assert.DoesNotContain("error=", envelope);
+		// One whole-batch refusal: no slot frames at all, both generations named in the message, and the
+		// current snapshot emitted as a real header so the caller can rerun against it.
+		Assert.StartsWith("error=Stale", envelope);
+		Assert.Contains(pinned.Id.ToString("N"), envelope);
+		Assert.Contains($"snapshot={instance.CurrentModel.Id.ToString("N")}", envelope);
+		Assert.DoesNotContain("slot=", envelope);
+		Assert.DoesNotContain("\n--", envelope);
+		Assert.DoesNotContain("method,Compute", envelope);
+	}
+
+	[Fact]
+	public async Task WhenTheSolutionAdvancesWhileTheBatchRuns_ThenTheWholeBatchIsStaleAndNoSlotIsRendered()
+	{
+		using var registry = new InstanceRegistry();
+		await registry.GetOrAddAsync(TestSolutions.Simple);
+		RoslynInstance instance = await registry.GetOrBeginAsync(TestSolutions.Simple);
+		SolutionModel pinned = await instance.ReadModelAsync();
+
+		var provider = new ServiceCollection()
+			.AddSingleton<InstanceRegistry>(registry)
+			.AddSingleton<SymbolResolver>()
+			.AddSingleton<ProjectionService>()
+			.BuildServiceProvider();
+		var subject = new MultiQueryTool(provider, registry);
+
+		// A stub core publishes a new Solution from INSIDE an operation, so the change deterministically
+		// lands after the batch pinned its model and before any slot is rendered.
+		var catalog = new Dictionary<string, MultiQueryCatalog.OpEntry>(StringComparer.Ordinal)
+		{
+			["get_symbol_body"] = new("get_symbol_body", typeof(AdvancingCoreHost), nameof(AdvancingCoreHost.AdvanceAndReturnAsync)),
+			["get_members"] = new("get_members", typeof(AdvancingCoreHost), nameof(AdvancingCoreHost.ReturnAsync)),
+		};
+
+		string envelope = await subject.ExecuteBatchAsync(
+			pinned,
+			instance,
+			catalog,
+			[
+				new MultiQueryOperation(MultiQueryOp.get_symbol_body, MultiQueryTestHelpers.Args(("symbolName", MultiQueryTestHelpers.Json("SimpleLibrary.Widget")))),
+				new MultiQueryOperation(MultiQueryOp.get_members, MultiQueryTestHelpers.Args(("symbolName", MultiQueryTestHelpers.Json("SimpleLibrary.Widget")))),
+			]);
+
+		Assert.StartsWith("error=Stale", envelope);
+		Assert.Contains(pinned.Id.ToString("N"), envelope);
+		Assert.Contains($"snapshot={instance.CurrentModel.Id.ToString("N")}", envelope);
+		Assert.DoesNotContain("slot=", envelope);
+		Assert.DoesNotContain("\n--", envelope);
+		Assert.DoesNotContain("body=advanced", envelope);
+		Assert.DoesNotContain("body=plain", envelope);
 	}
 
 	[Fact]
@@ -149,4 +197,21 @@ internal sealed class ThrowingCoreHost
 {
 	public Task<string> ThrowAsync(SolutionModel model, RoslynInstance instance, string symbolName, CancellationToken token) =>
 		throw new InvalidOperationException("boom");
+}
+
+/// <summary>A stub operation that publishes a new Solution mid-batch, then returns a body.</summary>
+internal sealed class AdvancingCoreHost
+{
+	public Task<string> AdvanceAndReturnAsync(SolutionModel model, RoslynInstance instance, string symbolName, CancellationToken token)
+	{
+		instance.AdvanceTo(
+			model.Solution!
+				.Projects.First()
+				.AddDocument("MidBatch.cs", "namespace MidBatch; public class MidBatch { }")
+				.Project.Solution);
+		return Task.FromResult("body=advanced\n");
+	}
+
+	public Task<string> ReturnAsync(SolutionModel model, RoslynInstance instance, string symbolName, CancellationToken token) =>
+		Task.FromResult("body=plain\n");
 }

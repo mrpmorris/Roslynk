@@ -53,8 +53,10 @@ public sealed class GetTypeHierarchyTool
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
-		SolutionModel model = await instance.ReadModelAsync();
-		return await GetTypeHierarchyCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget);
+		return await QueryExecution.QueryAsync(
+			instance,
+			(model, _) => GetTypeHierarchyCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget),
+			cancellationToken);
 	}
 
 	internal async Task<string> GetTypeHierarchyCoreAsync(
