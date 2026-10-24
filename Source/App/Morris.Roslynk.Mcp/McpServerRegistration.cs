@@ -87,6 +87,9 @@ internal static class McpServerRegistration
 			Failures are header-only: error=<code>, errorMessage=..., optional candidates.
 			An argument the tool does not declare returns error=UnknownArgument naming the valid parameters;
 			nothing ran, so retry with the listed names. Stale: target changed since reading; recompute/retry.
+			Read-only queries are snapshot-guarded: a result is refused as Stale, with the current snapshot=<id>,
+			when the solution changes while the query runs or the query is cancelled, so re-run it. multi_query
+			rejects the whole batch the same way rather than mixing generations.
 			Re-query after relevant writes/user saves.
 
 			## Paging

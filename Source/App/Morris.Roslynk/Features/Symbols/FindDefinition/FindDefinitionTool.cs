@@ -51,8 +51,10 @@ public sealed class FindDefinitionTool
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
-		SolutionModel model = await instance.ReadModelAsync();
-		return await FindDefinitionCoreAsync(model, instance, filePath, line, column, CancellationToken.None);
+		return await QueryExecution.QueryAsync(
+			instance,
+			(model, _) => FindDefinitionCoreAsync(model, instance, filePath, line, column, CancellationToken.None),
+			cancellationToken);
 	}
 
 	internal async Task<string> FindDefinitionCoreAsync(SolutionModel model, RoslynInstance instance, string filePath, int line, int column, CancellationToken token = default)

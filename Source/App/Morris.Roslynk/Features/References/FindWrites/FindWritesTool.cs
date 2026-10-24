@@ -50,8 +50,10 @@ public sealed class FindWritesTool
 		CancellationToken cancellationToken = default)
 	{
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
-		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
-		return await FindWritesCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget, cancellationToken);
+		return await QueryExecution.QueryAsync(
+			instance,
+			(model, token) => FindWritesCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget, token),
+			cancellationToken);
 	}
 
 	internal Task<string> FindWritesCoreAsync(
