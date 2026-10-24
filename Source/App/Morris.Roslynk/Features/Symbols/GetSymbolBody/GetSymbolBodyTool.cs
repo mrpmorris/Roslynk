@@ -78,7 +78,19 @@ public sealed class GetSymbolBodyTool
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		return await QueryExecution.QueryAsync(
 			instance,
-			(model, token) => GetSymbolBodyCoreAsync(model, instance, symbolName, includeLeadingTrivia, startItem, maxSize, part, countOnly, Budget, token),
+			(model, token) =>
+				GetSymbolBodyCoreAsync(
+					model: model,
+					instance: instance,
+					symbolName: symbolName,
+					includeLeadingTrivia: includeLeadingTrivia,
+					startItem: startItem,
+					maxSize: maxSize,
+					part: part,
+					countOnly: countOnly,
+					Budget: Budget,
+					cancellationToken: token
+				),
 			cancellationToken);
 	}
 
@@ -91,7 +103,7 @@ public sealed class GetSymbolBodyTool
 		int maxSize = 0,
 		int part = 0,
 		bool countOnly = false,
-		ResponseBudget? budget = null,
+		ResponseBudget? Budget = null,
 		CancellationToken cancellationToken = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
@@ -119,7 +131,7 @@ public sealed class GetSymbolBodyTool
 			if (declared.Count > 1)
 				return Failure(SymbolAmbiguity.Ambiguous(symbolName, declared));
 			if (declared.Count == 1)
-				return await RenderBodyAsync([declared[0]], symbolName, model, model.Solution, solutionDirectory, Failure, includeLeadingTrivia, startItem, maxSize, part, countOnly, budget, cancellationToken);
+				return await RenderBodyAsync([declared[0]], symbolName, model, model.Solution, solutionDirectory, Failure, includeLeadingTrivia, startItem, maxSize, part, countOnly, Budget, cancellationToken);
 
 			if (metadata.Count > 0)
 			{
@@ -136,7 +148,7 @@ public sealed class GetSymbolBodyTool
 			return Failure(SymbolAmbiguity.Ambiguous(symbolName, groups.Select(group => group[0].Symbol)));
 
 		ProjectionSymbol resolved = groups[0][0];
-		return await RenderBodyAsync([resolved.Symbol], symbolName, model, resolved.Projection.Solution, solutionDirectory, Failure, includeLeadingTrivia, startItem, maxSize, part, countOnly, budget, cancellationToken);
+		return await RenderBodyAsync([resolved.Symbol], symbolName, model, resolved.Projection.Solution, solutionDirectory, Failure, includeLeadingTrivia, startItem, maxSize, part, countOnly, Budget, cancellationToken);
 	}
 
 	/// <summary>

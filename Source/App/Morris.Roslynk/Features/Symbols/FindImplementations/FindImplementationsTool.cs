@@ -56,7 +56,16 @@ public sealed class FindImplementationsTool
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		return await QueryExecution.QueryAsync(
 			instance,
-			(model, _) => FindImplementationsCoreAsync(model, instance, symbolName, startItem, maxSize, countOnly, Budget, CancellationToken.None),
+			(model, _) =>
+				FindImplementationsCoreAsync(
+					model: model,
+					instance: instance,
+					symbolName: symbolName,
+					startItem: startItem,
+					maxSize: maxSize,
+					countOnly: countOnly,
+					Budget: Budget
+				),
 			cancellationToken);
 	}
 
@@ -67,7 +76,7 @@ public sealed class FindImplementationsTool
 		int startItem = 1,
 		int maxSize = 0,
 		bool countOnly = false,
-		ResponseBudget? budget = null,
+		ResponseBudget? Budget = null,
 		CancellationToken token = default)
 	{
 		string Failure(Error error) => OutlineError.Format(error, model.Status);
@@ -109,7 +118,7 @@ public sealed class FindImplementationsTool
 			root.Items(),
 			startItem,
 			maxSize,
-			budget,
+			Budget,
 			countOnly: countOnly);
 		return render switch
 		{

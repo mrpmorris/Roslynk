@@ -52,7 +52,13 @@ public sealed class GetSymbolTool
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		return await QueryExecution.QueryAsync(
 			instance,
-			(model, token) => GetSymbolCoreAsync(model, instance, symbolName, token),
+			(model, token) =>
+				GetSymbolCoreAsync(
+					model: model,
+					instance: instance,
+					symbolName: symbolName,
+					cancellationToken: token
+				),
 			cancellationToken);
 	}
 

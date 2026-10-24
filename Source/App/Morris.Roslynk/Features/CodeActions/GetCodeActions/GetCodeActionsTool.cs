@@ -54,7 +54,17 @@ public sealed class GetCodeActionsTool
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		return await QueryExecution.QueryAsync(
 			instance,
-			(model, token) => GetCodeActionsCoreAsync(model, instance, filePath, line, column, endLine, endColumn, token),
+			(model, token) =>
+				GetCodeActionsCoreAsync(
+					model: model,
+					instance: instance,
+					filePath: filePath,
+					line: line,
+					column: column,
+					endLine: endLine,
+					endColumn: endColumn,
+					cancellationToken: token
+				),
 			cancellationToken);
 	}
 

@@ -63,7 +63,17 @@ public sealed class SearchSymbolsTool
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		return await QueryExecution.QueryAsync(
 			instance,
-			(model, _) => SearchSymbolsCoreAsync(model, instance, symbolNameFilter, kinds, startItem, maxSize, countOnly, Budget, CancellationToken.None),
+			(model, _) =>
+				SearchSymbolsCoreAsync(
+					model: model,
+					instance: instance,
+					symbolNameFilter: symbolNameFilter,
+					kinds: kinds,
+					startItem: startItem,
+					maxSize: maxSize,
+					countOnly: countOnly,
+					Budget: Budget
+				),
 			cancellationToken);
 	}
 
@@ -75,7 +85,7 @@ public sealed class SearchSymbolsTool
 		int startItem = 1,
 		int maxSize = 0,
 		bool countOnly = false,
-		ResponseBudget? budget = null,
+		ResponseBudget? Budget = null,
 		CancellationToken token = default)
 	{
 		// Validate the filter before doing any work: an unknown kind name is the caller's mistake and must
@@ -150,7 +160,7 @@ public sealed class SearchSymbolsTool
 			items: root.Items(),
 			startItem: startItem,
 			maxSize: maxSize,
-			budget: budget,
+			budget: Budget,
 			countOnly: countOnly);
 		return render switch
 		{

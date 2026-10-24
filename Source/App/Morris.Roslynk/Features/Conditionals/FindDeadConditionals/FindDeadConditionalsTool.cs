@@ -53,7 +53,15 @@ public sealed class FindDeadConditionalsTool
 		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(solutionId, cancellationToken);
 		return await QueryExecution.QueryAsync(
 			instance,
-			(model, _) => FindDeadConditionalsCoreAsync(model, instance, startItem, maxSize, countOnly, Budget),
+			(model, _) =>
+				FindDeadConditionalsCoreAsync(
+					model: model,
+					instance: instance,
+					startItem: startItem,
+					maxSize: maxSize,
+					countOnly: countOnly,
+					Budget: Budget
+				),
 			cancellationToken);
 	}
 
@@ -63,7 +71,7 @@ public sealed class FindDeadConditionalsTool
 		int startItem = 1,
 		int maxSize = 0,
 		bool countOnly = false,
-		ResponseBudget? budget = null,
+		ResponseBudget? Budget = null,
 		CancellationToken token = default)
 	{
 		if (model.Solution is null)
@@ -101,7 +109,7 @@ public sealed class FindDeadConditionalsTool
 			items,
 			startItem,
 			maxSize,
-			budget,
+			Budget,
 			countOnly: countOnly);
 		return render switch
 		{
