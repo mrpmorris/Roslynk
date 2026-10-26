@@ -60,8 +60,7 @@ public class PathResolutionTests
 	[Fact]
 	public async Task WhenGetDiagnosticsUsesAnExactPath_ThenNoResolvedPathHeaderIsEmitted()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
@@ -71,7 +70,6 @@ public class PathResolutionTests
 		Assert.DoesNotContain("resolvedPath=", result);
 		Assert.Contains("filter=filePath:SimpleLibrary/Calculator.cs", result);
 	}
-
 	[Fact]
 	public async Task WhenApplyPatchUsesABareFileName_ThenItResolvesAndEchoesResolvedPath()
 	{
@@ -111,8 +109,7 @@ public class PathResolutionTests
 	[Fact]
 	public async Task WhenFindDefinitionUsesABareFileName_ThenItResolvesAndEchoesResolvedPath()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new FindDefinitionTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindDefinition(TestSolutions.Simple, "Calculator.cs", 7, 10);
@@ -121,12 +118,10 @@ public class PathResolutionTests
 		Assert.Contains("resolvedPath=SimpleLibrary/Calculator.cs", result);
 		Assert.Contains("fullName=a", result);
 	}
-
 	[Fact]
 	public async Task WhenGetExpressionInfoUsesABareFileName_ThenItResolvesAndEchoesResolvedPath()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new GetExpressionInfoTool(registry, new ProjectionService());
 
 		string result = await subject.GetExpressionInfo(TestSolutions.Simple, "Calculator.cs", 7, 10);

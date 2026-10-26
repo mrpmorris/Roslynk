@@ -65,8 +65,7 @@ public class FindReferencesDisposeTests
 
 	private static async Task<string> FindAsync(string symbolName)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Dispose);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Dispose);
 		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
 
 		return await subject.FindReferences(TestSolutions.Dispose, symbolName);

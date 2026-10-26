@@ -153,27 +153,23 @@ public class ExtractMethodTests
 	[InlineData("two words")]
 	public async Task WhenTheMethodNameIsInvalid_ThenInvalidIsReturned(string methodName)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
 
 		string result = await subject.ExtractMethod(TestSolutions.Simple, "SimpleLibrary/Greeter.cs", 1, 1, 1, 2, methodName: methodName);
 
 		Assert.Contains("error=Invalid", result);
 	}
-
 	[Fact]
 	public async Task WhenTheSelectionIsOutsideTheDocument_ThenInvalidIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
 
 		string result = await subject.ExtractMethod(TestSolutions.Simple, "SimpleLibrary/Greeter.cs", 1, 1, 9999, 1);
 
 		Assert.Contains("error=Invalid", result);
 	}
-
 	[Fact]
 	public async Task WhenTheDocumentIsNotInTheSolution_ThenNotFoundIsReturned()
 	{

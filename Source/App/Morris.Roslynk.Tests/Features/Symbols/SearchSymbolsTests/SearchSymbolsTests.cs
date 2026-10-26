@@ -9,8 +9,7 @@ public class SearchSymbolsTests
 	[Fact]
 	public async Task WhenSearchingByNameSubstring_ThenMatchingSymbolsAreReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet");
@@ -19,12 +18,10 @@ public class SearchSymbolsTests
 		Assert.Contains("\tSimpleLibrary\n", result);
 		Assert.Contains("class,Greeter", result);
 	}
-
 	[Fact]
 	public async Task WhenTheFilterIsSuppliedByItsPublishedName_ThenTheFilterApplies()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		// Pins the public parameter name (issue #152): 'query' read as free-text search, so a caller
@@ -34,19 +31,16 @@ public class SearchSymbolsTests
 		Assert.DoesNotContain("error=", result);
 		Assert.Contains("class,Greeter", result);
 	}
-
 	[Fact]
 	public async Task WhenNothingMatchesTheQuery_ThenNoResultsAreReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "NoSuchSymbolNameHere");
 
-		Assert.Equal("", result);
+		OutlineAssert.HasNoSymbols(result);
 	}
-
 	[Fact]
 	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{
@@ -63,8 +57,7 @@ public class SearchSymbolsTests
 	[Fact]
 	public async Task WhenAQueryMatchesSeveralOverloads_ThenEveryOverloadIsListed()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Add");
@@ -73,12 +66,10 @@ public class SearchSymbolsTests
 		// Both Ledger.Add overloads are listed; before the dedupe key carried the signature, one was dropped.
 		Assert.Equal(2, result.Split('\n').Count(line => line.TrimStart('	').StartsWith("method,Add,", StringComparison.Ordinal)));
 	}
-
 	[Fact]
 	public async Task WhenAQueryNamesAMemberUnderItsType_ThenOnlyThatMemberIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Widget.Compute");
@@ -89,12 +80,10 @@ public class SearchSymbolsTests
 		// The dotted query names the member itself, so the substring-matching sibling is not listed.
 		Assert.DoesNotContain("UseCompute", result);
 	}
-
 	[Fact]
 	public async Task WhenAQueryNamesAMemberByItsNamespaceAndType_ThenThatMemberIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "SimpleLibrary.Ledger.Total");
@@ -103,12 +92,10 @@ public class SearchSymbolsTests
 		Assert.Contains("class,Ledger", result);
 		Assert.Contains("property,Total,5:13", result);
 	}
-
 	[Fact]
 	public async Task WhenAQueryNamesAMemberByANestedTypeChain_ThenThatMemberIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.LocalFunctions);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.LocalFunctions, "ParentClass.Widget.Caller");
@@ -118,12 +105,10 @@ public class SearchSymbolsTests
 		Assert.Contains("class,Widget", result);
 		Assert.Contains("method,Caller", result);
 	}
-
 	[Fact]
 	public async Task WhenADottedQueryUsesDifferentCasing_ThenTheMemberIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "widget.COMPUTE");
@@ -131,50 +116,42 @@ public class SearchSymbolsTests
 		Assert.DoesNotContain("error=", result);
 		Assert.Contains("method,Compute,8:13", result);
 	}
-
 	[Fact]
 	public async Task WhenADottedQueryNamesAMemberOfAnotherType_ThenNoResultsAreReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		// Add exists, but on Calculator and Ledger, not Widget.
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Widget.Add");
 
-		Assert.Equal("", result);
+		OutlineAssert.HasNoSymbols(result);
 	}
-
 	[Fact]
 	public async Task WhenADottedQueryNamesAMissingMember_ThenNoResultsAreReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Widget.NoSuchMember");
 
-		Assert.Equal("", result);
+		OutlineAssert.HasNoSymbols(result);
 	}
-
 	[Fact]
 	public async Task WhenADottedQueryWritesOnlyPartOfAContainerSegment_ThenNoResultsAreReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		// 'Library' is not a whole segment of 'SimpleLibrary', so the suffix comparison must not cross it.
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Library.Widget.Compute");
 
-		Assert.Equal("", result);
+		OutlineAssert.HasNoSymbols(result);
 	}
-
 	[Fact]
 	public async Task WhenABareQueryMatchesMembersOfSeveralTypes_ThenEveryContainerIsListed()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Add");
@@ -182,12 +159,10 @@ public class SearchSymbolsTests
 		Assert.Contains("class,Calculator", result);
 		Assert.Contains("class,Ledger", result);
 	}
-
 	[Fact]
 	public async Task WhenADottedQuerySelectsOneOfSeveralContainers_ThenOnlyThatContainerIsListed()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Ledger.Add");
@@ -200,8 +175,7 @@ public class SearchSymbolsTests
 	[Fact]
 	public async Task WhenKindsFiltersToMethods_ThenOnlyMethodsAreReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		// "Greet" matches both the Greeter class and its Greet method; only the method was requested.
@@ -211,12 +185,10 @@ public class SearchSymbolsTests
 		Assert.Contains("method,Greet,", result);
 		Assert.DoesNotContain("class,Greeter,", result);
 	}
-
 	[Fact]
 	public async Task WhenKindsFiltersToClasses_ThenMembersAreNotReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet", kinds: ["Class"]);
@@ -225,12 +197,10 @@ public class SearchSymbolsTests
 		Assert.Contains("class,Greeter,", result);
 		Assert.DoesNotContain("method,Greet,", result);
 	}
-
 	[Fact]
 	public async Task WhenKindsUsesPascalCase_ThenTheFilterStillApplies()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet", kinds: ["METHOD"]);
@@ -239,12 +209,10 @@ public class SearchSymbolsTests
 		Assert.Contains("method,Greet,", result);
 		Assert.DoesNotContain("class,Greeter,", result);
 	}
-
 	[Fact]
 	public async Task WhenKindsIsEmpty_ThenEveryKindIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Simple, "Greet", kinds: []);
@@ -253,12 +221,10 @@ public class SearchSymbolsTests
 		Assert.Contains("class,Greeter,", result);
 		Assert.Contains("method,Greet,", result);
 	}
-
 	[Fact]
 	public async Task WhenAKindNameIsUnknown_ThenTheCallIsInvalidAndNamesTheAcceptedKinds()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		// A silently unmatched name would look like "no such symbol"; the caller's typo must be named.
@@ -269,12 +235,10 @@ public class SearchSymbolsTests
 		Assert.Contains("'Methods'", exception.Message, StringComparison.Ordinal);
 		Assert.Contains("method", exception.Message, StringComparison.Ordinal);
 	}
-
 	[Fact]
 	public async Task WhenCountOnlyIsRequested_ThenCountEqualsTheNormalSearchesItemCount()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string normal = await subject.SearchSymbols(TestSolutions.Simple, "Add");

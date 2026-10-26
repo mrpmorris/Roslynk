@@ -46,8 +46,7 @@ public class ChangeSignatureTests
 	[Fact]
 	public async Task WhenTheMethodImplementsAnInterfaceMember_ThenItIsNotSupported()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
 
 		string result = await subject.ChangeSignature(
@@ -56,12 +55,10 @@ public class ChangeSignatureTests
 		Assert.Contains("error=NotSupported", result);
 		Assert.Contains("interface", result, StringComparison.OrdinalIgnoreCase);
 	}
-
 	[Fact]
 	public async Task WhenNoDefaultValueIsGiven_ThenItIsRefused()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
 
 		string result = await subject.ChangeSignature(
@@ -70,12 +67,10 @@ public class ChangeSignatureTests
 		Assert.Contains("error=Invalid", result);
 		Assert.Contains("default", result, StringComparison.OrdinalIgnoreCase);
 	}
-
 	[Fact]
 	public async Task WhenTheMethodIsNotFound_ThenNotFoundIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
 
 		string result = await subject.ChangeSignature(
@@ -83,7 +78,6 @@ public class ChangeSignatureTests
 
 		Assert.Contains("error=NotFound", result);
 	}
-
 	[Fact]
 	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{

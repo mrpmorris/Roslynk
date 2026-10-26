@@ -25,8 +25,7 @@ public class FindDeadCodeDisposeTests
 
 	private static async Task<string> RunAsync(string scope)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Dispose);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Dispose);
 		var subject = new FindDeadCodeTool(registry);
 
 		return await subject.FindDeadCode(TestSolutions.Dispose, scope, includePublic: true);

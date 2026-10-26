@@ -126,8 +126,7 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenGettingTheBodyOfALocalFunctionInsideALocalFunction_ThenItsSourceIsReturnedVerbatim()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.LocalFunctions);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
 		var subject = new GetSymbolBodyTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetSymbolBody(TestSolutions.LocalFunctions, Inner);
@@ -135,12 +134,10 @@ public class LocalFunctionNamingTests
 		Assert.DoesNotContain("error=", result);
 		Assert.Contains("static int inner(string text)\r\n\t\t\t\t{\r\n\t\t\t\t\treturn text.Length;\r\n\t\t\t\t}", result);
 	}
-
 	[Fact]
 	public async Task WhenGettingALocalFunctionSymbol_ThenItsKindAndDeclarationAreReported()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.LocalFunctions);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
 		var subject = new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetSymbol(TestSolutions.LocalFunctions, LocalMethod);
@@ -148,12 +145,10 @@ public class LocalFunctionNamingTests
 		Assert.DoesNotContain("error=", result);
 		Assert.Contains("static int localMethod(string p1, int p2)", result);
 	}
-
 	[Fact]
 	public async Task WhenAnAmbiguousLocalFunctionIsRequested_ThenTheCandidatesAreTheQualifiedOverloads()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.LocalFunctions);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
 		var subject = new GetSymbolBodyTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetSymbolBody(TestSolutions.LocalFunctions, Widget + ".Method2.helper");
@@ -162,12 +157,10 @@ public class LocalFunctionNamingTests
 		Assert.Contains($"candidate={Widget}.Method2(int).helper(int)", result);
 		Assert.Contains($"candidate={Widget}.Method2(string).helper(string)", result);
 	}
-
 	[Fact]
 	public async Task WhenFindingReferencesToANestedLocalFunction_ThenTheReferenceNestsUnderItsContainingLocalFunction()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.LocalFunctions);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
 		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindReferences(TestSolutions.LocalFunctions, Inner);
@@ -179,12 +172,10 @@ public class LocalFunctionNamingTests
 		Assert.True(method >= 0 && local > method, result);
 		Assert.Contains("13:", lines[local]);
 	}
-
 	[Fact]
 	public async Task WhenGettingTheCallersOfANestedLocalFunction_ThenTheCallingLocalFunctionNestsUnderItsMethod()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.LocalFunctions);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
 		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetCallers(TestSolutions.LocalFunctions, Inner);
@@ -195,12 +186,10 @@ public class LocalFunctionNamingTests
 		Assert.Contains("method,Method1", result);
 		Assert.Contains("localfunction,localMethod,11:", result);
 	}
-
 	[Fact]
 	public async Task WhenSearchingForALocalFunctionName_ThenTheLocalFunctionIsListedUnderItsContainers()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.LocalFunctions);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.LocalFunctions, "inner");
@@ -208,12 +197,10 @@ public class LocalFunctionNamingTests
 		Assert.Contains("localfunction,localMethod", result);
 		Assert.Contains("localfunction,inner,16:", result);
 	}
-
 	[Fact]
 	public async Task WhenFindingTheDefinitionOfANestedLocalFunctionCall_ThenItsFullNameIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.LocalFunctions);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
 		var subject = new FindDefinitionTool(registry, new SymbolResolver(), new ProjectionService());
 
 		// Line 13 is 'int length = inner(p1);'.
@@ -222,12 +209,10 @@ public class LocalFunctionNamingTests
 		Assert.Contains($"fullName={InnerSignature}", result);
 		Assert.Contains("kind=localfunction", result);
 	}
-
 	[Fact]
 	public async Task WhenListingTheMembersOfANestedClass_ThenEachMembersLocalFunctionsNestBeneathIt()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.LocalFunctions);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
 		var subject = new GetMembersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetMembers(TestSolutions.LocalFunctions, Widget);
@@ -248,12 +233,10 @@ public class LocalFunctionNamingTests
 			"\t\t\tmethod,Caller,37:3-37:50\n",
 			result.Replace("\r\n", "\n"));
 	}
-
 	[Fact]
 	public async Task WhenBatchingQueriesOnLocalFunctions_ThenEverySlotResolves()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.LocalFunctions);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
 		var provider = new ServiceCollection()
 			.AddSingleton(registry)
 			.AddSingleton<SymbolResolver>()
@@ -276,7 +259,6 @@ public class LocalFunctionNamingTests
 	}
 
 	// ---- write tools ----
-
 	[Fact]
 	public async Task WhenRenamingAParameterOfALocalFunctionInANestedClass_ThenTheDeclarationAndUsesAreRenamed()
 	{
