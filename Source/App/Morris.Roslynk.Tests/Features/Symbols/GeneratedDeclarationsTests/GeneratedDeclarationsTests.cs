@@ -175,8 +175,7 @@ public class GeneratedDeclarationsTests
 
 	private static async Task<string> WithToolAsync(Func<InstanceRegistry, Task<string>> run)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Generator);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Generator);
 		return await run(registry);
 	}
 }

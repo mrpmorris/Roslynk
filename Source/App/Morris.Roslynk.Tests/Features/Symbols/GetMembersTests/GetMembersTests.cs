@@ -238,7 +238,7 @@ public class GetMembersTests
 		string result = await RunAsync("SimpleLibrary.Holder", countOnly: true);
 
 		// Holder: property Count (accessors are not listed as methods, #149), field _ready, method Combine.
-		Assert.Equal(
+		OutlineAssert.HeadersAre(
 			"resolvedType=SimpleLibrary.Holder\ncount=3\ncount.method=1\ncount.property=1\ncount.field=1\n",
 			result);
 	}
@@ -248,7 +248,7 @@ public class GetMembersTests
 	{
 		string result = await RunAsync("SimpleLibrary.Holder", includeMethods: false, countOnly: true);
 
-		Assert.Equal("resolvedType=SimpleLibrary.Holder\ncount=2\ncount.property=1\ncount.field=1\n", result);
+		OutlineAssert.HeadersAre("resolvedType=SimpleLibrary.Holder\ncount=2\ncount.property=1\ncount.field=1\n", result);
 	}
 
 	private static async Task<string> RunAsync(
@@ -262,8 +262,7 @@ public class GetMembersTests
 		bool includeNestedTypes = true,
 		bool countOnly = false)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new GetMembersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		return await subject.GetMembers(

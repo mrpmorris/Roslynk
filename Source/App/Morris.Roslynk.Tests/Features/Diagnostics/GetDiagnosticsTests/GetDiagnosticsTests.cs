@@ -9,8 +9,7 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenASolutionHasACompileError_ThenItIsReturnedAsAnError()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeErrors: true);
@@ -21,12 +20,10 @@ public class GetDiagnosticsTests
 		Assert.Contains("\terrors\n", result);
 		Assert.Contains("CS0029,9:27,", result);
 	}
-
 	[Fact]
 	public async Task WhenSeveritiesAreNotWidened_ThenOnlyErrorsAreReturnedButTheCountsStillSeeWarnings()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeErrors: true);
@@ -35,12 +32,10 @@ public class GetDiagnosticsTests
 		Assert.Contains("warnings=0", result);
 		Assert.DoesNotContain("\twarnings", result);
 	}
-
 	[Fact]
 	public async Task WhenWarningsAreIncluded_ThenTheyAppearAlongsideErrors()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
@@ -50,7 +45,6 @@ public class GetDiagnosticsTests
 		Assert.Contains("warnings=0", result);
 		Assert.Contains("\terrors\n", result);
 	}
-
 	[Fact]
 	public async Task WhenARazorFileHasARazorSyntaxError_ThenTheRazorDiagnosticIsReportedAgainstThatFile()
 	{
@@ -129,8 +123,7 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenFilteredByIds_ThenOnlyThoseIdsAreReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
@@ -142,12 +135,10 @@ public class GetDiagnosticsTests
 		Assert.Contains("CS0029,9:27,", result);
 		Assert.DoesNotContain("CS0169,", result);
 	}
-
 	[Fact]
 	public async Task WhenIdsDifferInCase_ThenTheyStillMatch()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
@@ -158,12 +149,10 @@ public class GetDiagnosticsTests
 		Assert.Contains("CS0029,9:27,", result);
 		Assert.DoesNotContain("CS0169,", result);
 	}
-
 	[Fact]
 	public async Task WhenMaxSizeIsExceeded_ThenTheFirstEntriesAreKeptAndCountsStayComplete()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
@@ -177,7 +166,6 @@ public class GetDiagnosticsTests
 		Assert.Single(leaves);
 		Assert.StartsWith("CS0169,", leaves[0].TrimStart('\t'));
 	}
-
 	[Fact]
 	public async Task WhenSummaryOnly_ThenDiagnosticsAreGroupedById()
 	{
@@ -263,8 +251,7 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenFilePathMatchesNoDocument_ThenNotFoundOffersCandidates()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
@@ -272,7 +259,6 @@ public class GetDiagnosticsTests
 
 		Assert.Contains("error=NotFound", result);
 	}
-
 	[Fact]
 	public async Task WhenACompiledFileHasNoMatchingDiagnostics_ThenTheCountsAreZeroAndNotAnError()
 	{
@@ -293,8 +279,7 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenMaxSizeIsNegative_ThenTheResultIsHeadersOnly()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
@@ -306,7 +291,6 @@ public class GetDiagnosticsTests
 		Assert.Contains("truncated=Y", result);
 		Assert.DoesNotContain("CS0029", result);
 	}
-
 	[Fact]
 	public async Task WhenFiltersCombine_ThenEveryActiveFilterIsEchoedAndCountsAgree()
 	{
@@ -362,8 +346,7 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenNoFiltersAreSupplied_ThenTheOutputIsUnchanged()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeErrors: true, includeAnalyzers: false);
@@ -373,7 +356,6 @@ public class GetDiagnosticsTests
 		Assert.DoesNotContain("truncated=", result);
 		Assert.Contains("CS0029,9:27,", result);
 	}
-
 	[Fact]
 	public async Task WhenMaxSizeIsExceeded_ThenTheKeptLeavesAreTheFirstInBodyOrder()
 	{
@@ -406,8 +388,7 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenSummaryOnlyIsRequestedWithoutSeverityFlags_ThenNonHiddenIdsAreListedAndCountsStayComplete()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeAnalyzers: false, summaryOnly: true);
@@ -421,7 +402,6 @@ public class GetDiagnosticsTests
 		Assert.DoesNotContain("CS8019,", result);
 		Assert.DoesNotContain("count=", result);
 	}
-
 	[Fact]
 	public async Task WhenSummaryOnlyIsCapped_ThenCountCountsIdRows()
 	{
@@ -490,8 +470,7 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenFilteredByAPrivateFixTriggerId_ThenNothingMatches()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
@@ -506,12 +485,10 @@ public class GetDiagnosticsTests
 		Assert.Contains("filter=ids:RemoveUnnecessaryImportsFixable", result);
 		Assert.DoesNotContain("CS0029", result);
 	}
-
 	[Fact]
 	public async Task WhenCountOnlyIsRequested_ThenTheHeadersAndCountAreReturnedWithoutRows()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
@@ -526,7 +503,6 @@ public class GetDiagnosticsTests
 		Assert.Equal("2", HeaderOf(result, "count"));
 		Assert.DoesNotContain("\n\n", result);
 	}
-
 	[Fact]
 	public async Task WhenCountOnlyIsCapped_ThenTruncatedIsKeptAndCountAppearsOnce()
 	{

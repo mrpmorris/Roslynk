@@ -64,8 +64,7 @@ public class RemoveUnusedUsingsTests
 	[Fact]
 	public async Task WhenThereAreNoUnnecessaryUsings_ThenNothingIsApplied()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = TestServices.RemoveUnusedUsings(registry);
 
 		string result = await subject.RemoveUnusedUsings(TestSolutions.Simple);
@@ -73,7 +72,6 @@ public class RemoveUnusedUsingsTests
 		Assert.Contains("applied=N", result);
 		Assert.Contains("removedCount=0", result);
 	}
-
 	[Fact]
 	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{

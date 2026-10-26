@@ -69,8 +69,7 @@ public class RazorSymbolMappingTests
 	[Fact]
 	public async Task WhenGettingTheBodyOfAGeneratedNonRazorDeclaration_ThenItIsStillMarkedGenerated()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Generator);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Generator);
 		var subject = new GetSymbolBodyTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetSymbolBody(TestSolutions.Generator, "ConsumerLib.Ctx.ReadValue2");

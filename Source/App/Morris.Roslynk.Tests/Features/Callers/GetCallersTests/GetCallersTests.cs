@@ -10,8 +10,7 @@ public class GetCallersTests
 	[Fact]
 	public async Task WhenAMethodIsCalled_ThenItsCallersAreReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Greeter.Greet");
@@ -21,19 +20,16 @@ public class GetCallersTests
 		Assert.Contains("class,Caller\n", result);
 		Assert.Contains("method,Run,", result);
 	}
-
 	[Fact]
 	public async Task WhenTheMethodIsNotFound_ThenNotFoundIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.DoesNotExist");
 
 		Assert.Contains("error=NotFound", result);
 	}
-
 	[Fact]
 	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{
@@ -50,8 +46,7 @@ public class GetCallersTests
 	[Fact]
 	public async Task WhenAnOverloadIsTargetedBySignature_ThenOnlyThatOverloadsCallersAreReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Ledger.Add(int)");
@@ -61,12 +56,10 @@ public class GetCallersTests
 		// Add(int) is called by Add(int, int); the reverse is not true.
 		Assert.Contains("method,Add,", result);
 	}
-
 	[Fact]
 	public async Task WhenTheNameMatchesSeveralOverloads_ThenAmbiguousCandidatesAreDistinguishable()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetCallers(TestSolutions.Simple, "SimpleLibrary.Ledger.Add");

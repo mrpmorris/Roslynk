@@ -40,15 +40,13 @@ public class GetCodeActionsTests
 	[Fact]
 	public async Task WhenTheDocumentIsUnknown_ThenNotFoundIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new GetCodeActionsTool(registry, TestServices.CodeActions());
 
 		string result = await subject.GetCodeActions(TestSolutions.Simple, "NoSuchFile.cs", 1, 1);
 
 		Assert.Contains("error=NotFound", result);
 	}
-
 	[Fact]
 	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{

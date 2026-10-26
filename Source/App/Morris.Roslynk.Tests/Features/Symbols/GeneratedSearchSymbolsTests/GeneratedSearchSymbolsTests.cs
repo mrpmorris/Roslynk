@@ -86,14 +86,13 @@ public class GeneratedSearchSymbolsTests
 		// The generated pass applies the same post-filter Roslyn applies to its own results: no accessors.
 		string result = await SearchAsync("get_");
 
-		Assert.Equal("", result);
+		OutlineAssert.HasNoSymbols(result);
 	}
 
 	[Fact]
 	public async Task WhenMaxSizeCannotCarryEveryMatch_ThenThePageIsTruncatedAndNothingIsCapped()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Generator);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Generator);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		// Shape matches the partial type and the ShapeSourceGenerator class, so a one-item page truncates.

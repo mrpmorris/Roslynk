@@ -25,8 +25,7 @@ public class RazorPlacementTests
 	[Fact]
 	public async Task WhenSearchingForARazorDeclaredMember_ThenTheRazorFileAndPositionAreReported()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Razor);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Razor);
 		var subject = new SearchSymbolsTool(registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.Razor, "IncrementCount");
@@ -36,12 +35,10 @@ public class RazorPlacementTests
 		Assert.Contains("method,IncrementCount,18:15\n", result);
 		Assert.DoesNotContain("_razor.g.cs", result);
 	}
-
 	[Fact]
 	public async Task WhenListingTheCalleesOfARazorDeclaredMember_ThenTheCalleeIsUnderTheRazorFile()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Razor);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Razor);
 		var subject = new GetCalleesTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetCallees(TestSolutions.Razor, "RazorLib.Counter.OnInitialized");
@@ -52,12 +49,10 @@ public class RazorPlacementTests
 		Assert.Contains("method,get_StartAt,11:23\n", result);
 		Assert.DoesNotContain("_razor.g.cs", result);
 	}
-
 	[Fact]
 	public async Task WhenGettingTheCallersOfARazorDeclaredMember_ThenACallerWithNoRazorPositionKeepsTheGeneratedPath()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Razor);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Razor);
 		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		// IncrementCount is called only from the markup, so the caller is BuildRenderTree, whose declaration
@@ -70,12 +65,10 @@ public class RazorPlacementTests
 		Assert.Contains("method,BuildRenderTree,30:33\n", result);
 		Assert.DoesNotContain("Counter.razor", result);
 	}
-
 	[Fact]
 	public async Task WhenGettingTheCallersOfARazorDeclaredField_ThenMappedCallersReportTheRazorFile()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Razor);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Razor);
 		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		// CurrentCount is read by the markup (BuildRenderTree, generated only) and written by the two
@@ -89,7 +82,6 @@ public class RazorPlacementTests
 		Assert.Contains("Counter_razor.g.cs\n", result);
 		Assert.Contains("method,BuildRenderTree,30:33\n", result);
 	}
-
 	[Fact]
 	public async Task WhenPlacingARazorDeclaredSymbolDirectly_ThenThePlacementNamesTheRazorFile()
 	{

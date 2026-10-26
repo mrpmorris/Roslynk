@@ -36,15 +36,13 @@ public class RenameSymbolTests
 	[Fact]
 	public async Task WhenTheNewNameIsNotAValidIdentifier_ThenItIsRefusedAndNothingIsWritten()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(TestSolutions.Simple, "SimpleLibrary.Greeter", "1nvalid");
 
 		Assert.Contains("error=Invalid", result);
 	}
-
 	[Fact]
 	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{
@@ -82,8 +80,7 @@ public class RenameSymbolTests
 	[Fact]
 	public async Task WhenTheNameMatchesSeveralOverloads_ThenAmbiguousCandidatesAreDistinguishable()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(TestSolutions.Simple, "SimpleLibrary.Ledger.Add", "Accumulate");
@@ -92,7 +89,6 @@ public class RenameSymbolTests
 		Assert.Contains("candidate=SimpleLibrary.Ledger.Add(int)\n", result);
 		Assert.Contains("candidate=SimpleLibrary.Ledger.Add(int, int)\n", result);
 	}
-
 	[Fact]
 	public async Task WhenAGenericTypeIsNamedByItsBareName_ThenTheGenericTypeIsTargeted()
 	{

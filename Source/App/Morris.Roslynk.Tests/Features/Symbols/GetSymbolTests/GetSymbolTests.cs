@@ -139,8 +139,7 @@ public class GetSymbolTests
 	[InlineData("Repro.Pair", "public class Pair")]
 	public async Task WhenATypeNameOmitsOrUsesMetadataArity_ThenGetSymbolResolvesIt(string name, string expected)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.MultiTarget);
 		var subject = new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetSymbol(TestSolutions.MultiTarget, name);
@@ -148,7 +147,6 @@ public class GetSymbolTests
 		Assert.DoesNotContain("error=", result);
 		Assert.Contains(expected, result);
 	}
-
 	[Fact]
 	public async Task WhenAContainingTypeOmitsItsArity_ThenTheMemberResolves()
 	{
@@ -182,8 +180,7 @@ public class GetSymbolTests
 
 	private static async Task<string> RunOnMultiTargetAsync(string symbolName)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.MultiTarget);
 		var subject = new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService());
 
 		return await subject.GetSymbol(TestSolutions.MultiTarget, symbolName);

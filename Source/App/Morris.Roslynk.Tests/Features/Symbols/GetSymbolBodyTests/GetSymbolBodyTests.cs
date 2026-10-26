@@ -180,8 +180,7 @@ public class GetSymbolBodyTests
 	[InlineData("Repro.Box.this[int]", "public T? this[int index] => default;")]
 	public async Task WhenABareOrMetadataGenericNameIsGiven_ThenTheSourceBodyIsReturned(string name, string expected)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.MultiTarget);
 		var subject = new GetSymbolBodyTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetSymbolBody(TestSolutions.MultiTarget, name);
@@ -189,7 +188,6 @@ public class GetSymbolBodyTests
 		Assert.DoesNotContain("error=", result);
 		Assert.Contains(expected, result);
 	}
-
 	[Fact]
 	public async Task WhenCountOnlyIsRequested_ThenTheHeadersAndLineCountAreReturnedWithoutText()
 	{
@@ -222,8 +220,7 @@ public class GetSymbolBodyTests
 		int part = 0,
 		bool countOnly = false)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new GetSymbolBodyTool(registry, new SymbolResolver(), new ProjectionService());
 
 		return await subject.GetSymbolBody(

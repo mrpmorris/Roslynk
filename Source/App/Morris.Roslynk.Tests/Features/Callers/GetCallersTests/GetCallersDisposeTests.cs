@@ -60,8 +60,7 @@ public class GetCallersDisposeTests
 
 	private static async Task<string> CallersAsync(string symbolName)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Dispose);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Dispose);
 		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
 
 		return await subject.GetCallers(TestSolutions.Dispose, symbolName);

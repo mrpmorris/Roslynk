@@ -10,8 +10,7 @@ public class GeneratorDiagnosticsTests
 	[Fact]
 	public async Task WhenAProjectReferencesASourceGenerator_ThenGeneratedTypesAreInTheCompilation()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Generator);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Generator);
 		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Generator);
@@ -20,7 +19,6 @@ public class GeneratorDiagnosticsTests
 		Assert.Contains("errors=0", result);
 		Assert.DoesNotContain("CS0246", result);
 	}
-
 	[Fact]
 	public async Task WhenTheGeneratorAssemblyCannotBeLoaded_ThenTheLoadReportsTheFailure()
 	{

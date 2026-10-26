@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Morris.Roslynk.Infrastructure.Lifecycle;
 
 namespace Morris.Roslynk.Tests;
 
@@ -42,6 +43,36 @@ internal static class TestSolutions
 		WriteLargeTypeGeneratedSources(Path.Combine(Path.GetDirectoryName(path)!, "LargeTypeLib"));
 		return path;
 	});
+
+	// Fixtures whose projects carry a PackageReference/FrameworkReference or a netstandard target:
+	// MSBuildWorkspace's design-time build resolves those from obj/project.assets.json, so the fixture
+	// must be restored. A package-free single-TFM fixture loads cleanly without any restore.
+	private static readonly HashSet<string> FixturesNeedingRestore = new(StringComparer.OrdinalIgnoreCase)
+	{
+		"RazorSolution",
+		"RazorInjectSolution",
+		"BindSolution",
+		"RazorMultiProjectSolution",
+		"CodeStyleSolution",
+		"GeneratorSolution",
+		"MultiTargetSolution",
+	};
+
+	// One registry for the whole test process. Committed fixtures are never written to, so every test
+	// that only reads one shares this registry's loaded snapshot (and Roslyn's compilation and
+	// SymbolFinder caches) instead of paying an MSBuild load, a first compilation and a declaration
+	// index of its own. Never dispose it: disposing would tear down instances other tests are using.
+	private static readonly InstanceRegistry SharedRegistry = new();
+
+	/// <summary>
+	/// The process-wide registry, with <paramref name="solutionPath"/> loaded and ready. Use this from
+	/// a test that only reads a committed fixture; do not dispose the returned registry.
+	/// </summary>
+	public static async Task<InstanceRegistry> SharedAsync(string solutionPath)
+	{
+		await SharedRegistry.GetOrAddAsync(solutionPath);
+		return SharedRegistry;
+	}
 
 	/// <summary>A clean single-project solution.</summary>
 	public static string Simple => SimpleSolution.Value;
@@ -146,7 +177,8 @@ internal static class TestSolutions
 	private static string Prepare(params string[] relativeParts)
 	{
 		string path = Path.Combine([FindTestFixturesRoot(), .. relativeParts]);
-		Restore(path);
+		if (FixturesNeedingRestore.Contains(relativeParts[0]))
+			Restore(path);
 		return path;
 	}
 
