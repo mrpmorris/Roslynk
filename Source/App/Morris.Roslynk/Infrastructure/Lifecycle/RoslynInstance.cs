@@ -398,7 +398,7 @@ public sealed class RoslynInstance : IDisposable
 			{
 				using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("begin_initial_load"))
 				{
-					activity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(Key.FilePath));
+					activity?.SetTag(ActivityTags.SolutionPathTag, Key.FilePath);
 
 					SolutionWorkspace workspace = await loader(tracker);
 					Volatile.Write(ref WorkspaceField, workspace);

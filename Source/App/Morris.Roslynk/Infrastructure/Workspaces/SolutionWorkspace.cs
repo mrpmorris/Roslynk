@@ -80,7 +80,7 @@ public sealed class SolutionWorkspace : IDisposable
 
 		using (Activity? loadActivity = RoslynkActivitySource.Instance.StartActivity("load_solution"))
 		{
-			loadActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
+			loadActivity?.SetTag(ActivityTags.SolutionPathTag, solutionPath);
 
 			using (Activity? msbuildActivity = RoslynkActivitySource.Instance.StartActivity("msbuild_register"))
 			{
@@ -94,7 +94,7 @@ public sealed class SolutionWorkspace : IDisposable
 			{
 				using (Activity? openActivity = RoslynkActivitySource.Instance.StartActivity("open_solution_async"))
 				{
-					openActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
+					openActivity?.SetTag(ActivityTags.SolutionPathTag, solutionPath);
 
 					var projectSpans = new Dictionary<string, Activity>();
 					var loadStart = DateTime.UtcNow;
@@ -119,7 +119,7 @@ public sealed class SolutionWorkspace : IDisposable
 						Activity? projectActivity = RoslynkActivitySource.Instance.StartActivity("project_loaded", ActivityKind.Internal, new ActivityContext(Activity.Current?.TraceId ?? default, Activity.Current?.SpanId ?? default, ActivityTraceFlags.None));
 						if (projectActivity is not null)
 						{
-							projectActivity.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(p.FilePath));
+							projectActivity.SetTag(ActivityTags.SolutionPathTag, p.FilePath);
 							projectActivity.SetTag(ActivityTags.TargetFrameworkTag, p.TargetFramework ?? "");
 							projectActivity.SetTag("roslynk.load.elapsed", currentElapsed.TotalSeconds);
 							projectActivity.SetTag("roslynk.load.duration", durationSeconds);
@@ -164,14 +164,14 @@ public sealed class SolutionWorkspace : IDisposable
 				TrackedAnalyzers trackedAnalyzers;
 				using (Activity? shadowActivity = RoslynkActivitySource.Instance.StartActivity("shadow_copy_analyzers"))
 				{
-					shadowActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
+					shadowActivity?.SetTag(ActivityTags.SolutionPathTag, solutionPath);
 					(solution, trackedAnalyzers) = UseShadowCopyAnalyzerLoaders(solution, loadDiagnostics);
 				}
 
 				var razor = new RazorGenerationState();
 				using (Activity? razorActivity = RoslynkActivitySource.Instance.StartActivity("razor_augment"))
 				{
-					razorActivity?.SetTag(ActivityTags.SolutionPathTag, ActivityTags.Truncate(solutionPath));
+					razorActivity?.SetTag(ActivityTags.SolutionPathTag, solutionPath);
 					solution = await RazorDocumentGenerator.AugmentAsync(solution, razor, cancellationToken);
 				}
 

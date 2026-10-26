@@ -1,42 +1,18 @@
 using Morris.Roslynk.Infrastructure.Observability;
+using System.Diagnostics;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Observability;
 
 public class ActivityTagsTests
 {
 	[Fact]
-	public void WhenTheValueIsNull_ThenNullIsReturned()
+	public void WhenATagIsRecorded_ThenTheWholeValueIsKept()
 	{
-		string? result = ActivityTags.Truncate(null);
+		string value = new('a', 10_000);
 
-		Assert.Null(result);
-	}
+		Activity activity = new(nameof(ActivityTagsTests));
+		activity.SetTag(ActivityTags.SolutionPathTag, value);
 
-	[Fact]
-	public void WhenTheValueIsShorterThanTheLimit_ThenItIsReturnedUnchanged()
-	{
-		string? result = ActivityTags.Truncate("short");
-
-		Assert.Equal("short", result);
-	}
-
-	[Fact]
-	public void WhenTheValueEqualsTheLimit_ThenItIsReturnedUnchanged()
-	{
-		string value = new('a', ActivityTags.MaxValueLength);
-
-		string? result = ActivityTags.Truncate(value);
-
-		Assert.Equal(value, result);
-	}
-
-	[Fact]
-	public void WhenTheValueExceedsTheLimit_ThenItIsCappedAtTheLimit()
-	{
-		string value = new('a', ActivityTags.MaxValueLength + 10);
-
-		string? result = ActivityTags.Truncate(value);
-
-		Assert.Equal(new string('a', ActivityTags.MaxValueLength), result);
+		Assert.Equal(value, activity.GetTagItem(ActivityTags.SolutionPathTag));
 	}
 }

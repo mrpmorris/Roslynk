@@ -62,7 +62,7 @@ public sealed class SymbolResolver
 
 		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("resolve_symbol"))
 		{
-			activity?.SetTag("roslynk.symbol.name", ActivityTags.Truncate(name));
+			activity?.SetTag("roslynk.symbol.name", name);
 			activity?.SetTag("roslynk.symbol.signature", query.ListKind != ParameterListKind.None);
 
 			// A declaration search is keyed on a member's own name, which an indexer does not have — it is
@@ -453,7 +453,7 @@ public sealed class SymbolResolver
 	{
 		using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("resolve_position"))
 		{
-			activity?.SetTag("roslynk.file.path", ActivityTags.Truncate(filePath));
+			activity?.SetTag("roslynk.file.path", filePath);
 			activity?.SetTag("roslynk.line", line);
 			activity?.SetTag("roslynk.column", column);
 

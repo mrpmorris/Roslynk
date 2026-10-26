@@ -65,14 +65,10 @@ public static class McpToolTraceNaming
 			root.SetTag(ArgumentTagPrefix + argument.Key, Render(argument.Value));
 	}
 
-	private static string? Render(JsonElement value)
-	{
-		string text = value.ValueKind == JsonValueKind.String
+	private static string Render(JsonElement value) =>
+		value.ValueKind == JsonValueKind.String
 			? value.GetString() ?? ""
 			: value.GetRawText();
-
-		return ActivityTags.Truncate(text);
-	}
 
 	private static Activity? RootOf(Activity? activity)
 	{

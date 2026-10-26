@@ -22,7 +22,7 @@ public static class RoslynkMeter
 
 	public static void RecordLoadDuration(string solutionPath, TimeSpan duration, bool success)
 	{
-		KeyValuePair<string, object?> pathTag = new(SolutionPathTag, ActivityTags.Truncate(solutionPath));
+		KeyValuePair<string, object?> pathTag = new(SolutionPathTag, solutionPath);
 		KeyValuePair<string, object?> resultTag = new(ResultTag, success ? "ready" : "faulted");
 		LoadDurationHistogram.Record(duration.TotalSeconds, pathTag, resultTag);
 	}

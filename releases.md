@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- OpenTelemetry span and metric tag values are recorded in full instead of being silently capped at 64 characters, so `mcp.tool.arg.*` tool-call arguments, `roslynk.solution.path`, `roslynk.symbol.name` and `roslynk.file.path` are usable in Aspire (Fixes #172)
 - Read-only tools run through a shared snapshot guard that returns `error=Stale` (with the current `snapshot=<id>`) when the solution changes mid-query or the query is cancelled, and `multi_query` rejects the whole batch rather than mixing generations; write tools stay on the write pipeline (Fixes #165)
 - `get_solution_status` reports NuGet restore warnings (NU1902/NU1903/NU1510 ...) as `loadWarning=<code>: <message>` instead of `loadDiagnostic=`, by matching each load failure's text against the Warning-level entries the restore wrote to the projects' `project.assets.json` (Fixes #163)
 - `search_symbols`, `get_callees`, `get_callers` and `find_implementations` report a symbol declared in a `.razor`/`.cshtml` file under that file with its mapped position instead of the virtual generated `.g.cs` path, which has no file on disk (Fixes #164)
