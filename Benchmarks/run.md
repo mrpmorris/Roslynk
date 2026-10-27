@@ -153,9 +153,9 @@ Regenerate the results and the audit from the saved records; do not hand-edit nu
 
 - The title, `# Benchmark results`.
 - `Last run on {$yyyy-MM-dd HH:mm:ss}` — the run's start time.
-- The table: one row per use case, with `Test`, `Standard pass %` and `Roslynk pass %`. A pass % is the share of the criteria in `scoring.md` that the condition's answer passed (`8/8` is `100%`).
+- The table: one row per use case, with `Test`, `Standard pass %`, `Roslynk pass %`, then the time and token columns — Standard time, Roslynk time, Roslynk time delta, Standard tokens in, Roslynk tokens in, Roslynk tokens delta, Standard tokens out, Roslynk tokens out, Roslynk tokens out delta, Standard total tokens, Roslynk total tokens, Roslynk total tokens delta.
 
-Nothing else goes in that file.
+A pass % is the share of the criteria in `scoring.md` that the condition's answer passed (`8/8` is `100%`). Every delta is **Roslynk minus Standard**, written with an explicit sign (`+` or `-`; zero may be `0`), and time carries its unit (e.g. `+12.3 s`). Nothing else goes in that file.
 
 `Benchmarks/use-cases/<use-case>/benchmark-audit.md` contains, for the most recent run of that use case:
 

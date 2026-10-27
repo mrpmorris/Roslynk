@@ -23,7 +23,7 @@ The only intended difference between the two runs is Roslynk tool availability. 
 | `Benchmarks/use-cases/find_symbol/prompt.md` | The prompt sent to a measured run, in full. |
 | `Benchmarks/use-cases/find_symbol/scoring.md` | The expected answer and scoring criteria for that use case. |
 | `Benchmarks/use-cases/find_symbol/benchmark-audit.md` | Per-criterion scoring and per-condition tool-call tables for the most recent run of that use case. |
-| `Benchmarks/benchmark-results.md` | Results table: last-run timestamp and pass % per condition for each use case. |
+| `Benchmarks/benchmark-results.md` | Results table: last-run timestamp, pass % and signed time/token deltas per condition for each use case. |
 
 ## Use cases
 
@@ -41,7 +41,7 @@ A human does not run this by hand. Ask an AI agent that has access to the harnes
 
 ## Interpreting results
 
-A faster or cheaper run is not an improvement unless it also produced a correct and complete answer. `benchmark-results.md` shows each condition's pass % — the share of the criteria in `scoring.md` that the answer met — and the use case's `benchmark-audit.md` holds the per-criterion scoring and every tool call with its duration, outcome and result size. Treat a run that failed the task as a failed run rather than a cheap one.
+A faster or cheaper run is not an improvement unless it also produced a correct and complete answer. `benchmark-results.md` shows each condition's pass % — the share of the criteria in `scoring.md` that the answer met — next to the time and token deltas, and the use case's `benchmark-audit.md` holds the per-criterion scoring and every tool call with its duration, outcome and result size. Treat a run that failed the task as a failed run rather than a cheap one.
 
 ## Current status
 
