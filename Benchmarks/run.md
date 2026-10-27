@@ -10,7 +10,7 @@ A use case is one directory directly under `Benchmarks/use-cases/`, named for th
 
 - List the directories directly under `Benchmarks/use-cases/`, sorted by name. Record that list as the run's use cases.
 - A directory is a use case if it holds `prompt.md` and `scoring.md`. It may also hold an optional `setup.md` (section 11). Skip a directory that lacks either required file, and record that you skipped it and why.
-- Run every use case in the same pass, one after another in that order. Each use case is run twice, standard then Roslynk (sections 4 and 6), and a use case's standard session must finish before its Roslynk session starts.
+- Run every use case in the same pass, one after another in that order. Each use case is run twice, standard then Roslynk (sections 4 and 6), and a use case's standard session must finish before its Roslynk session starts. Both conditions use the single worktree `Roslynk-BenchRunner`, which is deleted once at the very start of the run, created fresh immediately before each session and deleted immediately after it (section 3).
 - `{$useCase}` substitutes the directory name everywhere it appears: paths, worktree names, record fields and the results table's `Test` column.
 
 ## 1. Identify the harness
@@ -45,44 +45,64 @@ Every use case is two required files plus an optional third: `prompt.md` contain
 
 Measurements come from the harness's own session record: wall clock around the session, token usage, and the tool-call log with durations where it exposes them. Do not instrument tool calls yourself, and do not turn the session's output into numbers by hand. If the harness does not expose a value, record it as `unavailable` and name it in `limitations`.
 
-## 3. Create the worktrees
+## 3. Prepare the worktree
 
-From the repository root, at the commit you are benchmarking, create one pair of worktrees per use case:
+One worktree, one name, every time: a sibling of the repository root named `Roslynk-BenchRunner`. It is the only worktree the benchmark uses. It is deleted before it is created, and deleted again as soon as each condition's session has finished.
+
+The order is fixed:
+
+1. At the very start of everything — before any use case's session — delete `Roslynk-BenchRunner` ("Clear the worktree" below). Do this once.
+2. Loop through the use cases, in the order recorded in section 0.
+3. For each use case:
+	1. Create `Roslynk-BenchRunner` for the standard condition ("Create the worktree" below).
+	2. Run the standard session (section 4).
+	3. Delete `Roslynk-BenchRunner` ("Clear the worktree" below).
+	4. Create `Roslynk-BenchRunner` again for the Roslynk condition ("Create the worktree" below) — a new worktree from the same `startingCommit`, not the deleted one reused — then apply its `setup.md` (section 11) and the Roslynk setup (section 5).
+	5. Run the Roslynk session (section 6).
+	6. Delete `Roslynk-BenchRunner` ("Clear the worktree" below).
+
+**Clear the worktree.** From the repository root, record the commit you are benchmarking and remove the worktree:
 
 ```bash
 git rev-parse HEAD                     # record this as startingCommit
 repo_root="$(git rev-parse --show-toplevel)"
-parent="$(dirname "$repo_root")/roslynk-bench-$(date -u +%Y%m%dT%H%M%SZ)"
-mkdir -p "$parent"
-for use_case in {$useCase list}; do
-	git worktree add --detach "$parent/RoslynkEnabled-$use_case" HEAD
-	git worktree add --detach "$parent/RoslynkDisabled-$use_case" HEAD
+wt="$(dirname "$repo_root")/Roslynk-BenchRunner"
+for w in $(git worktree list --porcelain | sed -n 's/^worktree //p'); do
+	case "$w" in "$wt") git worktree remove --force "$w" ;; esac
 done
+rm -rf "$wt"
+git worktree prune
+git worktree list
 ```
 
-Use a temporary parent directory outside the repository; the sibling location above keeps every path native to the platform. For each worktree, sparse-checkout only the test solution:
+The prune is required: deleting a worktree's directory by hand leaves its registration in `.git/worktrees`, and `git worktree add` refuses a path git still considers registered. Deleting the directory is also what makes the run start from a clean checkout — no leftover edits, build output or `bin`/`obj` from a previous session.
+
+**Create the worktree.** Create it from `startingCommit`, sparse-checkout only the test solution, reset it, then verify it:
 
 ```bash
-cd "$parent/RoslynkEnabled-{$useCase}"
+git worktree add --detach "$wt" HEAD
+cd "$wt"
 git sparse-checkout init --no-cone
 git sparse-checkout set Benchmarks/TestSolution
+Benchmarks/TestSolution/scripts/reset.sh
 ```
 
 Use no-cone mode. Cone mode always checks out the repository's root files, which would put `AGENTS.md` and `README.md` in the measured agent's workspace and leak benchmark instructions into the run; no-cone mode checks out only `Benchmarks/TestSolution`.
 
-Repeat in `RoslynkDisabled-{$useCase}`, and in every other use case's pair. Then verify every worktree, and record the output of each check:
+Verify the worktree and record the output of each check:
 
-- `git -C {$worktree} rev-parse HEAD` is identical in every worktree and equals `startingCommit`.
-- `git -C {$worktree} status --porcelain` is empty in every worktree.
-- Only `Benchmarks/TestSolution` exists besides `.git` in each worktree.
-- `Benchmarks/TestSolution/scripts/reset.sh` has been run in every worktree, so `TestSolution` starts clean.
+- `git -C "$wt" rev-parse HEAD` equals `startingCommit`.
+- `git -C "$wt" status --porcelain` is empty.
+- Only `Benchmarks/TestSolution` exists besides `.git` in the worktree.
+- `Benchmarks/TestSolution/scripts/reset.sh` has been run, so `TestSolution` starts clean.
 
-The worktree names must be exactly `RoslynkEnabled-{$useCase}` and `RoslynkDisabled-{$useCase}`, one pair per use case.
+After a clear, `git worktree list` must show no worktree at `Roslynk-BenchRunner`, and no `Roslynk-BenchRunner` directory may remain beside the repository. If a session left a registration behind with its directory already gone, `git worktree prune` clears it.
 
 ## 4. Run the standard condition
 
-Start one session barred from Roslynk, working in `RoslynkDisabled-{$useCase}`. This condition has no setup step, so its measured duration is the whole session.
+Start one session barred from Roslynk, working in `Roslynk-BenchRunner`. This condition has no setup step, so its measured duration is the whole session.
 
+- Create `Roslynk-BenchRunner` before starting (section 3, use-case step 1).
 - Its user prompt ends with the standard prohibition line `Do not use Roslynk`, after the tool-discovery line.
 - The Roslynk tools are still in the session's tool list — availability is identical to the Roslynk condition; only the instruction differs. Do not remove them from the harness.
 - Time limit: 10 minutes of wall clock.
@@ -93,13 +113,15 @@ Start one session barred from Roslynk, working in `RoslynkDisabled-{$useCase}`. 
 
 Do not start that use case's Roslynk session until this one has finished.
 
+When this session has finished and its record is saved, delete `Roslynk-BenchRunner` (section 3, use-case step 3), so the Roslynk condition starts from a new worktree.
+
 ## 5. Roslynk setup (not measured)
 
-Immediately before the Roslynk session, in `RoslynkEnabled-{$useCase}`. You perform this setup yourself; it does not belong in the measured session.
+Immediately before the Roslynk session, in `Roslynk-BenchRunner` — created new at use-case step 4 of section 3, after the standard condition's worktree has been deleted. You perform this setup yourself; it does not belong in the measured session.
 
 0. **Register the tools before timing, in both conditions.** A tool registry that hands the session its tools lazily or on demand makes the session pay a discovery cost — searching for tools, then loading their schemas — that it pays once, not on every use of the tools. That cost is harness overhead, not part of the task, so it must not land in the measured session. Make the session's tool list explicit before the measured session starts: the condition's tools are registered and visible at the start of the session, with no discovery step required. Both sessions get the same list, Roslynk tools included; only the standard condition's prompt forbids using them. Record the tool list you registered, and record any tool-discovery calls the session still makes (with their durations and result sizes) as setup, not as task cost. If the harness cannot register tools ahead of the session, record that limitation and treat any discovery calls the session makes as harness overhead in `limitations`, not as Roslynk's cost.
 1. Make sure the Roslynk daemon is running and exposed to the harness.
-2. Call `open_solution` with the absolute path `{$worktree}/Benchmarks/TestSolution/TestSolution.slnx`, and record the echoed `solutionId`.
+2. Call `open_solution` with the absolute path `{$wt}/Benchmarks/TestSolution/TestSolution.slnx`, and record the echoed `solutionId`.
 3. Poll `get_solution_status` with that `solutionId` until its line reports `Ready`. Treat `Faulted` as a setup failure; record it and do not start the measured session. Record every poll and every retry.
 4. Record setup duration (from the `open_solution` call to the first `Ready` observation), the tokens those calls consumed, retries and failures.
 
@@ -111,9 +133,9 @@ If the harness restarts the daemon between setup and the measured session, the s
 
 ## 6. Run the Roslynk condition
 
-Start one session with Roslynk available, working in `RoslynkEnabled-{$useCase}`, under the same limits and rules as section 4. Its user prompt ends with the Roslynk preference line `Prefer use of Roslynk tools where appropriate`, after the tool-discovery line, and carries no prohibition line; that one line is the only difference between the two conditions' prompts.
+Create `Roslynk-BenchRunner` before starting (section 3, use-case step 4), then complete the setup in section 5. Start one session with Roslynk available, working in that worktree, under the same limits and rules as section 4. Its user prompt ends with the Roslynk preference line `Prefer use of Roslynk tools where appropriate`, after the tool-discovery line, and carries no prohibition line; that one line is the only difference between the two conditions' prompts.
 
-Always run the conditions in the same order (`standard`, then `roslynk`) and record that order, so separate benchmark runs stay comparable. Then move to the next use case, in the order recorded in section 0.
+Always run the conditions in the same order (`standard`, then `roslynk`) and record that order, so separate benchmark runs stay comparable. When the Roslynk session has finished and its record is saved, delete `Roslynk-BenchRunner` (section 3, use-case step 6). Then move to the next use case, in the order recorded in section 0, repeating the loop in section 3.
 
 ## 7. Score the answer
 
@@ -191,16 +213,15 @@ In the results table, write `unavailable` for any cell the harness did not expos
 
 ## 10. Clean up
 
-Remove every temporary worktree and verify they are gone:
+`Roslynk-BenchRunner` is removed inside the use-case loop: it is deleted right after each session (section 3, use-case steps 3 and 6), so nothing accumulates. At the end of the run, verify that nothing is left behind:
 
 ```bash
-for use_case in {$useCase list}; do
-	git worktree remove --force "$parent/RoslynkEnabled-$use_case"
-	git worktree remove --force "$parent/RoslynkDisabled-$use_case"
-done
 git worktree prune
 git worktree list
+ls "$(dirname "$repo_root")"
 ```
+
+`git worktree list` must show no worktree at `Roslynk-BenchRunner`, and no `Roslynk-BenchRunner` directory may remain beside the repository.
 
 Then delete the temporary run directory (`rm -rf "$runDir"`) once the results table and the audits have been written from it, and verify that no benchmark directories remain.
 
@@ -208,4 +229,4 @@ Scope every reset and clean to the benchmark worktrees and the temporary run dir
 
 ## 11. Use-case setup files
 
-A use case may hold an optional `setup.md` alongside `prompt.md` and `scoring.md`. If it does, apply it identically in both of that use case's worktrees before either session starts, and record its time and tokens separately from task totals. It must not use Roslynk. A use case with no `setup.md` needs no setup step.
+A use case may hold an optional `setup.md` alongside `prompt.md` and `scoring.md`. If it does, apply it identically in each of that use case's worktrees, in both conditions, before that condition's session starts, and record its time and tokens separately from task totals. It must not use Roslynk. A use case with no `setup.md` needs no setup step.
