@@ -149,18 +149,21 @@ Take per-tool-call tokens from the assistant turn that issued the call when the 
 
 Regenerate the results and the audit from the saved records; do not hand-edit numbers.
 
-`Benchmarks/benchmark-results.md` contains:
+`Benchmarks/benchmark-results.md` contains only:
 
-- One row per use case in the table specified there. Every delta is **Roslynk minus Standard**, written with an explicit sign (`+` or `-`; zero may be `0`), and time carries its unit (e.g. `+12.3 s`). A negative value means Roslynk used less time or fewer tokens.
-- The provenance line: harness, model, model settings, starting commit and the session mechanism and record location.
-- The tool-discovery line that was sent with the prompt, and the sha256 of the full user prompt as sent (prompt plus that line), so the setup can be reproduced exactly.
-- The tool list registered before the session started (section 5, step 0), and any discovery calls the measured session still made, recorded as setup rather than as task cost.
+- The title, `# Benchmark results`.
+- `Last run on {$yyyy-MM-dd HH:mm:ss}` — the run's start time.
+- The table: one row per use case, with `Test`, `Standard pass %` and `Roslynk pass %`. A pass % is the share of the criteria in `scoring.md` that the condition's answer passed (`8/8` is `100%`).
+
+Nothing else goes in that file.
 
 `Benchmarks/use-cases/<use-case>/benchmark-audit.md` contains, for the most recent run of that use case:
 
+- The measurements table: time, tokens in, tokens out and total tokens for each condition, plus the deltas (Roslynk minus Standard, explicit sign, unit on time).
 - The per-criterion scoring table built from `scoring.md`, with a pass or fail for each condition.
 - The tool-call audit grouped by condition, one entry per tool call, in call order, in the format specified there. Omit a field the harness did not expose rather than writing `unavailable` inside an entry.
 - A separately labelled setup section listing `open_solution` and status-polling calls, visible but excluded from task totals.
+- Provenance: harness, model, model settings, starting commit, session mechanism and record location, the tool-discovery line and the sha256 of the full user prompt as sent, the tools registered before the session (section 5, step 0), and any discovery calls charged as setup.
 - Your observations at the bottom of the file.
 
 Replace the audit's contents on every run; it describes only the latest run and is never appended to.
