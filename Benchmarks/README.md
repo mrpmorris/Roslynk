@@ -1,0 +1,54 @@
+# Roslynk benchmarks
+
+This folder holds a reproducible benchmark suite that measures how Roslynk changes the cost and time an AI agent needs to complete realistic C# tasks, compared with the same agent using only its standard tools.
+
+Roslynk's claim is that an agent can answer semantic questions about a compiled solution faster and with fewer tokens than by searching text and reading files by hand. This suite measures that claim under controlled conditions instead of by impression.
+
+## The two conditions
+
+Every use case is run twice, with the same model, system prompt, task prompt, session setup, stopping rules, time limit and output requirements:
+
+1. **Standard** — Roslynk tools are unavailable. The agent uses whatever else its harness provides (file search, shell commands, file reads).
+2. **Roslynk** — Roslynk tools are available. The solution is opened and reports ready before measured task timing starts; that setup cost is recorded separately and excluded from task totals.
+
+The only intended difference between the two runs is Roslynk tool availability. A run that changes anything else is not a valid comparison.
+
+## Layout
+
+| Path | Purpose |
+| --- | --- |
+| `Benchmarks/README.md` | This file: what the suite is and why it exists. |
+| `Benchmarks/run.md` | Instructions an AI agent follows to run the benchmark. |
+| `Benchmarks/TestSolution/` | One self-contained C# solution used by every use case. It is the only folder checked out into each benchmark worktree. |
+| `Benchmarks/use-cases/find_symbol/prompt.md` | The prompt sent to a measured run, in full. |
+| `Benchmarks/use-cases/find_symbol/scoring.md` | The expected answer and scoring criteria for that use case. |
+| `Benchmarks/benchmark-results.md` | Results table and per-tool-call audit, regenerated from saved run records. |
+| `Benchmarks/run-records/` | Raw run records kept for audit; created by a run, not present until one has been recorded. |
+
+## Use cases
+
+`find_symbol` asks the agent for one symbol's declaration and every call site of one specific overload, in a solution where text search alone cannot tell the overloads and same-named methods apart. Its `prompt.md` is the exact text sent to a measured run; its `scoring.md` holds the expected answer and the criteria used to judge the reply.
+
+## What is measured
+
+For each condition: wall-clock task duration, input/output/total token counts, every tool call with its duration where the harness exposes one, the final answer, and correctness/completeness against the expected outcome in the use case's `scoring.md`. The record also carries the harness, model, model settings, starting commit, and the session mechanism with the location of its record.
+
+Roslynk solution-opening duration, tokens, retries and failures are recorded separately, so the setup cost stays visible without inflating the task totals.
+
+## Running it
+
+A human does not run this by hand. Ask an AI agent that has access to the harness being measured to run the Roslynk benchmarks; it must follow `Benchmarks/run.md`, which defines the conditions, worktrees, measurements, record format and cleanup. It starts one session per condition in the harness itself and reads the harness's own session record; it does not write a script that drives the harness.
+
+## Interpreting results
+
+A faster or cheaper run is not an improvement unless it also produced a correct and complete answer. Read the time and token deltas next to the correctness result, and treat a run that failed the task as a failed run rather than a cheap one.
+
+## Current status
+
+The structure and the single `find_symbol` use case exist. No benchmark run has been recorded yet, so `benchmark-results.md` contains no measurements.
+
+## Adding use cases
+
+The suite deliberately starts with one use case so the approach can be assessed before more are added. A future use case is a new folder `Benchmarks/use-cases/{$name}/` holding two files, both using the same `TestSolution`: `prompt.md`, which contains only the prompt and is sent to a measured run in its entirety, and `scoring.md`, which holds the expected answer and scoring criteria. No per-use-case setup file is needed unless the task requires preparation; if one is added it must not use Roslynk, must be applied identically in both worktrees before measurement, and its time and tokens are recorded separately from task totals.
+
+`TestSolution` is fixed benchmark data, not product code: it must not be modified between the two conditions, and `TestSolution/scripts/reset.sh` restores it inside a benchmark worktree.

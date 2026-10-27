@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<OutputType>Exe</OutputType>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="../Warehouse.Core/Warehouse.Core.csproj" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="../../data/seed-stock.json" Link="data/seed-stock.json" CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
+</Project>
