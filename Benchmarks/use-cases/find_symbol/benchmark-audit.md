@@ -9,12 +9,12 @@ Criteria are defined in scoring.md
 | Declaration path | pass | pass |
 | Declaration line | pass | pass |
 | Signature | pass | pass |
-| Call-site count | pass | pass |
+| Call-site count | pass | fail |
 | Call site 1 | pass | pass |
 | Call site 2 | pass | pass |
-| Call site 3 | pass | pass |
-| No false positives | pass | pass |
-| Overall | pass | pass |
+| Call site 3 | pass | fail |
+| No false positives | pass | fail |
+| Overall | pass | fail |
 
 ## Tool call audit
 
@@ -22,33 +22,24 @@ Criteria are defined in scoring.md
 
 | Tool name | Time | Outcome | Result size |
 | --- | --: | --- | --: |
-| search_files | 2429 ms | ok | 1992 bytes |
-| search_files | 2437 ms | ok | 376 bytes |
-| read_file | 1174 ms | ok | 1772 bytes |
-| read_file | 1183 ms | ok | 425 bytes |
-| read_file | 1191 ms | ok | 1223 bytes |
-| read_file | 1195 ms | ok | 1008 bytes |
-| read_file | 1200 ms | ok | 948 bytes |
-| read_file | 1205 ms | ok | 616 bytes |
-| search_files | 1031 ms | ok | 1980 bytes |
-| search_files | 1055 ms | ok | 2525 bytes |
-| read_file | 1915 ms | ok | 711 bytes |
-| read_file | 1924 ms | ok | 619 bytes |
-| read_file | 1943 ms | ok | 656 bytes |
-| search_files | 1948 ms | ok | 2236 bytes |
+| terminal | 443 ms | ok | 119 bytes |
+| search_files | 1357 ms | ok | 926 bytes |
+| read_file | 659 ms | ok | 1772 bytes |
+| read_file | 666 ms | ok | 425 bytes |
+| search_files | 791 ms | ok | 2431 bytes |
+| read_file | 873 ms | ok | 1223 bytes |
+| read_file | 880 ms | ok | 1008 bytes |
+| read_file | 886 ms | ok | 948 bytes |
+| terminal | 449 ms | ok | 776 bytes |
+| terminal | 390 ms | ok | 704 bytes |
 
 ### Roslynk
 
 | Tool name | Time | Outcome | Result size |
 | --- | --: | --- | --: |
-| terminal | 468 ms | ok | 119 bytes |
-| tool_describe | 570 ms | ok | 6275 bytes |
-| mcp__roslynk__open_solution | 35 ms | ok | 693 bytes |
-| mcp__roslynk__search_symbols | 97 ms | ok | 788 bytes |
-| read_file | 628 ms | ok | 1772 bytes |
-| read_file | 634 ms | ok | 425 bytes |
-| mcp__roslynk__get_callers | 74 ms | ok | 907 bytes |
-| terminal | 468 ms | ok | 1561 bytes |
-| read_file | 838 ms | ok | 1223 bytes |
-| read_file | 843 ms | ok | 1008 bytes |
-| read_file | 847 ms | ok | 948 bytes |
+| terminal | 488 ms | ok | 287 bytes |
+| search_files | 1466 ms | ok | 2623 bytes |
+| read_file | 1039 ms | ok | 1772 bytes |
+| read_file | 1071 ms | ok | 1223 bytes |
+| read_file | 1128 ms | ok | 948 bytes |
+| read_file | 1148 ms | ok | 1008 bytes |
