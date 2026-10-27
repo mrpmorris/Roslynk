@@ -1,8 +1,17 @@
 # Running the Roslynk benchmarks
 
-Audience: an AI agent asked to run the Roslynk benchmarks. Follow this file exactly. Read `Benchmarks/README.md` for what the suite is for, `Benchmarks/use-cases/find_symbol/prompt.md` for the measured task, and `Benchmarks/use-cases/find_symbol/scoring.md` when scoring.
+Audience: an AI agent asked to run the Roslynk benchmarks. Follow this file exactly. Read `Benchmarks/README.md` for what the suite is for, then the use cases under `Benchmarks/use-cases/` for the measured tasks.
 
 Do not write a harness adapter, a driver script, or any program that launches the harness. You are operating the harness, not building a tool around it: start a session, let it do the task, and read what the harness recorded. The measured run is the harness's own session.
+
+## 0. Use cases
+
+A use case is one directory directly under `Benchmarks/use-cases/`, named for the task it measures. Its name is written `{$useCase}` below. This file names no use case: discover them at run time.
+
+- List the directories directly under `Benchmarks/use-cases/`, sorted by name. Record that list as the run's use cases.
+- A directory is a use case if it holds `prompt.md` and `scoring.md`. It may also hold an optional `setup.md` (section 11). Skip a directory that lacks either required file, and record that you skipped it and why.
+- Run every use case in the same pass, one after another in that order. Each use case is run twice, standard then Roslynk (sections 4 and 6), and a use case's standard session must finish before its Roslynk session starts.
+- `{$useCase}` substitutes the directory name everywhere it appears: paths, worktree names, record fields and the results table's `Test` column.
 
 ## 1. Identify the harness
 
@@ -12,77 +21,83 @@ Before starting anything, determine and record:
 - The mechanism it offers for a fresh session with a fixed system prompt and one user prompt (a subagent/task, a new chat, a CLI prompt, an API call).
 - Model and model settings (temperature, reasoning/thinking settings, max output tokens).
 - What the harness records for a session: input/output/total tokens, per-turn or per-tool-call usage, tool-call names and durations, timestamps, and where that record lives.
-- Whether one session can enable or disable the Roslynk MCP server, or whether that is harness-wide configuration you must change before the session and restore afterwards.
+- Whether the harness can expose the Roslynk MCP tools to a session at all, and how. Per-session toggling is not required: availability is enforced by the prompt (section 2), not by harness settings, so a harness that only reads its configuration at startup is fine.
 
 If the harness cannot start a fresh session with a fixed prompt, or does not record a measurement this file asks for, record that limitation in the run record and in `Benchmarks/benchmark-results.md`. Never invent a value.
 
 ## 2. Prepare the sessions
 
-Both conditions use the same session setup; only Roslynk availability differs.
+Both conditions use the same session setup; only the final line of the user prompt differs.
 
 - Start one fresh session per condition, through the mechanism recorded in section 1.
 - Working directory: the condition's worktree (section 3).
 - System prompt: the harness's normal system prompt, identical in both conditions.
-- User prompt: the entire contents of `Benchmarks/use-cases/find_symbol/prompt.md`, byte for byte, followed by the tool-discovery line below, and nothing else.
-- Tool-discovery line: `Check which tools are available to you before you start.` Send it verbatim, as the last line of the user prompt, in both conditions. It is generic — it names no tool and no product — so it does not tell the session which tools are expected to help; it only makes deferred or on-demand tool registries discoverable in both conditions alike.
+- User prompt: the entire contents of `Benchmarks/use-cases/{$useCase}/prompt.md`, byte for byte, followed by the tool-discovery line below, then that condition's final line below, and nothing else.
+- Tool-discovery line: `Check which tools are available to you before you start.` Send it verbatim in both conditions, immediately after `prompt.md`'s last line: it is the last line of the Roslynk condition's prompt and the second-to-last of the standard condition's. It is generic — it names no tool and no product — so it does not tell the session which tools are expected to help; it only makes deferred or on-demand tool registries discoverable in both conditions alike.
+- Standard prohibition line: `Do not use Roslynk`. Send it verbatim, as the last line of the standard condition's user prompt, after the tool-discovery line. Do not send it in the Roslynk condition. Do not reword, soften or extend it, and do not mention Roslynk anywhere else in either prompt.
+- Roslynk preference line: `Prefer use of Roslynk tools where appropriate`. Send it verbatim, as the last line of the Roslynk condition's user prompt, after the tool-discovery line. Do not send it in the standard condition. Do not reword, soften or extend it, and do not mention Roslynk anywhere else in either prompt.
 - Model, model settings, stopping rules, time limit and output requirements: identical in both conditions.
-- Do not tell the session that it is being benchmarked, and do not tell it which tools are expected to help.
-- Roslynk availability is harness configuration for that session, not prompt text. Confirm the session's tool list matches the condition — no Roslynk tool in `standard`, the Roslynk tools in `roslynk` — and record that list. That list must be complete when the session starts (section 5, step 0), not assembled by the session during the task.
+- Do not tell the session that it is being benchmarked, and do not tell it which tools are expected to help. The two condition lines are the only exceptions: the standard prohibition line names Roslynk only to bar its use, and the Roslynk preference line names it only to steer its use.
+- Roslynk availability is enforced by those condition lines, not by harness configuration. Do not change the harness's own MCP configuration between the conditions: both sessions get the same tool list, so a harness that only reads its settings at startup does not need a restart. Confirm and record each session's tool list, and confirm that the standard session used no Roslynk tool (section 7). That list must be complete when the session starts (section 5, step 0), not assembled by the session during the task.
 - Run the two conditions sequentially, never in parallel: the standard session must finish before the Roslynk session starts.
 
-Every use case is two files: `prompt.md` contains only the prompt, so it is sent in full, followed by the tool-discovery line, and there is nothing to strip; `scoring.md` contains the expected answer and scoring criteria and is used only in section 7.
+Every use case is two required files plus an optional third: `prompt.md` contains only the prompt, so it is sent in full, followed by the tool-discovery line, and there is nothing to strip; `scoring.md` contains the expected answer and scoring criteria and is used only in section 7; `setup.md` is optional and covered in section 11. Each condition's final line — the standard prohibition line or the Roslynk preference line — is added by the runner, never written into `prompt.md`.
 
 Measurements come from the harness's own session record: wall clock around the session, token usage, and the tool-call log with durations where it exposes them. Do not instrument tool calls yourself, and do not turn the session's output into numbers by hand. If the harness does not expose a value, record it as `unavailable` and name it in `limitations`.
 
-## 3. Create the two worktrees
+## 3. Create the worktrees
 
-From the repository root, at the commit you are benchmarking:
+From the repository root, at the commit you are benchmarking, create one pair of worktrees per use case:
 
 ```bash
 git rev-parse HEAD                     # record this as startingCommit
 repo_root="$(git rev-parse --show-toplevel)"
 parent="$(dirname "$repo_root")/roslynk-bench-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$parent"
-git worktree add --detach "$parent/RoslynkEnabled-find_symbol" HEAD
-git worktree add --detach "$parent/RoslynkDisabled-find_symbol" HEAD
+for use_case in {$useCase list}; do
+	git worktree add --detach "$parent/RoslynkEnabled-$use_case" HEAD
+	git worktree add --detach "$parent/RoslynkDisabled-$use_case" HEAD
+done
 ```
 
 Use a temporary parent directory outside the repository; the sibling location above keeps every path native to the platform. For each worktree, sparse-checkout only the test solution:
 
 ```bash
-cd "$parent/RoslynkEnabled-find_symbol"
+cd "$parent/RoslynkEnabled-{$useCase}"
 git sparse-checkout init --no-cone
 git sparse-checkout set Benchmarks/TestSolution
 ```
 
 Use no-cone mode. Cone mode always checks out the repository's root files, which would put `AGENTS.md` and `README.md` in the measured agent's workspace and leak benchmark instructions into the run; no-cone mode checks out only `Benchmarks/TestSolution`.
 
-Repeat in `RoslynkDisabled-find_symbol`. Then verify, and record the output of each check:
+Repeat in `RoslynkDisabled-{$useCase}`, and in every other use case's pair. Then verify every worktree, and record the output of each check:
 
-- `git -C {$worktree} rev-parse HEAD` is identical in both worktrees and equals `startingCommit`.
-- `git -C {$worktree} status --porcelain` is empty in both.
+- `git -C {$worktree} rev-parse HEAD` is identical in every worktree and equals `startingCommit`.
+- `git -C {$worktree} status --porcelain` is empty in every worktree.
 - Only `Benchmarks/TestSolution` exists besides `.git` in each worktree.
-- `Benchmarks/TestSolution/scripts/reset.sh` has been run in both, so `TestSolution` starts clean.
+- `Benchmarks/TestSolution/scripts/reset.sh` has been run in every worktree, so `TestSolution` starts clean.
 
-The worktree names must be exactly `RoslynkEnabled-find_symbol` and `RoslynkDisabled-find_symbol`.
+The worktree names must be exactly `RoslynkEnabled-{$useCase}` and `RoslynkDisabled-{$useCase}`, one pair per use case.
 
 ## 4. Run the standard condition
 
-Start one session with Roslynk unavailable, working in `RoslynkDisabled-find_symbol`. This condition has no setup step, so its measured duration is the whole session.
+Start one session barred from Roslynk, working in `RoslynkDisabled-{$useCase}`. This condition has no setup step, so its measured duration is the whole session.
 
+- Its user prompt ends with the standard prohibition line `Do not use Roslynk`, after the tool-discovery line.
+- The Roslynk tools are still in the session's tool list — availability is identical to the Roslynk condition; only the instruction differs. Do not remove them from the harness.
 - Time limit: 10 minutes of wall clock.
 - Turn limit: 40 assistant turns, if the harness supports a turn cap.
 - No hints, no follow-up prompts, no retries of the task. If the harness itself errors before the task starts, start one replacement session and keep both records; if it errors during the task, record the failure.
 - A session that hits the time or turn limit is recorded as `status: "timeout"` and its partial answer is kept.
 - The session must not be told that it is being benchmarked, and must not be told which tools are expected to help.
 
-Do not start the Roslynk session until this one has finished.
+Do not start that use case's Roslynk session until this one has finished.
 
 ## 5. Roslynk setup (not measured)
 
-Immediately before the Roslynk session, in `RoslynkEnabled-find_symbol`. You perform this setup yourself; it does not belong in the measured session.
+Immediately before the Roslynk session, in `RoslynkEnabled-{$useCase}`. You perform this setup yourself; it does not belong in the measured session.
 
-0. **Register the tools before timing, in both conditions.** A tool registry that hands the session its tools lazily or on demand makes the session pay a discovery cost — searching for tools, then loading their schemas — that it pays once, not on every use of the tools. That cost is harness overhead, not part of the task, so it must not land in the measured session. Make the session's tool list explicit before the measured session starts: the condition's tools are registered and visible at the start of the session, with no discovery step required. Do the same for `standard`, so both sessions begin with a complete tool list and the only difference remains Roslynk availability. Record the tool list you registered, and record any tool-discovery calls the session still makes (with their durations and result sizes) as setup, not as task cost. If the harness cannot register tools ahead of the session, record that limitation and treat any discovery calls the session makes as harness overhead in `limitations`, not as Roslynk's cost.
+0. **Register the tools before timing, in both conditions.** A tool registry that hands the session its tools lazily or on demand makes the session pay a discovery cost — searching for tools, then loading their schemas — that it pays once, not on every use of the tools. That cost is harness overhead, not part of the task, so it must not land in the measured session. Make the session's tool list explicit before the measured session starts: the condition's tools are registered and visible at the start of the session, with no discovery step required. Both sessions get the same list, Roslynk tools included; only the standard condition's prompt forbids using them. Record the tool list you registered, and record any tool-discovery calls the session still makes (with their durations and result sizes) as setup, not as task cost. If the harness cannot register tools ahead of the session, record that limitation and treat any discovery calls the session makes as harness overhead in `limitations`, not as Roslynk's cost.
 1. Make sure the Roslynk daemon is running and exposed to the harness.
 2. Call `open_solution` with the absolute path `{$worktree}/Benchmarks/TestSolution/TestSolution.slnx`, and record the echoed `solutionId`.
 3. Poll `get_solution_status` with that `solutionId` until its line reports `Ready`. Treat `Faulted` as a setup failure; record it and do not start the measured session. Record every poll and every retry.
@@ -96,23 +111,25 @@ If the harness restarts the daemon between setup and the measured session, the s
 
 ## 6. Run the Roslynk condition
 
-Start one session with Roslynk available, working in `RoslynkEnabled-find_symbol`, under the same limits and rules as section 4.
+Start one session with Roslynk available, working in `RoslynkEnabled-{$useCase}`, under the same limits and rules as section 4. Its user prompt ends with the Roslynk preference line `Prefer use of Roslynk tools where appropriate`, after the tool-discovery line, and carries no prohibition line; that one line is the only difference between the two conditions' prompts.
 
-Always run the conditions in the same order (`standard`, then `roslynk`) and record that order, so separate benchmark runs stay comparable.
+Always run the conditions in the same order (`standard`, then `roslynk`) and record that order, so separate benchmark runs stay comparable. Then move to the next use case, in the order recorded in section 0.
 
 ## 7. Score the answer
 
-Score the final answer against `Benchmarks/use-cases/find_symbol/scoring.md`: declaration path and line, signature, call-site count, and each call site's path, line and containing member. Record each criterion as pass or fail, plus any false positives or omissions, in `Benchmarks/use-cases/find_symbol/benchmark-audit.md`. Do not edit the answer to make it pass.
+Score each condition's final answer against that use case's `Benchmarks/use-cases/{$useCase}/scoring.md`, criterion by criterion, exactly as that file defines them. Record each criterion as pass or fail, plus any false positives or omissions, in `Benchmarks/use-cases/{$useCase}/benchmark-audit.md`. Do not edit the answer to make it pass, and do not add criteria of your own.
+
+Before scoring, check both sessions' tool logs. A standard session that called a Roslynk tool broke its prohibition line: record it as invalid, score it as it ran, and say so in the reply rather than presenting its numbers as a comparison. A Roslynk session that called no Roslynk tool measured nothing: record that too, and do not attribute its deltas to Roslynk.
 
 ## 8. Run record format
 
-Write one JSON file per run, e.g. `{$runDir}/standard.json` and `{$runDir}/roslynk.json`, in a temporary directory outside the repository (for example `{$tempRoot}/roslynk-bench-{$runId}/`), with the task prompt and the session record copied into the same directory. These are working files for producing the results table and the audit; they are not kept after the run. Fields:
+Write one JSON file per condition per use case, e.g. `{$runDir}/{$useCase}-standard.json` and `{$runDir}/{$useCase}-roslynk.json`, in a temporary directory outside the repository (for example `{$tempRoot}/roslynk-bench-{$runId}/`), with the task prompt and the session record copied into the same directory. These are working files for producing the results table and the audits; they are not kept after the run. Fields:
 
 ```json
 {
-  "runId": "{$utcTimestamp}-find_symbol",
+  "runId": "{$utcTimestamp}-{$useCase}",
   "condition": "standard | roslynk",
-  "useCase": "find_symbol",
+  "useCase": "{$useCase}",
   "startedUtc": "{$iso8601Timestamp}",
   "endedUtc": "{$iso8601Timestamp}",
   "durationSeconds": 0.0,
@@ -124,6 +141,8 @@ Write one JSON file per run, e.g. `{$runDir}/standard.json` and `{$runDir}/rosly
   "systemPromptSha256": "",
   "promptSha256": "",
   "toolDiscoveryLine": "",
+  "prohibitionLine": "",
+  "preferenceLine": "",
   "startingCommit": "",
   "worktree": "",
   "roslynkAvailable": false,
@@ -143,46 +162,50 @@ Write one JSON file per run, e.g. `{$runDir}/standard.json` and `{$runDir}/rosly
 
 Use `null` for any value the harness does not expose, and name it in `limitations`. Do not write a plausible number in place of a missing measurement.
 
+`useCase` is the directory name under `Benchmarks/use-cases/`. `roslynkAvailable` records whether the Roslynk tools were in the session's tool list — true in both conditions under this procedure. `prohibitionLine` holds `Do not use Roslynk` in `standard` and is empty in `roslynk`; `preferenceLine` holds `Prefer use of Roslynk tools where appropriate` in `roslynk` and is empty in `standard`. So `promptSha256` is per condition and is not shared between them.
+
 Take per-tool-call tokens from the assistant turn that issued the call when the harness records them that way; if it reports usage only per session, set the per-call token fields to `null`.
 
-## 9. Update the results file
+## 9. Update the results files
 
-Regenerate the results and the audit from the saved records; do not hand-edit numbers.
+Regenerate the results and the audits from the saved records; do not hand-edit numbers.
 
 `Benchmarks/benchmark-results.md` contains only:
 
 - The title, `# Benchmark results`.
 - `Last run on {$yyyy-MM-dd HH:mm:ss}` — the run's start time.
-- The table: one row per use case, with `Test`, `Standard pass %`, `Roslynk pass %`, then the time and token columns — Standard time, Roslynk time, Roslynk time delta, Standard tokens in, Roslynk tokens in, Roslynk tokens delta, Standard tokens out, Roslynk tokens out, Roslynk tokens out delta, Standard total tokens, Roslynk total tokens, Roslynk total tokens delta.
+- The table: one row per use case, with `Test` (the use case's directory name), `Standard pass %`, `Roslynk pass %`, then the time and token columns — Standard time, Roslynk time, Roslynk time delta, Standard tokens in, Roslynk tokens in, Roslynk tokens delta, Standard tokens out, Roslynk tokens out, Roslynk tokens out delta, Standard total tokens, Roslynk total tokens, Roslynk total tokens delta.
 
-A pass % is the share of the criteria in `scoring.md` that the condition's answer passed (`8/8` is `100%`). Every delta is **Roslynk minus Standard**, written with an explicit sign (`+` or `-`; zero may be `0`), and time carries its unit (e.g. `+12.3 s`). Nothing else goes in that file.
+A pass % is the share of the criteria in that use case's `scoring.md` that the condition's answer passed (`8/8` is `100%`). Every delta is **Roslynk minus Standard**, written with an explicit sign (`+` or `-`; zero may be `0`), and time carries its unit (e.g. `+12.3 s`). Nothing else goes in that file.
 
-`Benchmarks/use-cases/<use-case>/benchmark-audit.md` contains, for the most recent run of that use case:
+`Benchmarks/use-cases/{$useCase}/benchmark-audit.md` contains, for the most recent run of that use case:
 
 - `## Per criterion scoring`: the line `Criteria are defined in scoring.md`, then the criterion table with a pass or fail for each condition.
 - `## Tool call audit`: two tables, `### Standard tools` and `### Roslynk`, each with the columns `Tool name | Time | Outcome | Result size` and one row per tool call in call order. Where a Roslynk call is recorded through the harness's generic `tool_call` wrapper, list the invoked tool name. Omit a field the harness did not expose rather than writing `unavailable` in a cell.
 
 Nothing follows the `### Roslynk` table.
 
-Replace the audit's contents on every run; it describes only the latest run and is never appended to.
+Replace each audit's contents on every run; it describes only the latest run of that use case and is never appended to.
 
-In the results table, write `unavailable` for any cell the harness did not expose. The results table and the audit are the record of the run: once both are written, delete the temporary run directory. Nothing from a run is kept except those two files.
+In the results table, write `unavailable` for any cell the harness did not expose. The results table and the audits are the record of the run: once all of them are written, delete the temporary run directory. Nothing from a run is kept except those files.
 
 ## 10. Clean up
 
-Remove both temporary worktrees and verify they are gone:
+Remove every temporary worktree and verify they are gone:
 
 ```bash
-git worktree remove --force "$parent/RoslynkEnabled-find_symbol"
-git worktree remove --force "$parent/RoslynkDisabled-find_symbol"
+for use_case in {$useCase list}; do
+	git worktree remove --force "$parent/RoslynkEnabled-$use_case"
+	git worktree remove --force "$parent/RoslynkDisabled-$use_case"
+done
 git worktree prune
 git worktree list
 ```
 
-Then delete the temporary run directory (`rm -rf "$runDir"`) once the results table and the audit have been written from it, and verify that no benchmark directories remain.
+Then delete the temporary run directory (`rm -rf "$runDir"`) once the results table and the audits have been written from it, and verify that no benchmark directories remain.
 
 Scope every reset and clean to the benchmark worktrees and the temporary run directory. Never reset or clean the main checkout.
 
 ## 11. Use-case setup files
 
-`find_symbol` needs no setup file. If a future use case adds one, it must not use Roslynk, must be applied identically in both worktrees before measurement, and its time and tokens are recorded separately from task totals.
+A use case may hold an optional `setup.md` alongside `prompt.md` and `scoring.md`. If it does, apply it identically in both of that use case's worktrees before either session starts, and record its time and tokens separately from task totals. It must not use Roslynk. A use case with no `setup.md` needs no setup step.

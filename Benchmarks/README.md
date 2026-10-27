@@ -8,10 +8,10 @@ Roslynk's claim is that an agent can answer semantic questions about a compiled 
 
 Every use case is run twice, with the same model, system prompt, task prompt, session setup, stopping rules, time limit and output requirements:
 
-1. **Standard** — Roslynk tools are unavailable. The agent uses whatever else its harness provides (file search, shell commands, file reads).
-2. **Roslynk** — Roslynk tools are available. The solution is opened and reports ready before measured task timing starts; that setup cost is recorded separately and excluded from task totals.
+1. **Standard** — the agent is told `Do not use Roslynk` as the last line of its prompt. The Roslynk tools are in its tool list, so the two runs start from the same harness state; the prohibition, not a settings change, is what bars them. The agent uses whatever else its harness provides (file search, shell commands, file reads).
+2. **Roslynk** — Roslynk tools are available and the prompt ends with `Prefer use of Roslynk tools where appropriate` instead of a prohibition. The solution is opened and reports ready before measured task timing starts; that setup cost is recorded separately and excluded from task totals.
 
-The only intended difference between the two runs is Roslynk tool availability. A run that changes anything else is not a valid comparison.
+The only intended difference between the two runs is that final prompt line. A run that changes anything else is not a valid comparison.
 
 ## Layout
 
