@@ -23,8 +23,7 @@ The only intended difference between the two runs is Roslynk tool availability. 
 | `Benchmarks/use-cases/find_symbol/prompt.md` | The prompt sent to a measured run, in full. |
 | `Benchmarks/use-cases/find_symbol/scoring.md` | The expected answer and scoring criteria for that use case. |
 | `Benchmarks/use-cases/find_symbol/benchmark-audit.md` | Per-criterion scoring, tool-call audit, setup calls and observations for the most recent run of that use case. |
-| `Benchmarks/benchmark-results.md` | Results table and provenance, regenerated from saved run records. |
-| `Benchmarks/run-records/` | Raw run records kept for audit; created by a run, not present until one has been recorded. |
+| `Benchmarks/benchmark-results.md` | Results table and provenance. |
 
 ## Use cases
 
@@ -38,7 +37,7 @@ Roslynk solution-opening duration, tokens, retries and failures are recorded sep
 
 ## Running it
 
-A human does not run this by hand. Ask an AI agent that has access to the harness being measured to run the Roslynk benchmarks; it must follow `Benchmarks/run.md`, which defines the conditions, worktrees, measurements, record format and cleanup. It starts one session per condition in the harness itself and reads the harness's own session record; it does not write a script that drives the harness.
+A human does not run this by hand. Ask an AI agent that has access to the harness being measured to run the Roslynk benchmarks; it must follow `Benchmarks/run.md`, which defines the conditions, worktrees, measurements, record format and cleanup. It starts one session per condition in the harness itself and reads the harness's own session record; it does not write a script that drives the harness. Run records are working files: they are written outside the repository and deleted once the results table and the audit are updated.
 
 ## Interpreting results
 
