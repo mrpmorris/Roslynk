@@ -1,22 +1,8 @@
 # find_symbol audit
 
-Per-criterion scoring, the measurements, the tool-call audit and the setup calls for the most recent `find_symbol` run. Built from the run's temporary records, which are deleted once this file and the results table are written. Only the latest run is kept here — a new run replaces this file, it is never appended to.
+## Per criterion scoring
 
-Run `20261027T171838Z-find_symbol` — conditions run sequentially, `standard` then `roslynk`.
-
-## Measurements
-
-Every delta is **Roslynk minus Standard**, written with an explicit sign (`+` for more, `-` for less; zero may be `0`). A negative value means Roslynk used less time or fewer tokens.
-
-| Condition | Time | Tokens in | Tokens out | Total tokens |
-| --- | --: | --: | --: | --: |
-| Standard | 39.66 s | 30,620 | 1,493 | 32,113 |
-| Roslynk | 26.98 s | 13,278 | 1,190 | 14,468 |
-| Delta (Roslynk minus Standard) | -12.68 s | -17,342 | -303 | -17,645 |
-
-## Per-criterion scoring
-
-Criteria are defined in `scoring.md`. Each call site is matched by path, line and containing member; the order the sites are listed in is not a criterion.
+Criteria are defined in scoring.md
 
 | Criterion | Standard | Roslynk |
 | --- | --- | --- |
@@ -30,38 +16,52 @@ Criteria are defined in `scoring.md`. Each call site is matched by path, line an
 | No false positives | pass | pass |
 | Overall | pass | pass |
 
-## Tool-call audit
+## Tool call audit
 
-One entry per tool call, in call order. Each entry is `tool — duration — outcome — result size`. Durations are the harness's own timestamps: the gap between the assistant turn that issued the call and the tool result. Calls issued in parallel share a turn start, so they overlap. Per-call tokens are absent because the harness does not attribute usage per tool call. Where the harness recorded a Roslynk call as its generic `tool_call` wrapper, the invoked tool is shown after the arrow.
+### Standard tools
 
-- find_symbol
-  - Standard
-    - search_files — 2429 ms — ok — result 1992 bytes
-    - search_files — 2437 ms — ok — result 376 bytes
-    - read_file — 1174 ms — ok — result 1772 bytes
-    - read_file — 1183 ms — ok — result 425 bytes
-    - read_file — 1191 ms — ok — result 1223 bytes
-    - read_file — 1195 ms — ok — result 1008 bytes
-    - read_file — 1200 ms — ok — result 948 bytes
-    - read_file — 1205 ms — ok — result 616 bytes
-    - search_files — 1031 ms — ok — result 1980 bytes
-    - search_files — 1055 ms — ok — result 2525 bytes
-    - read_file — 1915 ms — ok — result 711 bytes
-    - read_file — 1924 ms — ok — result 619 bytes
-    - read_file — 1943 ms — ok — result 656 bytes
-    - search_files — 1948 ms — ok — result 2236 bytes
-  - Roslynk
-    - terminal — 468 ms — ok — result 119 bytes
-    - tool_describe — 570 ms — ok — result 6275 bytes
-    - tool_call → mcp__roslynk__open_solution — 35 ms — ok — result 693 bytes
-    - tool_call → mcp__roslynk__search_symbols — 97 ms — ok — result 788 bytes
-    - read_file — 628 ms — ok — result 1772 bytes
-    - read_file — 634 ms — ok — result 425 bytes
-    - tool_call → mcp__roslynk__get_callers — 74 ms — ok — result 907 bytes
-    - terminal — 468 ms — ok — result 1561 bytes
-    - read_file — 838 ms — ok — result 1223 bytes
-    - read_file — 843 ms — ok — result 1008 bytes
-    - read_file — 847 ms — ok — result 948 bytes
+| Tool name | Time | Outcome | Result size |
+| --- | --: | --- | --: |
+| search_files | 2429 ms | ok | 1992 bytes |
+| search_files | 2437 ms | ok | 376 bytes |
+| read_file | 1174 ms | ok | 1772 bytes |
+| read_file | 1183 ms | ok | 425 bytes |
+| read_file | 1191 ms | ok | 1223 bytes |
+| read_file | 1195 ms | ok | 1008 bytes |
+| read_file | 1200 ms | ok | 948 bytes |
+| read_file | 1205 ms | ok | 616 bytes |
+| search_files | 1031 ms | ok | 1980 bytes |
+| search_files | 1055 ms | ok | 2525 bytes |
+| read_file | 1915 ms | ok | 711 bytes |
+| read_file | 1924 ms | ok | 619 bytes |
+| read_file | 1943 ms | ok | 656 bytes |
+| search_files | 1948 ms | ok | 2236 bytes |
+
+### Roslynk
+
+| Tool name | Time | Outcome | Result size |
+| --- | --: | --- | --: |
+| terminal | 468 ms | ok | 119 bytes |
+| tool_describe | 570 ms | ok | 6275 bytes |
+| mcp__roslynk__open_solution | 35 ms | ok | 693 bytes |
+| mcp__roslynk__search_symbols | 97 ms | ok | 788 bytes |
+| read_file | 628 ms | ok | 1772 bytes |
+| read_file | 634 ms | ok | 425 bytes |
+| mcp__roslynk__get_callers | 74 ms | ok | 907 bytes |
+| terminal | 468 ms | ok | 1561 bytes |
+| read_file | 838 ms | ok | 1223 bytes |
+| read_file | 843 ms | ok | 1008 bytes |
+| read_file | 847 ms | ok | 948 bytes |
+
+## Measurements
+
+Every delta is **Roslynk minus Standard**, written with an explicit sign (`+` for more, `-` for less; zero may be `0`). A negative value means Roslynk used less time or fewer tokens.
+
+| Condition | Time | Tokens in | Tokens out | Total tokens |
+| --- | --: | --: | --: | --: |
+| Standard | 39.66 s | 30,620 | 1,493 | 32,113 |
+| Roslynk | 26.98 s | 13,278 | 1,190 | 14,468 |
+| Delta (Roslynk minus Standard) | -12.68 s | -17,342 | -303 | -17,645 |
 
 ## Setup (excluded from task totals)
 
@@ -78,6 +78,7 @@ One entry per tool call, in call order. Each entry is `tool — duration — out
 
 | Field | Value |
 | --- | --- |
+| Run | `20261027T171838Z-find_symbol` — conditions run sequentially, `standard` then `roslynk` |
 | Harness | Hermes Agent (delegate_task subagent session) — desktop build, model DeepSeek-V4.1-Flash-1017 via custom provider |
 | Model | DeepSeek-V4.1-Flash-1017 (identical in both conditions) |
 | Model settings | reasoning disabled; max iterations 250; max output tokens unset (provider default); temperature unavailable (not recorded by the harness); custom provider `http://sparky1.local:8888/v1`, chat_completions |
@@ -96,6 +97,7 @@ One entry per tool call, in call order. Each entry is `tool — duration — out
 
 - Both conditions produced the fully correct answer, so the deltas are a valid comparison.
 - Roslynk used **less** wall clock (-12.68 s) and **fewer** tokens (-17,342 in, -17,645 total), with 11 tool calls against 14.
+- Roslynk calls were issued through the harness's generic `tool_call` wrapper; the Roslynk table lists the tool that was invoked through it.
 - The Roslynk session did the semantic work with Roslynk: `search_symbols` found both `StockLedger` overloads, `get_callers` on `IStockLedger.ApplyAdjustment(string, int)` returned the three call sites with their containing members, and it read source only to confirm line numbers. It still ran one `rg` and four `read_file` calls, so it did not turn the semantic results straight into an answer.
 - Its one `tool_describe` (570 ms, 6,275 bytes) is deferred-registry overhead, charged as setup. In this harness the Roslynk tools reach a delegate_task session through the deferred catalog, so `run.md` §5 step 0 could not be fully met for `roslynk`. Unlike the previous run, no `tool_search` was needed — the session asked for the tool names directly.
 - The standard session never needed a discovery step: with Roslynk disabled there was nothing in its deferred catalog worth loading.

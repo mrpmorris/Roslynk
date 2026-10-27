@@ -159,9 +159,9 @@ Nothing else goes in that file.
 
 `Benchmarks/use-cases/<use-case>/benchmark-audit.md` contains, for the most recent run of that use case:
 
+- `## Per criterion scoring`: the line `Criteria are defined in scoring.md`, then the criterion table with a pass or fail for each condition.
+- `## Tool call audit`: two tables, `### Standard tools` and `### Roslynk`, each with the columns `Tool name | Time | Outcome | Result size` and one row per tool call in call order. Where a Roslynk call is recorded through the harness's generic `tool_call` wrapper, list the invoked tool name. Omit a field the harness did not expose rather than writing `unavailable` in a cell.
 - The measurements table: time, tokens in, tokens out and total tokens for each condition, plus the deltas (Roslynk minus Standard, explicit sign, unit on time).
-- The per-criterion scoring table built from `scoring.md`, with a pass or fail for each condition.
-- The tool-call audit grouped by condition, one entry per tool call, in call order, in the format specified there. Omit a field the harness did not expose rather than writing `unavailable` inside an entry.
 - A separately labelled setup section listing `open_solution` and status-polling calls, visible but excluded from task totals.
 - Provenance: harness, model, model settings, starting commit, session mechanism and record location, the tool-discovery line and the sha256 of the full user prompt as sent, the tools registered before the session (section 5, step 0), and any discovery calls charged as setup.
 - Your observations at the bottom of the file.
