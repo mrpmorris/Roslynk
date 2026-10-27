@@ -1,0 +1,191 @@
+{
+ "runId": "20261027T161718Z-find_symbol",
+ "condition": "roslynk",
+ "useCase": "find_symbol",
+ "startedUtc": "2026-10-27T16:20:30Z",
+ "endedUtc": "2026-10-27T16:21:16Z",
+ "durationSeconds": 46.17,
+ "status": "completed",
+ "harness": {
+  "name": "Hermes Agent (delegate_task subagent session)",
+  "version": "desktop build, model DeepSeek-V4.1-Flash-1017 via custom provider"
+ },
+ "session": {
+  "mechanism": "Hermes delegate_task subagent: fresh isolated session, parent passes goal + context as the single user turn, harness system prompt; no follow-up prompts",
+  "id": "20261027_162028_cb7013",
+  "recordPath": "C:/Users/X/AppData/Local/hermes/state.db (tables sessions/messages/async_delegations; subagent transcript C:/Users/X/AppData/Local/hermes/cache/delegation/live/deleg_164fb78e/task-0.log)"
+ },
+ "model": "DeepSeek-V4.1-Flash-1017",
+ "modelSettings": {
+  "reasoning": {
+   "enabled": false
+  },
+  "maxIterations": 250,
+  "maxTokens": null,
+  "temperature": null,
+  "provider": "custom (http://sparky1.local:8888/v1, chat_completions)"
+ },
+ "systemPromptSha256": "2793ec9167449f76ba1c5f17b9d8bf9461e1dcb593d27176650a7403a8d0ae00",
+ "promptSha256": "2a6a7dae0e618d712ce69a13f464cdd15ecadd284d9ffe5c497d7bdfdd8aaafb",
+ "startingCommit": "d35c9293d1646c04bd9879108724128cae2ee0b0",
+ "worktree": "C:/Data/ZZZScratch/Source/Roslynk/roslynk-bench-20261027T161718Z/RoslynkEnabled-find_symbol",
+ "roslynkAvailable": true,
+ "observedTools": [
+  "mcp__roslynk__search_symbols",
+  "mcp__roslynk__find_definition",
+  "mcp__roslynk__find_references",
+  "read_file",
+  "tool_search",
+  "tool_call"
+ ],
+ "usage": {
+  "inputTokens": 31942,
+  "outputTokens": 1013,
+  "totalTokens": 32955,
+  "cacheReadTokens": null,
+  "apiCalls": 6,
+  "assistantTurns": 9
+ },
+ "toolCalls": [
+  {
+   "name": "tool_search",
+   "durationMs": 3203,
+   "resultBytes": 8026,
+   "status": "ok",
+   "tokensIn": null,
+   "tokensOut": null,
+   "totalTokens": null
+  },
+  {
+   "name": "mcp__roslynk__search_symbols",
+   "durationMs": 128,
+   "resultBytes": 790,
+   "status": "ok",
+   "tokensIn": null,
+   "tokensOut": null,
+   "totalTokens": null
+  },
+  {
+   "name": "mcp__roslynk__find_definition",
+   "durationMs": 54,
+   "resultBytes": 552,
+   "status": "ok",
+   "tokensIn": null,
+   "tokensOut": null,
+   "totalTokens": null
+  },
+  {
+   "name": "mcp__roslynk__find_definition",
+   "durationMs": 93,
+   "resultBytes": 560,
+   "status": "ok",
+   "tokensIn": null,
+   "tokensOut": null,
+   "totalTokens": null
+  },
+  {
+   "name": "mcp__roslynk__find_references",
+   "durationMs": 122,
+   "resultBytes": 912,
+   "status": "ok",
+   "tokensIn": null,
+   "tokensOut": null,
+   "totalTokens": null
+  },
+  {
+   "name": "read_file",
+   "durationMs": 620,
+   "resultBytes": 1772,
+   "status": "ok",
+   "tokensIn": null,
+   "tokensOut": null,
+   "totalTokens": null
+  },
+  {
+   "name": "read_file",
+   "durationMs": 834,
+   "resultBytes": 1008,
+   "status": "ok",
+   "tokensIn": null,
+   "tokensOut": null,
+   "totalTokens": null
+  },
+  {
+   "name": "read_file",
+   "durationMs": 838,
+   "resultBytes": 948,
+   "status": "ok",
+   "tokensIn": null,
+   "tokensOut": null,
+   "totalTokens": null
+  },
+  {
+   "name": "read_file",
+   "durationMs": 843,
+   "resultBytes": 1223,
+   "status": "ok",
+   "tokensIn": null,
+   "tokensOut": null,
+   "totalTokens": null
+  }
+ ],
+ "finalAnswer": "declaration: Source/Warehouse.Core/Inventory/StockLedger.cs:27 \u2014 void ApplyAdjustment(string sku, int delta)\ncall-sites: 3\n- Source/Warehouse.Cli/Commands/AdjustStockCommand.cs:27 \u2014 called from AdjustStockCommand.Run\n- Source/Warehouse.Cli/Commands/ImportStockCommand.cs:29 \u2014 called from ImportStockCommand.Run\n- Source/Warehouse.Reporting/StockSummaryWriter.cs:39 \u2014 called from StockSummaryWriter.Reconcile",
+ "filesChanged": [],
+ "setup": null,
+ "scoring": {
+  "passed": true,
+  "criteria": [
+   {
+    "criterion": "Declaration path",
+    "expected": "Source/Warehouse.Core/Inventory/StockLedger.cs",
+    "result": "pass"
+   },
+   {
+    "criterion": "Declaration line",
+    "expected": "27",
+    "result": "pass"
+   },
+   {
+    "criterion": "Signature",
+    "expected": "void ApplyAdjustment(string sku, int delta)",
+    "result": "pass"
+   },
+   {
+    "criterion": "Call-site count",
+    "expected": "3",
+    "result": "pass"
+   },
+   {
+    "criterion": "Call site 1",
+    "expected": "Source/Warehouse.Cli/Commands/AdjustStockCommand.cs:27 \u2014 AdjustStockCommand.Run",
+    "result": "pass"
+   },
+   {
+    "criterion": "Call site 2",
+    "expected": "Source/Warehouse.Cli/Commands/ImportStockCommand.cs:29 \u2014 ImportStockCommand.Run",
+    "result": "pass"
+   },
+   {
+    "criterion": "Call site 3",
+    "expected": "Source/Warehouse.Reporting/StockSummaryWriter.cs:39 \u2014 StockSummaryWriter.Reconcile",
+    "result": "pass"
+   },
+   {
+    "criterion": "No false positives",
+    "expected": "no other file or line reported",
+    "result": "pass"
+   }
+  ],
+  "notes": "Answer matched the expected answer exactly; call sites listed in a different order, which the scoring criteria do not constrain. No false positives, no omissions."
+ },
+ "limitations": [
+  "Per-tool-call token usage is unavailable: the harness records usage per session (and per model call), not per tool call, so every tokensIn/tokensOut/totalTokens field in toolCalls is null.",
+  "Temperature and any provider-side thinking budget are not recorded by the harness; only reasoning disabled, max iterations 250 and max output tokens unset are known.",
+  "Token counts are the harness's session totals for the measured session, taken from its session record (state.db sessions table).",
+  "Tool-call durations are the gap between the assistant turn that issued the call and that call's tool result, from the session's message timestamps; calls issued in parallel share a turn start, so their durations overlap.",
+  "The subagent's workspace context was supplied as its task context, but Hermes records the subagent session cwd as the parent's checkout (C:/Data/ZZZScratch/Source/Roslynk/174) rather than the condition worktree; the standard session resolved the fixture to the parent checkout's Benchmarks/TestSolution (identical content to the worktree at the same commit) and the roslynk session used absolute worktree paths. Neither session read anything outside Benchmarks/TestSolution.",
+  "Roslynk availability is harness-wide configuration: config.yaml mcp_servers.roslynk.enabled was set to false for the standard session and restored to true before the roslynk session (backup config.yaml.bench-bak-20261027T161735Z). The harness's tool registry was rebuilt for each session, so the standard session saw no Roslynk tool.",
+  "The roslynk session reached Roslynk through the harness's generic tool_call wrapper, so the session record names the calls tool_call; the tool names in toolCalls were mapped from each wrapper invocation. It also spent one call on tool_search to discover the Roslynk tool names (8012 result bytes).",
+  "Roslynk tool-call durations (0.1\u20130.5 s) are far below the harness's own MCP round-trip latency for a first call in a session; the recorded durations are harness timestamps, not Roslynk-internal timings."
+ ]
+}

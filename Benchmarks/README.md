@@ -22,7 +22,8 @@ The only intended difference between the two runs is Roslynk tool availability. 
 | `Benchmarks/TestSolution/` | One self-contained C# solution used by every use case. It is the only folder checked out into each benchmark worktree. |
 | `Benchmarks/use-cases/find_symbol/prompt.md` | The prompt sent to a measured run, in full. |
 | `Benchmarks/use-cases/find_symbol/scoring.md` | The expected answer and scoring criteria for that use case. |
-| `Benchmarks/benchmark-results.md` | Results table and per-tool-call audit, regenerated from saved run records. |
+| `Benchmarks/use-cases/find_symbol/benchmark-audit.md` | Per-criterion scoring, tool-call audit, setup calls and observations for the most recent run of that use case. |
+| `Benchmarks/benchmark-results.md` | Results table and provenance, regenerated from saved run records. |
 | `Benchmarks/run-records/` | Raw run records kept for audit; created by a run, not present until one has been recorded. |
 
 ## Use cases
@@ -49,6 +50,6 @@ The structure and the single `find_symbol` use case exist. No benchmark run has 
 
 ## Adding use cases
 
-The suite deliberately starts with one use case so the approach can be assessed before more are added. A future use case is a new folder `Benchmarks/use-cases/{$name}/` holding two files, both using the same `TestSolution`: `prompt.md`, which contains only the prompt and is sent to a measured run in its entirety, and `scoring.md`, which holds the expected answer and scoring criteria. No per-use-case setup file is needed unless the task requires preparation; if one is added it must not use Roslynk, must be applied identically in both worktrees before measurement, and its time and tokens are recorded separately from task totals.
+The suite deliberately starts with one use case so the approach can be assessed before more are added. A future use case is a new folder `Benchmarks/use-cases/{$name}/` holding three files, all using the same `TestSolution`: `prompt.md`, which contains only the prompt and is sent to a measured run in its entirety; `scoring.md`, which holds the expected answer and scoring criteria; and `benchmark-audit.md`, which holds the per-criterion scoring, the tool-call audit and the setup calls for each run. No per-use-case setup file is needed unless the task requires preparation; if one is added it must not use Roslynk, must be applied identically in both worktrees before measurement, and its time and tokens are recorded separately from task totals.
 
 `TestSolution` is fixed benchmark data, not product code: it must not be modified between the two conditions, and `TestSolution/scripts/reset.sh` restores it inside a benchmark worktree.

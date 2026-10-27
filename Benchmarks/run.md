@@ -27,6 +27,7 @@ Both conditions use the same session setup; only Roslynk availability differs.
 - Model, model settings, stopping rules, time limit and output requirements: identical in both conditions.
 - Do not tell the session that it is being benchmarked, and do not tell it which tools are expected to help.
 - Roslynk availability is harness configuration for that session, not prompt text. Confirm the session's tool list matches the condition — no Roslynk tool in `standard`, the Roslynk tools in `roslynk` — and record that list.
+- Run the two conditions sequentially, never in parallel: the standard session must finish before the Roslynk session starts.
 
 Every use case is two files: `prompt.md` contains only the prompt, so it is sent in full and there is nothing to strip; `scoring.md` contains the expected answer and scoring criteria and is used only in section 7.
 
@@ -74,6 +75,8 @@ Start one session with Roslynk unavailable, working in `RoslynkDisabled-find_sym
 - A session that hits the time or turn limit is recorded as `status: "timeout"` and its partial answer is kept.
 - The session must not be told that it is being benchmarked, and must not be told which tools are expected to help.
 
+Do not start the Roslynk session until this one has finished.
+
 ## 5. Roslynk setup (not measured)
 
 Immediately before the Roslynk session, in `RoslynkEnabled-find_symbol`. You perform this setup yourself; it does not belong in the measured session.
@@ -97,7 +100,7 @@ Always run the conditions in the same order (`standard`, then `roslynk`) and rec
 
 ## 7. Score the answer
 
-Score the final answer against `Benchmarks/use-cases/find_symbol/scoring.md`: declaration path and line, signature, call-site count, and each call site's path, line and containing member. Record each criterion as pass or fail, plus any false positives or omissions. Do not edit the answer to make it pass.
+Score the final answer against `Benchmarks/use-cases/find_symbol/scoring.md`: declaration path and line, signature, call-site count, and each call site's path, line and containing member. Record each criterion as pass or fail, plus any false positives or omissions, in `Benchmarks/use-cases/find_symbol/benchmark-audit.md`. Do not edit the answer to make it pass.
 
 ## 8. Run record format
 
@@ -140,14 +143,24 @@ Take per-tool-call tokens from the assistant turn that issued the call when the 
 
 ## 9. Update the results file
 
-Regenerate `Benchmarks/benchmark-results.md` from the saved records; do not hand-edit numbers. It contains:
+Regenerate the results and the audit from the saved records; do not hand-edit numbers.
+
+`Benchmarks/benchmark-results.md` contains:
 
 - One row per use case in the table specified there. Every delta is **Roslynk minus Standard**, written with an explicit sign (`+` or `-`; zero may be `0`), and time carries its unit (e.g. `+12.3 s`). A negative value means Roslynk used less time or fewer tokens.
-- A tool-call audit grouped by use case and condition, one entry per tool call, in call order, in the format specified there.
-- A separately labelled setup section listing `open_solution` and status-polling calls, visible but excluded from task totals.
 - The provenance line: harness, model, model settings, starting commit and the session mechanism and record location.
 
-Write `unavailable` for any measurement the harness did not expose. Keep the raw records in `Benchmarks/run-records/` and commit them with the results update so the table can be audited and regenerated.
+`Benchmarks/use-cases/<use-case>/benchmark-audit.md` contains, for the most recent run of that use case:
+
+- The per-criterion scoring table built from `scoring.md`, with a pass or fail for each condition.
+- The tool-call audit grouped by condition, one entry per tool call, in call order, in the format specified there. Omit a field the harness did not expose rather than writing `unavailable` inside an entry.
+- A separately labelled setup section listing `open_solution` and status-polling calls, visible but excluded from task totals.
+- The location of the run records the audit was built from.
+- Your observations at the bottom of the file.
+
+Replace the audit's contents on every run; it describes only the latest run and is never appended to.
+
+In the results table, write `unavailable` for any cell the harness did not expose. Keep the raw records in `Benchmarks/run-records/` and commit them with the results update so the table and the audit can be audited and regenerated.
 
 ## 10. Clean up
 
