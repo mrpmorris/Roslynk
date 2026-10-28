@@ -2,7 +2,6 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Callers;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -16,7 +15,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Callers.GetCallers;
 
 [McpServerToolType]
-public sealed class GetCallersTool : IMcpTool
+public sealed class GetCallersTool
 {
 	public const string GetCallersName = "get_callers";
 
@@ -33,9 +32,7 @@ public sealed class GetCallersTool : IMcpTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	public static string GetName() => GetCallersName;
-
-	public static string GetDescription() => """
+	[Description("""
 		SupportsPaging=Y
 
 		Finds callers, including implicit calls: foreach/await enumeration and awaiter members
@@ -46,8 +43,7 @@ public sealed class GetCallersTool : IMcpTool
 
 		Body: project > folder > file > namespace > containing type; leaves name callers and declaration locations.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput;
-
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
 	[McpServerTool(
 		Name = GetCallersName,
 		Title = "Get callers of a method",

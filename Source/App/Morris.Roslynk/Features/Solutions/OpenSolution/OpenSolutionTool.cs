@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -11,7 +10,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Solutions.OpenSolution;
 
 [McpServerToolType]
-public sealed class OpenSolutionTool : IMcpTool
+public sealed class OpenSolutionTool
 {
 	public const string OpenSolutionName = "open_solution";
 
@@ -22,15 +21,12 @@ public sealed class OpenSolutionTool : IMcpTool
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 	}
 
-	public static string GetName() => OpenSolutionName;
-
-	public static string GetDescription() => """
+	[Description("""
 		Opens a .sln/.slnx and waits for the initial load (up to the server's load timeout); repeated opens reuse the instance.
 		Headers: solutionId (absolute path with forward slashes, reusable verbatim in JSON), status, projects, loadDiagnostics. Body: <projectPath>,<documentCount> per project.
 		noWait=true starts or reuses the load and returns immediately with status=Building (fire-and-forget pre-warming).
 		Missing solution: NotFound; failed load: Faulted.
-		""";
-
+		""")]
 	[McpServerTool(
 		Name = OpenSolutionName,
 		Title = "Open a C# solution",

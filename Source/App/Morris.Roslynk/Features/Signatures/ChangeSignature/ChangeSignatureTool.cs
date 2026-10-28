@@ -5,7 +5,6 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Editing;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -18,7 +17,7 @@ using Morris.Roslynk.Infrastructure.Writing;
 namespace Morris.Roslynk.Features.Signatures.ChangeSignature;
 
 [McpServerToolType]
-public sealed class ChangeSignatureTool : IMcpTool
+public sealed class ChangeSignatureTool
 {
 	public const string ChangeSignatureName = "change_signature";
 
@@ -33,9 +32,7 @@ public sealed class ChangeSignatureTool : IMcpTool
 		ApplyPipeline = applyPipeline ?? throw new ArgumentNullException(nameof(applyPipeline));
 	}
 
-	public static string GetName() => ChangeSignatureName;
-
-	public static string GetDescription() => """
+	[Description("""
 		Adds an optional parameter to one ordinary method/local function.
 		Method groups, nameof and cref references remain unchanged. Supports Razor @code declarations
 		and markup calls.
@@ -46,8 +43,7 @@ public sealed class ChangeSignatureTool : IMcpTool
 
 		Additional headers: resolvedMethod (pre-edit overload with parameter types), updatedCallSites.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""";
-
+		""")]
 	[McpServerTool(
 		Name = ChangeSignatureName,
 		Title = "Add a parameter to a method",

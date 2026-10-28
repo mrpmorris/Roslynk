@@ -5,7 +5,6 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -20,7 +19,7 @@ using Morris.Roslynk.Infrastructure.Writing;
 namespace Morris.Roslynk.Features.Signatures.RenameParameter;
 
 [McpServerToolType]
-public sealed class RenameParameterTool : IMcpTool
+public sealed class RenameParameterTool
 {
 	public const string RenameParameterName = "rename_parameter";
 
@@ -37,9 +36,7 @@ public sealed class RenameParameterTool : IMcpTool
 		ApplyPipeline = applyPipeline ?? throw new ArgumentNullException(nameof(applyPipeline));
 	}
 
-	public static string GetName() => RenameParameterName;
-
-	public static string GetDescription() => """
+	[Description("""
 		Renames one method/local function/constructor/indexer overload's parameter, updating declaration,
 		body uses, named call arguments and <paramref> docs. Strings/comments/unrelated text are unchanged.
 
@@ -59,8 +56,7 @@ public sealed class RenameParameterTool : IMcpTool
 		  type parameter in a renamed declaration.
 		- NotSupported: unsupported target kind, positional record parameter, metadata-only or
 		  generated-only target (names generator).
-		""";
-
+		""")]
 	[McpServerTool(
 		Name = RenameParameterName,
 		Title = "Rename a method parameter",

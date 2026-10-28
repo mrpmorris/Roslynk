@@ -2,7 +2,6 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -14,7 +13,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Symbols.SearchSymbols;
 
 [McpServerToolType]
-public sealed class SearchSymbolsTool : IMcpTool
+public sealed class SearchSymbolsTool
 {
 	public const string SearchSymbolsName = "search_symbols";
 
@@ -29,9 +28,7 @@ public sealed class SearchSymbolsTool : IMcpTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	public static string GetName() => SearchSymbolsName;
-
-	public static string GetDescription() => """
+	[Description("""
 		SupportsPaging=Y
 
 		Searches source symbol names, including generated declarations
@@ -46,8 +43,7 @@ public sealed class SearchSymbolsTool : IMcpTool
 		'kinds' filters the matched declarations by outline kind (namespace, class, struct, interface, enum,
 		delegate, module, method, property, field, event, localfunction), case-insensitively; an unknown kind
 		name is error=Invalid rather than an empty result.
-		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput;
-
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
 	[McpServerTool(
 		Name = SearchSymbolsName,
 		Title = "Search symbols by name",

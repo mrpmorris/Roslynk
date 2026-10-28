@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Results;
@@ -9,7 +8,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Solutions.GetSolutionStatus;
 
 [McpServerToolType]
-public sealed class GetSolutionStatusTool : IMcpTool
+public sealed class GetSolutionStatusTool
 {
 	public const string GetSolutionStatusName = "get_solution_status";
 
@@ -26,9 +25,7 @@ public sealed class GetSolutionStatusTool : IMcpTool
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 	}
 
-	public static string GetName() => GetSolutionStatusName;
-
-	public static string GetDescription() => """
+	[Description("""
 		Lists loaded solutions: <solutionId> (absolute path with forward slashes),<status>,<loaded>/<total>.
 		loaded tracks Building progress; total='?' until known after initial loading.
 
@@ -46,8 +43,7 @@ public sealed class GetSolutionStatusTool : IMcpTool
 		solutionId restricts the output to that one loaded solution (the id open_solution echoed, or
 		its absolute path in either slash form); omit it to list every loaded solution. An id naming
 		no loaded solution returns NotFound with candidate=<solutionId> lines.
-		""";
-
+		""")]
 	[McpServerTool(
 		Name = GetSolutionStatusName,
 		Title = "Get loaded-solution status",

@@ -3,7 +3,6 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Documentation;
@@ -23,7 +22,7 @@ namespace Morris.Roslynk.Features.Usings.RemoveUnusedUsings;
 /// removed syntactically instead, keeping their leading trivia so comments above a using survive.
 /// </summary>
 [McpServerToolType]
-public sealed class RemoveUnusedUsingsTool : IMcpTool
+public sealed class RemoveUnusedUsingsTool
 {
 	public const string RemoveUnusedUsingsName = "remove_unused_usings";
 
@@ -50,16 +49,13 @@ public sealed class RemoveUnusedUsingsTool : IMcpTool
 		DocumentDiagnostics = documentDiagnostics ?? throw new ArgumentNullException(nameof(documentDiagnostics));
 	}
 
-	public static string GetName() => RemoveUnusedUsingsName;
-
-	public static string GetDescription() => """
+	[Description("""
 		Removes unnecessary using directives (CS8019), solution-wide or in filePath, including
 		Razor @using lines. filePath also accepts a unique path suffix or file name; a fallback match
 		adds resolvedPath=<solution-relative path>. Additional header: removedCount.
 		No changes: applied=N, removedCount=0; safe to rerun.
 		NotFound: unloaded source file. Ambiguous: several matching files, with those paths as candidates.
-		""";
-
+		""")]
 	[McpServerTool(
 		Name = RemoveUnusedUsingsName,
 		Title = "Remove unused usings",

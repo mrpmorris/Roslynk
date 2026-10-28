@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Accesses;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -11,7 +10,7 @@ using Morris.Roslynk.Infrastructure.Resolution;
 namespace Morris.Roslynk.Features.References.FindWrites;
 
 [McpServerToolType]
-public sealed class FindWritesTool : IMcpTool
+public sealed class FindWritesTool
 {
 	public const string FindWritesName = "find_writes";
 
@@ -28,16 +27,13 @@ public sealed class FindWritesTool : IMcpTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	public static string GetName() => FindWritesName;
-
-	public static string GetDescription() => """
+	[Description("""
 		SupportsPaging=Y
 
 		Finds writes (assign/compound/increment/ref/out/init) using the shared access contract.
 		Body follows find_references with one location per leaf.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput;
-
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
 	[McpServerTool(
 		Name = FindWritesName,
 		Title = "Find writes to a field, property or parameter",

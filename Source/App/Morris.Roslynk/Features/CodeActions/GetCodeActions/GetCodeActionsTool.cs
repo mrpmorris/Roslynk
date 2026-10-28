@@ -2,7 +2,6 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -13,7 +12,7 @@ using Morris.Roslynk.Infrastructure.Results;
 namespace Morris.Roslynk.Features.CodeActions.GetCodeActions;
 
 [McpServerToolType]
-public sealed class GetCodeActionsTool : IMcpTool
+public sealed class GetCodeActionsTool
 {
 	public const string GetCodeActionsName = "get_code_actions";
 
@@ -26,9 +25,7 @@ public sealed class GetCodeActionsTool : IMcpTool
 		CodeActionService = codeActionService ?? throw new ArgumentNullException(nameof(codeActionService));
 	}
 
-	public static string GetName() => GetCodeActionsName;
-
-	public static string GetDescription() => """
+	[Description("""
 		Lists fixes/refactorings at a source position or selection. Fixes use compiler/analyzer
 		diagnostics at the span; refactorings use the span itself.
 
@@ -37,8 +34,7 @@ public sealed class GetCodeActionsTool : IMcpTool
 		adds resolvedPath=<solution-relative path>. Unknown filePath returns NotFound; several matching
 		files return Ambiguous with those paths as candidates.
 		Razor offers compiler fixes/refactorings; positions outside C# return NotSupported.
-		""";
-
+		""")]
 	[McpServerTool(
 		Name = GetCodeActionsName,
 		Title = "List code actions",

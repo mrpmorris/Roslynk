@@ -3,7 +3,6 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -16,7 +15,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Symbols.GetSymbol;
 
 [McpServerToolType]
-public sealed class GetSymbolTool : IMcpTool
+public sealed class GetSymbolTool
 {
 	public const string GetSymbolName = "get_symbol";
 
@@ -31,16 +30,13 @@ public sealed class GetSymbolTool : IMcpTool
 		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
 	}
 
-	public static string GetName() => GetSymbolName;
-
-	public static string GetDescription() => """
+	[Description("""
 		Returns a symbol's declaration without implementation. Source results: project, path and loc
 		headers, then the verbatim declaration before its opening brace or '=>'.
 		Without source: source=metadata, kind, signature and assembly headers.
 		A partially qualified symbolName resolves when exactly one symbol matches it as a dotted-segment
 		suffix; the result then carries resolvedSymbol=<canonical fully qualified signature>.
-		""";
-
+		""")]
 	[McpServerTool(
 		Name = GetSymbolName,
 		Title = "Get symbol details",

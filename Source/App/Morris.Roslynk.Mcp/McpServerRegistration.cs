@@ -141,10 +141,6 @@ internal static class McpServerRegistration
 			Edits map generated C# to source: unmappable edits return NotSupported; mismatched source,
 			Conflict. Analyzers skip generated Razor; compiler/RZxxxx diagnostics and CS8019/IDE0005
 			unused-using fixes are supported. _Imports.razor/_ViewImports.cshtml usings are never removed.
-
-			## Tool descriptions
-
-			A description of how to use each tool is available via the `help` tool
 			""";
 
 		options.NameTracesAfterTools();

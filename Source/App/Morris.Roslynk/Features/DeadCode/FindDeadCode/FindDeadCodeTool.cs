@@ -2,7 +2,6 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
-using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -16,7 +15,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.DeadCode.FindDeadCode;
 
 [McpServerToolType]
-public sealed class FindDeadCodeTool : IMcpTool
+public sealed class FindDeadCodeTool
 {
 	public const string FindDeadCodeName = "find_dead_code";
 
@@ -54,9 +53,7 @@ public sealed class FindDeadCodeTool : IMcpTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	public static string GetName() => FindDeadCodeName;
-
-	public static string GetDescription() => """
+	[Description("""
 		SupportsPaging=Y
 
 		Finds unreferenced types/methods/properties/fields/events, conservatively excluding interface
@@ -74,8 +71,7 @@ public sealed class FindDeadCodeTool : IMcpTool
 
 		countOnly=true returns the headers plus count=<n> and no leaves; maxSize still caps the scan,
 		so truncated=Y means the cap stopped the scan.
-		""";
-
+		""")]
 	[McpServerTool(
 		Name = FindDeadCodeName,
 		Title = "Find unused code",

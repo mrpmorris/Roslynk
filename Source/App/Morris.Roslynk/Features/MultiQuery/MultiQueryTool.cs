@@ -12,7 +12,7 @@ using Morris.Roslynk.Infrastructure.Tools;
 namespace Morris.Roslynk.Features.MultiQuery;
 
 [McpServerToolType]
-public sealed class MultiQueryTool : IMcpTool
+public sealed class MultiQueryTool
 {
 	public const string MultiQueryName = "multi_query";
 
@@ -37,9 +37,7 @@ public sealed class MultiQueryTool : IMcpTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	public static string GetName() => MultiQueryName;
-
-	public static string GetDescription() => """
+	[Description("""
 		Runs independent read-only operations against one snapshot, returning results in request order.
 		Operations cannot reference each other's output. Batch only queries needed for the question.
 
@@ -59,8 +57,7 @@ public sealed class MultiQueryTool : IMcpTool
 		index/tool. Pass snapshot=<id> as expectSnapshot; changed generations return Stale with both ids:
 		rerun the whole batch. Ratios are snapshot-specific; reruns remeasure/reselect.
 		Only slot-body nextStartItem drives paging; retry means an omitted result, not a page.
-		""";
-
+		""")]
 	[McpServerTool(
 		Name = MultiQueryName,
 		Title = "Run several read-only queries in one call",

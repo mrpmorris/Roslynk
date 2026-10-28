@@ -2,8 +2,6 @@
 using System.Text.Json;
 using ModelContextProtocol.Server;
 using Morris.Roslynk;
-using Morris.Roslynk.Features.Help.Help;
-using Morris.Roslynk.Infrastructure.Tools;
 using static Morris.Roslynk.McpTests.Server.PublishedSchema;
 
 namespace Morris.Roslynk.McpTests.Server;
@@ -65,7 +63,7 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 		Assert.Equal("string", PrimaryType(solutionId));
 		Assert.DoesNotContain("solutionId", Required(schema));
 		Assert.Contains("Optional", solutionId.GetProperty("description").GetString()!, StringComparison.Ordinal);
-		Assert.Contains("NotFound", McpToolCatalog.Descriptions[tool.ProtocolTool.Name], StringComparison.Ordinal);
+		Assert.Contains("NotFound", tool.ProtocolTool.Description!, StringComparison.Ordinal);
 	}
 
 	[Fact]
@@ -178,24 +176,18 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 	}
 
 	[Fact]
-	public void WhenToolsArePublished_ThenTheyUseShortSummariesAndKeepFullHelp()
+	public void WhenToolsArePublished_ThenTheyPreserveTheirCurrentDescriptions()
 	{
+		Dictionary<string, MethodInfo> methods = ToolMethods()
+			.ToDictionary(item => item.ToolName, item => item.Method, StringComparer.Ordinal);
+
 		foreach (McpServerTool tool in Tools)
 		{
-			Assert.False(string.IsNullOrWhiteSpace(tool.ProtocolTool.Title), $"Tool '{tool.ProtocolTool.Name}' has no short summary.");
-			Assert.Equal(tool.ProtocolTool.Title, tool.ProtocolTool.Description);
-			Assert.True(McpToolCatalog.Descriptions.TryGetValue(tool.ProtocolTool.Name, out string? fullDescription));
-			Assert.False(string.IsNullOrWhiteSpace(fullDescription), $"Tool '{tool.ProtocolTool.Name}' has no full help description.");
+			string? expected = methods[tool.ProtocolTool.Name]
+				.GetCustomAttribute<System.ComponentModel.DescriptionAttribute>()?.Description;
+			Assert.False(string.IsNullOrWhiteSpace(expected), $"Tool '{tool.ProtocolTool.Name}' has no description.");
+			Assert.Equal(expected, tool.ProtocolTool.Description);
 		}
-	}
-
-	[Fact]
-	public void WhenHelpIsRequested_ThenItReturnsTheFullDescriptionByToolName()
-	{
-		var help = new HelpTool();
-
-		Assert.Equal(McpToolCatalog.Descriptions["search_symbols"], help.Help("search_symbols"));
-		Assert.StartsWith("error=NotFound", help.Help("missing_tool"), StringComparison.Ordinal);
 	}
 
 	[Fact]
@@ -203,13 +195,13 @@ public class ToolSchemaTests : IClassFixture<ServerBuilder>
 	{
 		string Normalize(string text) => string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
-		string multiQuery = McpToolCatalog.Descriptions["multi_query"];
+		string multiQuery = Tools.Single(tool => tool.ProtocolTool.Name == "multi_query").ProtocolTool.Description!;
 		Assert.Contains(
 			"Operations cannot reference each other's output. Batch only queries needed for the question.",
 			Normalize(multiQuery),
 			StringComparison.Ordinal);
 
-		string findReferences = McpToolCatalog.Descriptions["find_references"];
+		string findReferences = Tools.Single(tool => tool.ProtocolTool.Name == "find_references").ProtocolTool.Description!;
 		Assert.Contains(
 			"Combine with get_callers/get_callees/find_implementations/get_type_hierarchy via multi_query for usage/impact analysis.",
 			Normalize(findReferences),
