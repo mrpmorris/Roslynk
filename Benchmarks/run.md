@@ -1,8 +1,8 @@
 # Running the Roslynk benchmarks
 
-Audience: an AI agent asked to run the Roslynk benchmarks. Follow this file exactly. Read `Benchmarks/README.md` for what the suite is for, then the use cases under `Benchmarks/use-cases/` for the measured tasks.
+Audience: an AI agent asked to run the Roslynk benchmarks. A measured run may be called a session, task, agent, chat, or another name by the harness. Follow this file exactly. Read `Benchmarks/README.md` for what the suite is for, then the use cases under `Benchmarks/use-cases/` for the measured tasks.
 
-Do not write a harness adapter, a driver script, or any program that launches the harness. You are operating the harness, not building a tool around it: start a session, let it do the task, and read what the harness recorded. The measured run is the harness's own session.
+Do not write a harness adapter, a driver script, or any program that launches the harness. Operate its native run mechanism directly and read what it recorded.
 
 ## 0. Use cases
 
@@ -18,14 +18,14 @@ A use case is one directory directly under `Benchmarks/use-cases/`, named for th
 Before starting anything, determine and record:
 
 - Harness name and version.
-- The mechanism it offers for a fresh session with a fixed system prompt and one user prompt (a subagent/task, a new chat, a CLI prompt, an API call).
+- The native mechanism it offers for a fresh, isolated agent run with fixed system instructions and one user prompt (for example, a task, chat, subagent, CLI invocation, or API call).
 - Model and model settings (temperature, reasoning/thinking settings, max output tokens).
-- What the harness records for a session: input/output/total tokens, per-turn or per-tool-call usage, tool-call names and durations, timestamps, and where that record lives.
+- What the harness records for a measured run: input/output/total tokens, per-turn or per-tool-call usage, tool-call names and durations, timestamps, and where that record lives.
 - Whether the harness can expose the Roslynk MCP tools to a session at all, and how. Per-session toggling is not required: availability is enforced by the prompt (section 2), not by harness settings, so a harness that only reads its configuration at startup is fine.
 
 When recording where a session's measurements live, distinguish the session store (which persists token usage and per-call records) from the launch mechanism's return value (which may carry only a summary). Read measurements from the store.
 
-If the harness cannot start a fresh session with a fixed prompt, or does not record a measurement this file asks for, record that limitation in the run record and in `Benchmarks/benchmark-results.md`. Never invent a value.
+Before changing benchmark data or results, confirm that the harness can launch two fresh, sufficiently isolated runs with the same system instructions, model, settings, tools, working directory, and limits. If it cannot, stop and report the specific missing capability and the smallest harness change that would enable the comparison. If a measurement is unavailable despite a valid comparison, record `null` in the run record and `unavailable` in the results table; never invent a value.
 
 ## 2. Prepare the sessions
 
@@ -218,3 +218,4 @@ Scope every reset and clean to `Benchmarks/TestSolution` and the temporary run d
 ## 11. Use-case setup files
 
 A use case may hold an optional `setup.md` alongside `prompt.md` and `scoring.md`. If it does, apply it identically in both conditions, before that condition's session starts, and record its time and tokens separately from task totals. It must not use Roslynk. A use case with no `setup.md` needs no setup step.
+
