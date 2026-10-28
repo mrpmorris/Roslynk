@@ -11,6 +11,10 @@ public static class DaemonVersion
 {
 	public static string Current { get; } = Resolve();
 
+	/// <summary>Recognizes local builds, including informational-version commit metadata.</summary>
+	public static bool IsDevelopment(string? version) =>
+		string.Equals(version?.Split('+', 2)[0], "0.0.1-local", StringComparison.OrdinalIgnoreCase);
+
 	private static string Resolve()
 	{
 		Assembly assembly = typeof(DaemonVersion).Assembly;

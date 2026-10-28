@@ -1,0 +1,7 @@
+[
+	{ "sku": "BOLT-M8", "name": "Hex bolt M8", "onHand": 240 },
+	{ "sku": "NUT-M8", "name": "Hex nut M8", "onHand": 310 },
+	{ "sku": "WASHER-M8", "name": "Washer M8", "onHand": 18 },
+	{ "sku": "CABLE-2M", "name": "USB-C cable 2m", "onHand": 7 },
+	{ "sku": "PSU-500", "name": "500W power supply", "onHand": 4 }
+]

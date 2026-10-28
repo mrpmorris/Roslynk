@@ -4,7 +4,9 @@ namespace Morris.Roslynk.Mcp.Hosting;
 /// The daemon's handshake endpoints. <c>GET /version</c> lets a stdio bridge learn which version owns
 /// the port before it pipes a session to it; <c>POST /shutdown</c> lets that bridge retire a daemon of
 /// another version so it can start its own; <c>POST /restart</c> lets it recycle a daemon of its own
-/// version, which <c>/shutdown</c> deliberately refuses. All are reachable on loopback only, like the
+/// version, which <c>/shutdown</c> deliberately refuses. Development daemons (0.0.1-local, ignoring
+/// case and optional commit metadata) refuse both POST endpoints with 409 Conflict and keep running.
+/// All are reachable on loopback only, like the
 /// rest of the host, and none is part of the MCP surface.
 /// </summary>
 public static class DaemonEndpoints
@@ -32,18 +34,24 @@ public static class DaemonEndpoints
 	/// </summary>
 	internal static void ResetRestartState() => Volatile.Write(ref RestartRequested, 0);
 
-	public static WebApplication MapDaemonEndpoints(this WebApplication app)
+	public static WebApplication MapDaemonEndpoints(this WebApplication app) =>
+		MapDaemonEndpoints(app, DaemonVersion.Current);
+
+	internal static WebApplication MapDaemonEndpoints(this WebApplication app, string version)
 	{
-		app.MapGet(VersionPath, () => Results.Text(DaemonVersion.Current, "text/plain"));
+		app.MapGet(VersionPath, () => Results.Text(version, "text/plain"));
 
 		app.MapPost(ShutdownPath, (HttpRequest request, IHostApplicationLifetime lifetime, ILoggerFactory loggerFactory) =>
 		{
+			if (DaemonVersion.IsDevelopment(version))
+				return Results.Conflict("Development Roslynk daemons cannot be shut down remotely.");
+
 			string? clientVersion = request.Query[ClientVersionParameter];
 
-			if (string.Equals(clientVersion, DaemonVersion.Current, StringComparison.Ordinal))
+			if (string.Equals(clientVersion, version, StringComparison.Ordinal))
 			{
 				return Results.Conflict(
-					$"This Roslynk daemon is already version {DaemonVersion.Current}.");
+					$"This Roslynk daemon is already version {version}.");
 			}
 
 			// Recorded in the daemon's log file: the issue this handshake fixes was silent, and this
@@ -52,32 +60,32 @@ public static class DaemonEndpoints
 				.CreateLogger(typeof(DaemonEndpoints).FullName!)
 				.LogWarning(
 					"Shutting down Roslynk daemon version {DaemonVersion} at the request of client version {ClientVersion}.",
-					DaemonVersion.Current,
+					version,
 					clientVersion ?? "(unspecified)");
 
 			lifetime.StopApplication();
 			return Results.Accepted(
-				value: $"Roslynk daemon {DaemonVersion.Current} is shutting down for client version {clientVersion ?? "(unspecified)"}.");
+				value: $"Roslynk daemon {version} is shutting down for client version {clientVersion ?? "(unspecified)"}.");
 		});
 
 		app.MapPost(RestartPath, (IHostApplicationLifetime lifetime, ILoggerFactory loggerFactory) =>
 		{
-			// No version parameter: /restart is only reachable from a bridge that already saw this
-			// daemon's version, so it cannot be used to swap a daemon of another version.
+			if (DaemonVersion.IsDevelopment(version))
+				return Results.Conflict("Development Roslynk daemons cannot be restarted remotely.");
 			if (Interlocked.CompareExchange(ref RestartRequested, 1, 0) != 0)
 			{
 				return Results.Conflict(
-					$"This Roslynk daemon ({DaemonVersion.Current}) is already restarting.");
+					$"This Roslynk daemon ({version}) is already restarting.");
 			}
 
 			loggerFactory
 				.CreateLogger(typeof(DaemonEndpoints).FullName!)
 				.LogWarning(
 					"Restarting Roslynk daemon version {DaemonVersion} at the request of a client.",
-					DaemonVersion.Current);
+					version);
 
 			lifetime.StopApplication();
-			return Results.Accepted(value: $"Roslynk daemon {DaemonVersion.Current} is restarting.");
+			return Results.Accepted(value: $"Roslynk daemon {version} is restarting.");
 		});
 
 		return app;

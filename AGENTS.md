@@ -10,6 +10,7 @@ This is a source-based implementation guide for future changes. Paths below are 
 - Batch related read-only questions with `multi_query`. Re-query after writes. A running Roslynk daemon can inspect edited source, but editing this repository does **not** replace the daemon's executing implementation; run tests against the checkout to validate new behavior.
 - Use normal file tooling for non-source configuration, documentation, and new-file creation. Roslynk's patch tool only edits existing files, and its plain-text fallback is rooted at the solution directory (`Source`), not the repository root.
 - The most important seams are `RoslynInstance`, `SolutionModel`, `ApplyPipeline`, `AtomicFileWriter`, `SolutionFileSync`, and the internal cores used by `MultiQueryCatalog`.
+- When asked to run the Roslynk benchmarks, follow `Benchmarks/run.md`. It defines the two conditions, the worktrees, what to measure, the record format and the cleanup; never invent a measurement the harness does not expose. `Benchmarks/README.md` explains the suite and `Benchmarks/benchmark-results.md` holds the recorded results.
 
 ## Required workflow for feature and tool changes
 
@@ -28,6 +29,7 @@ This is a source-based implementation guide for future changes. Paths below are 
 | `Source/App/Morris.Roslynk.McpTests` | Host composition, published MCP schemas, tool invocation and transport-facing tests. |
 | `Source/TestFixtures` | Small independent solutions: Simple, Broken, References, Conditional, Razor, Cshtml, LocalFunction, CodeStyle and Generator. |
 | `skills/roslynk` | User-facing skill (`SKILL.md`): minimal routing guidance. Update a tool's C# method description whenever its contract or behavior changes; update `SKILL.md` when activation or routing changes. |
+| `Benchmarks` | Reproducible AI benchmark suite: self-contained `TestSolution`, use-case prompts, `run.md` run instructions, and `benchmark-results.md`. |
 | `README.md`, `releases.md` | Setup/tool guidance and release history. |
 
 `Source/Directory.Build.props` sets .NET 10, latest C#, nullable and implicit usings, and warnings as errors. Package versions are central in `Source/Directory.Packages.props`; do not add local versions to individual project references. `Source/.editorconfig` specifies tabs (width 4), Allman braces, file-scoped namespaces, CRLF for C#/VB, and usings outside namespaces. Existing classes commonly use PascalCase private fields and explicit constructor injection; follow nearby code without unrelated formatting churn.

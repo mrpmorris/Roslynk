@@ -41,7 +41,7 @@ public class DaemonEndpointsTests
 	[Fact]
 	public async Task WhenRestartIsRequested_ThenTheHostStops()
 	{
-		await using DaemonTestHost host = await DaemonTestHost.StartAsync();
+		await using DaemonTestHost host = await DaemonTestHost.StartAsync("2.1.0");
 
 		using HttpResponseMessage response = await host.Client.PostAsync(
 			new Uri(host.BaseUri, DaemonEndpoints.RestartPath),
@@ -54,7 +54,7 @@ public class DaemonEndpointsTests
 	[Fact]
 	public async Task WhenARestartIsAlreadyInProgress_ThenASecondRestartIsRefused()
 	{
-		await using DaemonTestHost host = await DaemonTestHost.StartAsync();
+		await using DaemonTestHost host = await DaemonTestHost.StartAsync("2.1.0");
 
 		// Both requests are sent before the first one has stopped the host, so the process-wide
 		// restart marker is the only thing deciding which one wins.
@@ -74,7 +74,7 @@ public class DaemonEndpointsTests
 	[Fact]
 	public async Task WhenShutdownIsRequestedForAnotherVersion_ThenTheHostStops()
 	{
-		await using DaemonTestHost host = await DaemonTestHost.StartAsync();
+		await using DaemonTestHost host = await DaemonTestHost.StartAsync("2.1.0");
 
 		using HttpResponseMessage response = await host.Client.PostAsync(
 			ShutdownUri(host, "0.0.1-not-this-build"),
@@ -86,6 +86,24 @@ public class DaemonEndpointsTests
 
 	private static Uri ShutdownUri(DaemonTestHost host, string clientVersion) =>
 		new(host.BaseUri, $"{DaemonEndpoints.ShutdownPath}?{DaemonEndpoints.ClientVersionParameter}={Uri.EscapeDataString(clientVersion)}");
+
+	[Theory]
+	[InlineData("0.0.1-local", "/shutdown?clientVersion=3.0.0")]
+	[InlineData("0.0.1-Local", "/restart")]
+	[InlineData("0.0.1-local+abcdef", "/shutdown")]
+	[InlineData("0.0.1-LOCAL+abcdef", "/restart")]
+	public async Task WhenDevelopmentDaemonIsAskedToStop_ThenItRefusesAndKeepsServing(string version, string path)
+	{
+		await using DaemonTestHost host = await DaemonTestHost.StartAsync(version);
+
+		using HttpResponseMessage response = await host.Client.PostAsync(new Uri(host.BaseUri, path), content: null);
+
+		Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+		Assert.Contains("Development", await response.Content.ReadAsStringAsync());
+		Assert.False(host.Stopped.IsCompleted);
+		using HttpResponseMessage stillAlive = await host.Client.GetAsync(new Uri(host.BaseUri, DaemonEndpoints.VersionPath));
+		Assert.Equal(version, await stillAlive.Content.ReadAsStringAsync());
+	}
 
 	private sealed class DaemonTestHost : IAsyncDisposable
 	{
@@ -105,7 +123,7 @@ public class DaemonEndpointsTests
 
 		public Task Stopped => Stopping.Task;
 
-		public static async Task<DaemonTestHost> StartAsync()
+		public static async Task<DaemonTestHost> StartAsync(string? version = null)
 		{
 			int port = FreePort();
 
@@ -120,7 +138,7 @@ public class DaemonEndpointsTests
 			builder.WebHost.ConfigureKestrel(options => options.ListenLocalhost(port));
 
 			WebApplication app = builder.Build();
-			app.MapDaemonEndpoints();
+			app.MapDaemonEndpoints(version ?? DaemonVersion.Current);
 
 			// The restart marker is process-wide, so a host must start from a clean slate.
 			DaemonEndpoints.ResetRestartState();

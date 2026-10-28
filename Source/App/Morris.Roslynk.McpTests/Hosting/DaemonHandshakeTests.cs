@@ -7,6 +7,27 @@ public class DaemonHandshakeTests
 	private const string ExpectedVersion = "2.1.0";
 	private const string OtherVersion = "2.0.0";
 
+	[Theory]
+	[InlineData("0.0.1-local", false, 0)]
+	[InlineData("0.0.1-Local", true, 0)]
+	[InlineData("0.0.1-local+abcdef", false, 3)]
+	[InlineData("0.0.1-LOCAL+abcdef", true, 0)]
+	public async Task WhenTheDaemonIsADevelopmentBuild_ThenItIsReused(string version, bool forceRestart, int delayedAnswers)
+	{
+		var daemon = new FakeDaemonControl
+		{
+			Listening = true,
+			Version = version,
+			VersionCallsBeforeAnswer = delayedAnswers,
+		};
+
+		await DaemonHandshake.EnsureRunningAsync(Options(forceRestart), daemon, CancellationToken.None);
+
+		Assert.Equal(0, daemon.StartCount);
+		Assert.Equal(0, daemon.ShutdownRequestCount);
+		Assert.Equal(0, daemon.RestartRequestCount);
+	}
+
 	[Fact]
 	public async Task WhenTheDaemonVersionMatches_ThenTheRunningDaemonIsReused()
 	{
