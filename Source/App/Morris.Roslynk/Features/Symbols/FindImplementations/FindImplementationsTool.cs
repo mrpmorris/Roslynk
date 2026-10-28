@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -13,7 +14,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Symbols.FindImplementations;
 
 [McpServerToolType]
-public sealed class FindImplementationsTool
+public sealed class FindImplementationsTool : IMcpTool
 {
 	public const string FindImplementationsName = "find_implementations";
 
@@ -30,14 +31,17 @@ public sealed class FindImplementationsTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	[Description("""
+	public static string GetName() => FindImplementationsName;
+
+	public static string GetDescription() => """
 		SupportsPaging=Y
 
 		Finds implementations/overrides of interfaces, interface members or abstract members.
 		Returns resolvedSymbol (including method/indexer parameter types).
 		Body: project > folder > file > namespace; leaves: <typeKind>,<typeName>,<loc>.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput;
+
 	[McpServerTool(
 		Name = FindImplementationsName,
 		Title = "Find implementations",

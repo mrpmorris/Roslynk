@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -12,7 +13,7 @@ using Morris.Roslynk.Infrastructure.Results;
 namespace Morris.Roslynk.Features.Symbols.GetTypeHierarchy;
 
 [McpServerToolType]
-public sealed class GetTypeHierarchyTool
+public sealed class GetTypeHierarchyTool : IMcpTool
 {
 	public const string GetTypeHierarchyName = "get_type_hierarchy";
 
@@ -29,14 +30,17 @@ public sealed class GetTypeHierarchyTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	[Description("""
+	public static string GetName() => GetTypeHierarchyName;
+
+	public static string GetDescription() => """
 		SupportsPaging=Y
 
 		Returns base types (including metadata), implemented interfaces and known derived types.
 		Header: resolvedType. Body sections: base, interfaces, derived (empty sections omitted).
 		Entries: <typeKind>,<fully-qualified name>; typeKind=class|struct|interface|enum|delegate.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput;
+
 	[McpServerTool(
 		Name = GetTypeHierarchyName,
 		Title = "Get a type's hierarchy",

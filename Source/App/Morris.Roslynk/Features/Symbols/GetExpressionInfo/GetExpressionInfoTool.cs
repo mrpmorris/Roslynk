@@ -6,6 +6,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -18,7 +19,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Symbols.GetExpressionInfo;
 
 [McpServerToolType]
-public sealed partial class GetExpressionInfoTool
+public sealed partial class GetExpressionInfoTool : IMcpTool
 {
 	public const string GetExpressionInfoName = "get_expression_info";
 
@@ -40,7 +41,9 @@ public sealed partial class GetExpressionInfoTool
 		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
 	}
 
-	[Description("""
+	public static string GetName() => GetExpressionInfoName;
+
+	public static string GetDescription() => """
 		Returns compiler facts at a source position. Member/method names report the whole access/invocation: return type and
 		bound overload.
 
@@ -69,7 +72,8 @@ public sealed partial class GetExpressionInfoTool
 		filePath accepts absolute, solution-relative, or a unique path suffix/file name; a fallback match
 		adds resolvedPath=<solution-relative path>. Several matching files return Ambiguous with those paths
 		as candidates; an unloaded file returns NotFound.
-		""")]
+		""";
+
 	[McpServerTool(
 		Name = GetExpressionInfoName,
 		Title = "Get compiler facts about an expression",

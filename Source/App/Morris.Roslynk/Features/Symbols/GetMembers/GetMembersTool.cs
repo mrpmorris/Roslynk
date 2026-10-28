@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -14,7 +15,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Symbols.GetMembers;
 
 [McpServerToolType]
-public sealed class GetMembersTool
+public sealed class GetMembersTool : IMcpTool
 {
 	public const string GetMembersName = "get_members";
 
@@ -33,7 +34,9 @@ public sealed class GetMembersTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	[Description("""
+	public static string GetName() => GetMembersName;
+
+	public static string GetDescription() => """
 		SupportsPaging=Y
 
 		Lists methods/properties/fields/events/nested types grouped by declaring file ('<metadata>' for
@@ -46,7 +49,8 @@ public sealed class GetMembersTool
 
 		Includes all accessibilities. Filter with nameFilter/include*; use get_symbol_body for bodies.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput;
+
 	[McpServerTool(
 		Name = GetMembersName,
 		Title = "Get a type's members",

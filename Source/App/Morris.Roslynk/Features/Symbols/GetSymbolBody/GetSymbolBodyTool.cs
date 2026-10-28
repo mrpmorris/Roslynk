@@ -4,6 +4,7 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -16,7 +17,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Symbols.GetSymbolBody;
 
 [McpServerToolType]
-public sealed class GetSymbolBodyTool
+public sealed class GetSymbolBodyTool : IMcpTool
 {
 	/// <summary>The tool name; pages long declarations with startItem/maxSize.</summary>
 	public const string GetSymbolBodyName = "get_symbol_body";
@@ -34,7 +35,9 @@ public sealed class GetSymbolBodyTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	[Description("""
+	public static string GetName() => GetSymbolBodyName;
+
+	public static string GetDescription() => """
 		SupportsPaging=Y
 
 		Returns verbatim declarations of methods, constructors, properties, indexers, events, fields,
@@ -57,7 +60,8 @@ public sealed class GetSymbolBodyTool
 
 		countOnly=true returns the headers plus count=<n> (returned-text lines; every part's lines when
 		part=0 spans several parts) and no text; startItem and maxSize are ignored.
-		""")]
+		""";
+
 	[McpServerTool(
 		Name = GetSymbolBodyName,
 		Title = "Get symbol source text",

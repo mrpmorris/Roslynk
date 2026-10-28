@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Documentation;
@@ -13,7 +14,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 
 [McpServerToolType]
-public sealed class GetDiagnosticsTool
+public sealed class GetDiagnosticsTool : IMcpTool
 {
 	public const string GetDiagnosticsName = "get_diagnostics";
 
@@ -30,7 +31,9 @@ public sealed class GetDiagnosticsTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	[Description("""
+	public static string GetName() => GetDiagnosticsName;
+
+	public static string GetDescription() => """
 		SupportsPaging=Y
 
 		Returns compiler/analyzer diagnostics.
@@ -50,7 +53,8 @@ public sealed class GetDiagnosticsTool
 
 		countOnly=true returns the headers plus count=<n> and no rows; maxSize still caps the listed rows,
 		so truncated=Y means the cap stopped the listing.
-		""")]
+		""";
+
 	[McpServerTool(
 		Name = GetDiagnosticsName,
 		Title = "Get compiler diagnostics",

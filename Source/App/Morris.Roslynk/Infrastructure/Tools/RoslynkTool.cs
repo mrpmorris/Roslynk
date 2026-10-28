@@ -129,9 +129,8 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 	/// <summary>
 	/// Copies the protocol tool through JSON so every field the SDK filled in is preserved, replacing only
 	/// the input schema. The original instance is left untouched because the SDK caches and shares it.
-	/// An empty description is normalized to null: the SDK pipeline (AIFunctionFactory) yields an empty
-	/// string when a tool method has no [Description]. Nonempty method descriptions are preserved
-	/// verbatim so callers receive the current per-tool contract.
+	/// Description metadata comes from the statically-built <see cref="McpToolCatalog"/> so tools can
+	/// publish only a compact summary while callers request the complete contract through the help tool.
 	/// </summary>
 	private static Tool Republish(Tool tool)
 	{
@@ -147,7 +146,10 @@ internal sealed class RoslynkTool : DelegatingMcpServerTool
 		if (tool.Name == MultiQueryName)
 			MultiQuerySchema.RestoreOperationsItem(schema);
 		copy.InputSchema = JsonSerializer.SerializeToElement(schema);
-		copy.Description = string.IsNullOrEmpty(copy.Description) ? null : copy.Description;
+		if (!McpToolCatalog.Descriptions.ContainsKey(tool.Name))
+			throw new InvalidOperationException($"No MCP tool description is registered for '{tool.Name}'.");
+
+		copy.Description = copy.Title;
 		return copy;
 	}
 

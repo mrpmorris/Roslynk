@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -13,7 +14,7 @@ using Morris.Roslynk.Infrastructure.Writing;
 namespace Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
 
 [McpServerToolType]
-public sealed class ApplyCodeActionTool
+public sealed class ApplyCodeActionTool : IMcpTool
 {
 	public const string ApplyCodeActionName = "apply_code_action";
 
@@ -28,7 +29,9 @@ public sealed class ApplyCodeActionTool
 		ApplyPipeline = applyPipeline ?? throw new ArgumentNullException(nameof(applyPipeline));
 	}
 
-	[Description("""
+	public static string GetName() => ApplyCodeActionName;
+
+	public static string GetDescription() => """
 		Applies actionId from get_code_actions, re-resolving at its original position; retains no action state.
 
 		Errors: Conflict if the action no longer resolves (rerun get_code_actions); Invalid for a
@@ -36,7 +39,8 @@ public sealed class ApplyCodeActionTool
 		scaffolding may be unmappable.
 
 		Additional header: action.
-		""")]
+		""";
+
 	[McpServerTool(
 		Name = ApplyCodeActionName,
 		Title = "Apply a code action",

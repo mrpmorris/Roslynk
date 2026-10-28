@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Accesses;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -10,7 +11,7 @@ using Morris.Roslynk.Infrastructure.Resolution;
 namespace Morris.Roslynk.Features.References.FindReads;
 
 [McpServerToolType]
-public sealed class FindReadsTool
+public sealed class FindReadsTool : IMcpTool
 {
 	public const string FindReadsName = "find_reads";
 
@@ -27,13 +28,16 @@ public sealed class FindReadsTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	[Description("""
+	public static string GetName() => FindReadsName;
+
+	public static string GetDescription() => """
 		SupportsPaging=Y
 
 		Finds reads, including compound/increment/ref, using the shared access contract.
 		Body follows find_references with one location per leaf.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput;
+
 	[McpServerTool(
 		Name = FindReadsName,
 		Title = "Find reads of a field, property or parameter",

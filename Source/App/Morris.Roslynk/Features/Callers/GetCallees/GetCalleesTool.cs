@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Callers;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -13,7 +14,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Callers.GetCallees;
 
 [McpServerToolType]
-public sealed class GetCalleesTool
+public sealed class GetCalleesTool : IMcpTool
 {
 	public const string GetCalleesName = "get_callees";
 
@@ -30,7 +31,9 @@ public sealed class GetCalleesTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	[Description("""
+	public static string GetName() => GetCalleesName;
+
+	public static string GetDescription() => """
 		SupportsPaging=Y
 
 		Lists methods, constructors, property/event accessors and operators called by a member.
@@ -48,7 +51,8 @@ public sealed class GetCalleesTool
 		parameterTypes only for overloads declared in the callee's type (parameterless overload: '()'). Constructed generics collapse to their definitions; extension
 		methods include their 'this' parameter.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput;
+
 	[McpServerTool(
 		Name = GetCalleesName,
 		Title = "Get the members a member calls",

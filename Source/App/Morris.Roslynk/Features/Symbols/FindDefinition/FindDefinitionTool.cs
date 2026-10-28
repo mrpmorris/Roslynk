@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -13,7 +14,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Symbols.FindDefinition;
 
 [McpServerToolType]
-public sealed class FindDefinitionTool
+public sealed class FindDefinitionTool : IMcpTool
 {
 	public const string FindDefinitionName = "find_definition";
 
@@ -28,14 +29,17 @@ public sealed class FindDefinitionTool
 		ProjectionService = projectionService ?? throw new ArgumentNullException(nameof(projectionService));
 	}
 
-	[Description("""
+	public static string GetName() => FindDefinitionName;
+
+	public static string GetDescription() => """
 		Resolves the symbol at a source position. Returns fullName (including method/indexer parameter
 		types) and kind; source symbols add project, path and loc, metadata symbols add assembly.
 		filePath accepts absolute, solution-relative, or a unique path suffix/file name; a fallback match
 		adds resolvedPath=<solution-relative path>. Several matching files return Ambiguous with those paths
 		as candidates; an unloaded file returns NotFound.
 		No binding in any projection returns NotFound.
-		""")]
+		""";
+
 	[McpServerTool(
 		Name = FindDefinitionName,
 		Title = "Find a symbol's definition",

@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -10,7 +11,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.Conditionals.FindDeadConditionals;
 
 [McpServerToolType]
-public sealed class FindDeadConditionalsTool
+public sealed class FindDeadConditionalsTool : IMcpTool
 {
 	public const string FindDeadConditionalsName = "find_dead_conditionals";
 
@@ -25,7 +26,9 @@ public sealed class FindDeadConditionalsTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	[Description("""
+	public static string GetName() => FindDeadConditionalsName;
+
+	public static string GetDescription() => """
 		SupportsPaging=Y
 
 		Finds #if/#elif/#else branches absent from every checked configuration: each project's symbols
@@ -35,7 +38,8 @@ public sealed class FindDeadConditionalsTool
 		Header: deadConditionals=<n>. Body grouped by file; leaves: <line:col>,<directive>,<condition>.
 		directive=if|elif|else; condition is the raw expression or '(else)'.
 		Use find_dead_code for unreferenced symbols.
-		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput;
+
 	[McpServerTool(
 		Name = FindDeadConditionalsName,
 		Title = "Find never-compiled #if branches",

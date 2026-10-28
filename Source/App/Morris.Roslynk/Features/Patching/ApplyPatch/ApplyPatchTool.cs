@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -14,7 +15,7 @@ using Morris.Roslynk.Infrastructure.Writing;
 namespace Morris.Roslynk.Features.Patching.ApplyPatch;
 
 [McpServerToolType]
-public sealed class ApplyPatchTool
+public sealed class ApplyPatchTool : IMcpTool
 {
 	public const string ApplyPatchName = "apply_patch";
 
@@ -25,7 +26,9 @@ public sealed class ApplyPatchTool
 		InstanceRegistry = instanceRegistry ?? throw new ArgumentNullException(nameof(instanceRegistry));
 	}
 
-	[Description("""
+	public static string GetName() => ApplyPatchName;
+
+	public static string GetDescription() => """
 		Applies content-anchored git unified diffs to existing text files. Targets: solution-compiled
 		.cs/.razor/.cshtml (model synchronized), plus other text files under the solution folder
 		(e.g. .csproj/.json/.md). Creation/deletion, binary files and paths outside that folder:
@@ -40,7 +43,8 @@ public sealed class ApplyPatchTool
 		baseVersions pairs patch paths with documentVersion: SHA-256 hex of loaded text encoded as
 		UTF-8 without BOM. No read tool reports this hash; supply only if you can compute it exactly.
 		Mismatches return Stale with stale=<path>.
-		""")]
+		""";
+
 	[McpServerTool(
 		Name = ApplyPatchName,
 		Title = "Apply a patch",

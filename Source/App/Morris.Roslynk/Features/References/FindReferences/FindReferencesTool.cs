@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.FindSymbols;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -15,7 +16,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Features.References.FindReferences;
 
 [McpServerToolType]
-public sealed class FindReferencesTool
+public sealed class FindReferencesTool : IMcpTool
 {
 	public const string FindReferencesName = "find_references";
 
@@ -32,7 +33,9 @@ public sealed class FindReferencesTool
 		Budget = responseBudget ?? ResponseBudget.Default;
 	}
 
-	[Description("""
+	public static string GetName() => FindReferencesName;
+
+	public static string GetDescription() => """
 		SupportsPaging=Y
 
 		Finds semantic references, including partial classes/code-behind.
@@ -43,7 +46,8 @@ public sealed class FindReferencesTool
 		Combine with get_callers/get_callees/find_implementations/get_type_hierarchy via multi_query for
 		usage/impact analysis.
 		symbolName accepts a uniquely-matching dotted-segment suffix.
-		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput)]
+		""" + "\n\n" + OutlineDescriptions.CountOnlyOutput;
+
 	[McpServerTool(
 		Name = FindReferencesName,
 		Title = "Find references to a symbol",

@@ -8,6 +8,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Rename;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -21,7 +22,7 @@ using Morris.Roslynk.Infrastructure.Writing;
 namespace Morris.Roslynk.Features.Refactorings.ExtractMethod;
 
 [McpServerToolType]
-public sealed class ExtractMethodTool
+public sealed class ExtractMethodTool : IMcpTool
 {
 	public const string ExtractMethodName = "extract_method";
 
@@ -41,7 +42,9 @@ public sealed class ExtractMethodTool
 		ApplyPipeline = applyPipeline ?? throw new ArgumentNullException(nameof(applyPipeline));
 	}
 
-	[Description("""
+	public static string GetName() => ExtractMethodName;
+
+	public static string GetDescription() => """
 		Extracts contiguous C# statements or one expression into a method/local function, replacing the
 		selection with a call. Roslyn data-flow determines parameters, ref/out, return value, static/async
 		and call-site code. Surrounding whitespace is ignored.
@@ -60,7 +63,8 @@ public sealed class ExtractMethodTool
 		- Invalid: empty/out-of-range selection or invalid methodName.
 
 		Razor selections outside C# return NotSupported; inserting a method outside @code may be unmappable.
-		""")]
+		""";
+
 	[McpServerTool(
 		Name = ExtractMethodName,
 		Title = "Extract a selection into a method",

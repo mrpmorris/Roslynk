@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using System.Collections.Immutable;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Diagnostics;
@@ -16,7 +17,7 @@ using Morris.Roslynk.Infrastructure.Writing;
 namespace Morris.Roslynk.Features.CodeActions.ApplyCodeFix;
 
 [McpServerToolType]
-public sealed class ApplyCodeFixTool
+public sealed class ApplyCodeFixTool : IMcpTool
 {
 	public const string ApplyCodeFixName = "apply_code_fix";
 
@@ -40,7 +41,9 @@ public sealed class ApplyCodeFixTool
 		DocumentDiagnostics = documentDiagnostics ?? throw new ArgumentNullException(nameof(documentDiagnostics));
 	}
 
-	[Description("""
+	public static string GetName() => ApplyCodeFixName;
+
+	public static string GetDescription() => """
 		Fixes the diagnostic containing the supplied position, using its id and location from get_diagnostics.
 
 		Multiple fixes return Conflict with candidate=<actionId>,Fix,<diagnosticId> <title>:
@@ -54,7 +57,8 @@ public sealed class ApplyCodeFixTool
 		resolvedPath=<solution-relative path>. Several matching files return Ambiguous with those paths as
 		candidates; an unloaded file returns NotFound.
 		Additional header: action.
-		""")]
+		""";
+
 	[McpServerTool(
 		Name = ApplyCodeFixName,
 		Title = "Apply a diagnostic's fix",

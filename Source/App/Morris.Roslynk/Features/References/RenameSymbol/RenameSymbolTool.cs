@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Tools;
 using Morris.Roslynk.Infrastructure.Documentation;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
@@ -16,7 +17,7 @@ using Morris.Roslynk.Infrastructure.Writing;
 namespace Morris.Roslynk.Features.References.RenameSymbol;
 
 [McpServerToolType]
-public sealed class RenameSymbolTool
+public sealed class RenameSymbolTool : IMcpTool
 {
 	public const string RenameSymbolName = "rename_symbol";
 
@@ -33,7 +34,9 @@ public sealed class RenameSymbolTool
 		ApplyPipeline = applyPipeline ?? throw new ArgumentNullException(nameof(applyPipeline));
 	}
 
-	[Description("""
+	public static string GetName() => RenameSymbolName;
+
+	public static string GetDescription() => """
 		Renames a symbol and references across partial classes, code-behind and loaded frameworks under
 		shared conditional coverage. Strings/comments are unchanged. Razor supports @code, markup
 		expressions and component attributes.
@@ -46,7 +49,8 @@ public sealed class RenameSymbolTool
 		Errors: Invalid for invalid identifiers; Ambiguous with match candidates or fuzzy suggestions
 		when no match; Stale naming the target changed on disk/in the model since computation.
 		Intervening edits to other files are preserved.
-		""")]
+		""";
+
 	[McpServerTool(
 		Name = RenameSymbolName,
 		Title = "Rename a symbol",
