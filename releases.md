@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Development daemons reporting `0.0.1-local` refuse remote shutdown and restart requests, and clients reuse them regardless of their own version.
 - Reproducible AI benchmark suite comparing Roslynk with standard tools: a self-contained `Benchmarks/TestSolution`, the `find_symbol` use case, run instructions in `Benchmarks/run.md` and recorded results in `Benchmarks/benchmark-results.md` (Fixes #174)
 - OpenTelemetry span and metric tag values are recorded in full instead of being silently capped at 64 characters, so `mcp.tool.arg.*` tool-call arguments, `roslynk.solution.path`, `roslynk.symbol.name` and `roslynk.file.path` are usable in Aspire (Fixes #172)
 - Read-only tools run through a shared snapshot guard that returns `error=Stale` (with the current `snapshot=<id>`) when the solution changes mid-query or the query is cancelled, and `multi_query` rejects the whole batch rather than mixing generations; write tools stay on the write pipeline (Fixes #165)

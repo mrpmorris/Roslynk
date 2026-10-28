@@ -85,6 +85,10 @@ public sealed class DaemonHandshakeOptions
 /// </summary>
 public static class DaemonHandshake
 {
+	/// <summary>
+	/// Reuses a development daemon (0.0.1-local, ignoring case and commit metadata), even when a
+	/// restart is forced. Other versions follow the normal version replacement and restart handshake.
+	/// </summary>
 	public static async Task EnsureRunningAsync(
 		DaemonHandshakeOptions options,
 		IDaemonControl control,
@@ -108,6 +112,10 @@ public static class DaemonHandshake
 					$"within {options.StartupTimeout.TotalSeconds:0}s, so the daemon's version is unknown. " +
 					$"This client is version {options.ExpectedVersion}; stop the process holding the port and retry.");
 		}
+
+		// A local daemon belongs to the developer, including when a startup setting forces a restart.
+		if (DaemonVersion.IsDevelopment(version))
+			return;
 
 		if (string.Equals(version, options.ExpectedVersion, StringComparison.Ordinal))
 		{
@@ -159,7 +167,8 @@ public static class DaemonHandshake
 				return;
 			}
 
-			if (string.Equals(restartRemaining, options.ExpectedVersion, StringComparison.Ordinal))
+			if (DaemonVersion.IsDevelopment(restartRemaining) ||
+				string.Equals(restartRemaining, options.ExpectedVersion, StringComparison.Ordinal))
 				return;
 
 			throw new InvalidOperationException(
@@ -189,7 +198,8 @@ public static class DaemonHandshake
 			return;
 		}
 
-		if (string.Equals(remaining, options.ExpectedVersion, StringComparison.Ordinal))
+		if (DaemonVersion.IsDevelopment(remaining) ||
+			string.Equals(remaining, options.ExpectedVersion, StringComparison.Ordinal))
 			return;
 
 		throw new InvalidOperationException(
@@ -215,7 +225,8 @@ public static class DaemonHandshake
 				$"See '{DaemonLauncher.LogFilePath}' for its output.");
 		}
 
-		if (!string.Equals(version, options.ExpectedVersion, StringComparison.Ordinal))
+		if (!DaemonVersion.IsDevelopment(version) &&
+			!string.Equals(version, options.ExpectedVersion, StringComparison.Ordinal))
 		{
 			throw new InvalidOperationException(
 				$"A Roslynk daemon of version {version} answered on port {options.Port}, but this client is version " +
@@ -295,7 +306,8 @@ public static class DaemonHandshake
 			if (version is not null)
 			{
 				lastVersion = version;
-				if (string.Equals(version, options.ExpectedVersion, StringComparison.Ordinal))
+				if (DaemonVersion.IsDevelopment(version) ||
+					string.Equals(version, options.ExpectedVersion, StringComparison.Ordinal))
 					return (false, version);
 			}
 			else if (!control.IsListening(options.Port))
