@@ -10,8 +10,8 @@ A use case is one directory directly under `Benchmarks/use-cases/`, named for th
 
 - List the directories directly under `Benchmarks/use-cases/`, sorted by name. Record that list as the run's use cases.
 - A directory is a use case if it holds `prompt.md` and `scoring.md`. It may also hold an optional `setup.md` (section 11). Skip a directory that lacks either required file, and record that you skipped it and why.
-- Run every use case in the same pass, one after another in that order. Each use case is run twice, standard then Roslynk (sections 4 and 6), and a use case's standard session must finish before its Roslynk session starts. Both conditions use the single worktree `Roslynk-BenchRunner`, which is deleted once at the very start of the run, created fresh immediately before each session and deleted immediately after it (section 3).
-- `{$useCase}` substitutes the directory name everywhere it appears: paths, worktree names, record fields and the results table's `Test` column.
+- Run every use case in the same pass, one after another in that order. Each use case is run twice, standard then Roslynk (sections 4 and 6), and a use case's standard session must finish before its Roslynk session starts. Both conditions run in the repository's current checkout and `Benchmarks/TestSolution` is reset recursively before every session (section 3).
+- `{$useCase}` substitutes the directory name everywhere it appears: paths, record fields and the results table's `Test` column.
 
 ## 1. Identify the harness
 
@@ -23,6 +23,8 @@ Before starting anything, determine and record:
 - What the harness records for a session: input/output/total tokens, per-turn or per-tool-call usage, tool-call names and durations, timestamps, and where that record lives.
 - Whether the harness can expose the Roslynk MCP tools to a session at all, and how. Per-session toggling is not required: availability is enforced by the prompt (section 2), not by harness settings, so a harness that only reads its configuration at startup is fine.
 
+When recording where a session's measurements live, distinguish the session store (which persists token usage and per-call records) from the launch mechanism's return value (which may carry only a summary). Read measurements from the store.
+
 If the harness cannot start a fresh session with a fixed prompt, or does not record a measurement this file asks for, record that limitation in the run record and in `Benchmarks/benchmark-results.md`. Never invent a value.
 
 ## 2. Prepare the sessions
@@ -30,7 +32,7 @@ If the harness cannot start a fresh session with a fixed prompt, or does not rec
 Both conditions use the same session setup; only the final line of the user prompt differs.
 
 - Start one fresh session per condition, through the mechanism recorded in section 1.
-- Working directory: the condition's worktree (section 3).
+- Working directory: the repository root, on its current branch — the same checkout for both conditions (section 3).
 - System prompt: the harness's normal system prompt, identical in both conditions.
 - User prompt: the entire contents of `Benchmarks/use-cases/{$useCase}/prompt.md`, byte for byte, followed by the tool-discovery line below, then that condition's final line below, and nothing else.
 - Tool-discovery line: `Check which tools are available to you before you start.` Send it verbatim in both conditions, immediately after `prompt.md`'s last line: it is the last line of the Roslynk condition's prompt and the second-to-last of the standard condition's. It is generic — it names no tool and no product — so it does not tell the session which tools are expected to help; it only makes deferred or on-demand tool registries discoverable in both conditions alike.
@@ -45,64 +47,49 @@ Every use case is two required files plus an optional third: `prompt.md` contain
 
 Measurements come from the harness's own session record: wall clock around the session, token usage, and the tool-call log with durations where it exposes them. Do not instrument tool calls yourself, and do not turn the session's output into numbers by hand. If the harness does not expose a value, record it as `unavailable` and name it in `limitations`.
 
-## 3. Prepare the worktree
+**Token capture.** Read each session's input, output and total token counts from the harness's own persistent session record — the store the harness writes after a session ends — not from the summary its task-launch mechanism returns. A launch summary that omits usage is not evidence that usage is unavailable. Record `apiCallCount` and any separately reported cache-read or reasoning tokens alongside, and state which counts are included in `inputTokens`. If the harness's session record does not expose a value, record `null` and name it in `limitations`.
 
-One worktree, one name, every time: a sibling of the repository root named `Roslynk-BenchRunner`. It is the only worktree the benchmark uses. It is deleted before it is created, and deleted again as soon as each condition's session has finished.
+## 3. Reset the test solution
+
+No worktrees. Every session runs in the repository's current checkout, on its current branch, working in `Benchmarks/TestSolution`. That directory is reset recursively before every session, so each condition starts from exactly the same `TestSolution` content.
 
 The order is fixed:
 
-1. At the very start of everything — before any use case's session — delete `Roslynk-BenchRunner` ("Clear the worktree" below). Do this once.
+1. At the very start of everything — before any use case's session — record `startingCommit` and reset `Benchmarks/TestSolution` ("Reset" below). Do this once.
 2. Loop through the use cases, in the order recorded in section 0.
 3. For each use case:
-	1. Create `Roslynk-BenchRunner` for the standard condition ("Create the worktree" below).
+	1. Reset `Benchmarks/TestSolution` for the standard condition ("Reset" below).
 	2. Run the standard session (section 4).
-	3. Delete `Roslynk-BenchRunner` ("Clear the worktree" below).
-	4. Create `Roslynk-BenchRunner` again for the Roslynk condition ("Create the worktree" below) — a new worktree from the same `startingCommit`, not the deleted one reused — then apply its `setup.md` (section 11) and the Roslynk setup (section 5).
+	3. Reset `Benchmarks/TestSolution` again ("Reset" below).
+	4. Apply that use case's `setup.md` (section 11) if it has one, then the Roslynk setup (section 5).
 	5. Run the Roslynk session (section 6).
-	6. Delete `Roslynk-BenchRunner` ("Clear the worktree" below).
+	6. Reset `Benchmarks/TestSolution` again, so the next condition or use case starts clean.
 
-**Clear the worktree.** From the repository root, record the commit you are benchmarking and remove the worktree:
+**Reset.** From the repository root, restore every file under `Benchmarks/TestSolution` to its committed content, remove everything untracked inside it, and clear its build output:
 
 ```bash
 git rev-parse HEAD                     # record this as startingCommit
-repo_root="$(git rev-parse --show-toplevel)"
-wt="$(dirname "$repo_root")/Roslynk-BenchRunner"
-for w in $(git worktree list --porcelain | sed -n 's/^worktree //p'); do
-	case "$w" in "$wt") git worktree remove --force "$w" ;; esac
-done
-rm -rf "$wt"
-git worktree prune
-git worktree list
-```
-
-The prune is required: deleting a worktree's directory by hand leaves its registration in `.git/worktrees`, and `git worktree add` refuses a path git still considers registered. Deleting the directory is also what makes the run start from a clean checkout — no leftover edits, build output or `bin`/`obj` from a previous session.
-
-**Create the worktree.** Create it from `startingCommit`, sparse-checkout only the test solution, reset it, then verify it:
-
-```bash
-git worktree add --detach "$wt" HEAD
-cd "$wt"
-git sparse-checkout init --no-cone
-git sparse-checkout set Benchmarks/TestSolution
+git checkout -- Benchmarks/TestSolution
+git clean -fdx Benchmarks/TestSolution
 Benchmarks/TestSolution/scripts/reset.sh
 ```
 
-Use no-cone mode. Cone mode always checks out the repository's root files, which would put `AGENTS.md` and `README.md` in the measured agent's workspace and leak benchmark instructions into the run; no-cone mode checks out only `Benchmarks/TestSolution`.
+This is a hard reset of that one folder and nothing else. The pathspec limits all three commands to `Benchmarks/TestSolution`: no other path in the checkout is touched, the working tree's branch is not changed, and `git reset --hard` (which would reset the whole checkout) is never used. `git clean -fdx` with that pathspec deletes untracked and ignored files — including `bin`/`obj` and any file a session created — inside `Benchmarks/TestSolution` only.
 
-Verify the worktree and record the output of each check:
+Verify the reset and record the output of each check:
 
-- `git -C "$wt" rev-parse HEAD` equals `startingCommit`.
-- `git -C "$wt" status --porcelain` is empty.
-- Only `Benchmarks/TestSolution` exists besides `.git` in the worktree.
+- `git status --porcelain -- Benchmarks/TestSolution` is empty.
+- `git rev-parse HEAD` still equals `startingCommit`.
+- `Benchmarks/TestSolution` contains no `bin` or `obj` directory.
 - `Benchmarks/TestSolution/scripts/reset.sh` has been run, so `TestSolution` starts clean.
 
-After a clear, `git worktree list` must show no worktree at `Roslynk-BenchRunner`, and no `Roslynk-BenchRunner` directory may remain beside the repository. If a session left a registration behind with its directory already gone, `git worktree prune` clears it.
+Do not reset or clean any path outside `Benchmarks/TestSolution`; if the checkout has other uncommitted work, leave it alone.
 
 ## 4. Run the standard condition
 
-Start one session barred from Roslynk, working in `Roslynk-BenchRunner`. This condition has no setup step, so its measured duration is the whole session.
+Start one session barred from Roslynk, working in the repository root. This condition has no setup step, so its measured duration is the whole session.
 
-- Create `Roslynk-BenchRunner` before starting (section 3, use-case step 1).
+- Reset `Benchmarks/TestSolution` before starting (section 3, use-case step 1).
 - Its user prompt ends with the standard prohibition line `Do not use Roslynk`, after the tool-discovery line.
 - The Roslynk tools are still in the session's tool list — availability is identical to the Roslynk condition; only the instruction differs. Do not remove them from the harness.
 - Time limit: 10 minutes of wall clock.
@@ -113,15 +100,15 @@ Start one session barred from Roslynk, working in `Roslynk-BenchRunner`. This co
 
 Do not start that use case's Roslynk session until this one has finished.
 
-When this session has finished and its record is saved, delete `Roslynk-BenchRunner` (section 3, use-case step 3), so the Roslynk condition starts from a new worktree.
+When this session has finished and its record is saved, reset `Benchmarks/TestSolution` again (section 3, use-case step 3), so the Roslynk condition starts from identical content.
 
 ## 5. Roslynk setup (not measured)
 
-Immediately before the Roslynk session, in `Roslynk-BenchRunner` — created new at use-case step 4 of section 3, after the standard condition's worktree has been deleted. You perform this setup yourself; it does not belong in the measured session.
+Immediately before the Roslynk session, in the repository root — after `Benchmarks/TestSolution` has been reset again at use-case step 3 of section 3. You perform this setup yourself; it does not belong in the measured session.
 
 0. **Register the tools before timing, in both conditions.** A tool registry that hands the session its tools lazily or on demand makes the session pay a discovery cost — searching for tools, then loading their schemas — that it pays once, not on every use of the tools. That cost is harness overhead, not part of the task, so it must not land in the measured session. Make the session's tool list explicit before the measured session starts: the condition's tools are registered and visible at the start of the session, with no discovery step required. Both sessions get the same list, Roslynk tools included; only the standard condition's prompt forbids using them. Record the tool list you registered, and record any tool-discovery calls the session still makes (with their durations and result sizes) as setup, not as task cost. If the harness cannot register tools ahead of the session, record that limitation and treat any discovery calls the session makes as harness overhead in `limitations`, not as Roslynk's cost.
 1. Make sure the Roslynk daemon is running and exposed to the harness.
-2. Call `open_solution` with the absolute path `{$wt}/Benchmarks/TestSolution/TestSolution.slnx`, and record the echoed `solutionId`.
+2. Call `open_solution` with the absolute path of `Benchmarks/TestSolution/TestSolution.slnx` in the repository root, and record the echoed `solutionId`.
 3. Poll `get_solution_status` with that `solutionId` until its line reports `Ready`. Treat `Faulted` as a setup failure; record it and do not start the measured session. Record every poll and every retry.
 4. Record setup duration (from the `open_solution` call to the first `Ready` observation), the tokens those calls consumed, retries and failures.
 
@@ -133,9 +120,9 @@ If the harness restarts the daemon between setup and the measured session, the s
 
 ## 6. Run the Roslynk condition
 
-Create `Roslynk-BenchRunner` before starting (section 3, use-case step 4), then complete the setup in section 5. Start one session with Roslynk available, working in that worktree, under the same limits and rules as section 4. Its user prompt ends with the Roslynk preference line `Prefer use of Roslynk tools where appropriate`, after the tool-discovery line, and carries no prohibition line; that one line is the only difference between the two conditions' prompts.
+Reset `Benchmarks/TestSolution` before starting (section 3, use-case step 3), then complete the setup in section 5. Start one session with Roslynk available, working in the repository root, under the same limits and rules as section 4. Its user prompt ends with the Roslynk preference line `Prefer use of Roslynk tools where appropriate`, after the tool-discovery line, and carries no prohibition line; that one line is the only difference between the two conditions' prompts.
 
-Always run the conditions in the same order (`standard`, then `roslynk`) and record that order, so separate benchmark runs stay comparable. When the Roslynk session has finished and its record is saved, delete `Roslynk-BenchRunner` (section 3, use-case step 6). Then move to the next use case, in the order recorded in section 0, repeating the loop in section 3.
+Always run the conditions in the same order (`standard`, then `roslynk`) and record that order, so separate benchmark runs stay comparable. When the Roslynk session has finished and its record is saved, reset `Benchmarks/TestSolution` again (section 3, use-case step 6). Then move to the next use case, in the order recorded in section 0, repeating the loop in section 3.
 
 ## 7. Score the answer
 
@@ -166,7 +153,7 @@ Write one JSON file per condition per use case, e.g. `{$runDir}/{$useCase}-stand
   "prohibitionLine": "",
   "preferenceLine": "",
   "startingCommit": "",
-  "worktree": "",
+  "workingDirectory": "",
   "roslynkAvailable": false,
   "observedTools": [],
   "registeredTools": [],
@@ -184,7 +171,7 @@ Write one JSON file per condition per use case, e.g. `{$runDir}/{$useCase}-stand
 
 Use `null` for any value the harness does not expose, and name it in `limitations`. Do not write a plausible number in place of a missing measurement.
 
-`useCase` is the directory name under `Benchmarks/use-cases/`. `roslynkAvailable` records whether the Roslynk tools were in the session's tool list — true in both conditions under this procedure. `prohibitionLine` holds `Do not use Roslynk` in `standard` and is empty in `roslynk`; `preferenceLine` holds `Prefer use of Roslynk tools where appropriate` in `roslynk` and is empty in `standard`. So `promptSha256` is per condition and is not shared between them.
+`useCase` is the directory name under `Benchmarks/use-cases/`. `workingDirectory` is the repository root both conditions ran in, and `startingCommit` the commit `Benchmarks/TestSolution` was reset to before each session. `roslynkAvailable` records whether the Roslynk tools were in the session's tool list — true in both conditions under this procedure. `prohibitionLine` holds `Do not use Roslynk` in `standard` and is empty in `roslynk`; `preferenceLine` holds `Prefer use of Roslynk tools where appropriate` in `roslynk` and is empty in `standard`. So `promptSha256` is per condition and is not shared between them.
 
 Take per-tool-call tokens from the assistant turn that issued the call when the harness records them that way; if it reports usage only per session, set the per-call token fields to `null`.
 
@@ -213,20 +200,21 @@ In the results table, write `unavailable` for any cell the harness did not expos
 
 ## 10. Clean up
 
-`Roslynk-BenchRunner` is removed inside the use-case loop: it is deleted right after each session (section 3, use-case steps 3 and 6), so nothing accumulates. At the end of the run, verify that nothing is left behind:
+`Benchmarks/TestSolution` is reset inside the use-case loop: right after each session (section 3, use-case steps 3 and 6). At the end of the run, reset it once more and verify:
 
 ```bash
-git worktree prune
-git worktree list
-ls "$(dirname "$repo_root")"
+git checkout -- Benchmarks/TestSolution
+git clean -fdx Benchmarks/TestSolution
+Benchmarks/TestSolution/scripts/reset.sh
+git status --porcelain -- Benchmarks/TestSolution
 ```
 
-`git worktree list` must show no worktree at `Roslynk-BenchRunner`, and no `Roslynk-BenchRunner` directory may remain beside the repository.
+`git status --porcelain -- Benchmarks/TestSolution` must be empty, and `git rev-parse HEAD` must still equal `startingCommit`.
 
 Then delete the temporary run directory (`rm -rf "$runDir"`) once the results table and the audits have been written from it, and verify that no benchmark directories remain.
 
-Scope every reset and clean to the benchmark worktrees and the temporary run directory. Never reset or clean the main checkout.
+Scope every reset and clean to `Benchmarks/TestSolution` and the temporary run directory. Never reset or clean any other path in the checkout.
 
 ## 11. Use-case setup files
 
-A use case may hold an optional `setup.md` alongside `prompt.md` and `scoring.md`. If it does, apply it identically in each of that use case's worktrees, in both conditions, before that condition's session starts, and record its time and tokens separately from task totals. It must not use Roslynk. A use case with no `setup.md` needs no setup step.
+A use case may hold an optional `setup.md` alongside `prompt.md` and `scoring.md`. If it does, apply it identically in both conditions, before that condition's session starts, and record its time and tokens separately from task totals. It must not use Roslynk. A use case with no `setup.md` needs no setup step.
