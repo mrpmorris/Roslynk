@@ -80,7 +80,7 @@ public sealed class SymbolResolver
 			var relaxed = new List<ISymbol>();
 			foreach (Project project in solution.Projects)
 			{
-				foreach (ISymbol symbol in await SymbolFinder.FindDeclarationsAsync(project, searchName, ignoreCase: false, cancellationToken))
+				foreach (ISymbol symbol in await FindSourceAndMetadataDeclarationsAsync(project, searchName, cancellationToken))
 				{
 					foreach (ISymbol candidate in Expand(symbol, query))
 					{
@@ -165,7 +165,7 @@ public sealed class SymbolResolver
 				var suffix = new List<ISymbol>();
 				foreach (Project project in solution.Projects)
 				{
-					foreach (ISymbol symbol in await SymbolFinder.FindDeclarationsAsync(project, searchName, ignoreCase: false, cancellationToken))
+					foreach (ISymbol symbol in await FindSourceAndMetadataDeclarationsAsync(project, searchName, cancellationToken))
 					{
 						foreach (ISymbol candidate in Expand(symbol, query))
 						{
@@ -255,7 +255,33 @@ public sealed class SymbolResolver
 	}
 
 	/// <summary>
-	/// The simple name of the type a bracketed query's indexer belongs to, with any generic argument list or
+	/// Every declaration the project reports for <paramref name="name"/>: its source declarations plus its
+	/// metadata declarations. Two searches are needed because each covers what the other misses:
+	/// <see cref="SymbolFinder.FindSourceDeclarationsAsync(Project, Func{string, bool}, CancellationToken)"/>
+	/// indexes member declarations only, so a positional record's property — declared by the record's parameter
+	/// list — is never reported by it, while
+	/// <see cref="SymbolFinder.FindDeclarationsAsync(Project, string, bool, CancellationToken)"/> is the only one
+	/// that reports referenced-assembly (metadata) symbols such as a bare <c>String</c> resolving to
+	/// <c>System.String</c>.
+	/// </summary>
+	/// <remarks>
+	/// Call this rather than either Roslyn search on its own: dropping one leg silently loses a whole class of
+	/// declaration (a positional record's property, or every metadata symbol). The second search reuses the
+	/// declaration index the first already built, so it adds filter work rather than a re-parse or a generator run.
+	/// </remarks>
+	private static async Task<IEnumerable<ISymbol>> FindSourceAndMetadataDeclarationsAsync(Project project, string name, CancellationToken cancellationToken) =>
+		(await SymbolFinder.FindSourceDeclarationsAsync(project, candidate => string.Equals(candidate, name, StringComparison.Ordinal), cancellationToken))
+			.Concat(await SymbolFinder.FindDeclarationsAsync(project, name, ignoreCase: false, cancellationToken));
+
+	/// <summary>
+	/// The project's source declarations whose name satisfies <paramref name="predicate"/>. Suggestions only
+	/// offer source symbols, and only the source search accepts a predicate; the positional-record fix is in
+	/// the exact-name overload above.
+	/// </summary>
+	private static Task<IEnumerable<ISymbol>> FindSourceDeclarationsAsync(Project project, Func<string, bool> predicate, CancellationToken cancellationToken) =>
+		SymbolFinder.FindSourceDeclarationsAsync(project, predicate, cancellationToken);
+
+	/// <summary>The simple name of the type a bracketed query's indexer belongs to, with any generic argument list or
 	/// metadata arity suffix removed, so the declaration search is keyed on the identifier the index is keyed
 	/// by. The dots are split at top level only, so a container written with type arguments
 	/// ('Repro.Dictionary&lt;string, int&gt;.this[int]') does not split inside the angle brackets.
@@ -364,7 +390,7 @@ public sealed class SymbolResolver
 		var best = new Dictionary<string, (int Score, bool InContainer, bool IsSuffix)>(StringComparer.Ordinal);
 		foreach (Project project in solution.Projects)
 		{
-			foreach (ISymbol symbol in await SymbolFinder.FindSourceDeclarationsAsync(project, candidate => IsCandidate(candidate, simpleName), cancellationToken))
+			foreach (ISymbol symbol in await FindSourceDeclarationsAsync(project, candidate => IsCandidate(candidate, simpleName), cancellationToken))
 			{
 				string fullyQualified = FullyQualifiedName(symbol);
 				(int Score, bool InContainer, bool IsSuffix) rank = (
