@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- `get_symbol` returns the whole declaration, semicolon included, for a type declared without a body (`record X(...);`, `class X;`, `record struct`, `interface`), instead of throwing `ArgumentOutOfRangeException` and reporting `error=Faulted` (Fixes #179)
 - A positional record's property resolves by name, so `rename_symbol`, `get_symbol` and `get_symbol_body` find it instead of returning `NotFound` for the very candidate they suggest (Fixes #176)
 - Development daemons reporting `0.0.1-local` refuse remote shutdown and restart requests, and clients reuse them regardless of their own version.
 - Reproducible AI benchmark suite comparing Roslynk with standard tools: a self-contained `Benchmarks/TestSolution`, the `find_symbol` use case, run instructions in `Benchmarks/run.md` and recorded results in `Benchmarks/benchmark-results.md` (Fixes #174)
