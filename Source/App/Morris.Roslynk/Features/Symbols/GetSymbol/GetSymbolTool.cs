@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Text;
 using ModelContextProtocol.Server;
@@ -32,7 +33,8 @@ public sealed class GetSymbolTool
 
 	[Description("""
 		Returns a symbol's declaration without implementation. Source results: project, path and loc
-		headers, then the verbatim declaration before its opening brace or '=>'.
+		headers, then the verbatim declaration before its opening brace or '=>' (a type declared without
+		a body is returned whole, semicolon included).
 		Without source: source=metadata, kind, signature and assembly headers.
 		A partially qualified symbolName resolves when exactly one symbol matches it as a dotted-segment
 		suffix; the result then carries resolvedSymbol=<canonical fully qualified signature>.
@@ -141,9 +143,9 @@ public sealed class GetSymbolTool
 	/// <summary>
 	/// The verbatim declaration cut before its implementation: a method/constructor/delegate through the
 	/// closing ')' of its parameter list; a property/indexer keeping a reconstructed accessor list (or cut
-	/// before '=>'); a type through the line before its opening brace; a field/event the modifiers, type and
-	/// this variable's name. Leading and trailing whitespace is trimmed; an inner multi-line signature is
-	/// kept verbatim.
+	/// before '=>'); a type through the line before its opening brace, or whole (semicolon included) when it
+	/// has no body; a field/event the modifiers, type and this variable's name. Leading and trailing
+	/// whitespace is trimmed; an inner multi-line signature is kept verbatim.
 	/// </summary>
 	private static string DeclarationHeader(SyntaxNode node, SourceText text)
 	{
@@ -157,12 +159,22 @@ public sealed class GetSymbolTool
 			IndexerDeclarationSyntax indexer => AccessorHeader(node, indexer.ExpressionBody, indexer.AccessorList, text),
 			EventDeclarationSyntax @event => Slice(node, @event.Identifier.Span.End, text),
 			BaseFieldDeclarationSyntax field => FieldHeader(field.Declaration.Variables[0], text),
-			BaseTypeDeclarationSyntax type => Slice(node, type.OpenBraceToken.SpanStart, text),
+			BaseTypeDeclarationSyntax type => TypeHeader(type, text),
 			_ => node.ToString(),
 		};
 
 		return raw.Trim();
 	}
+
+	/// <summary>
+	/// A type with a body is cut before its opening brace; a bodiless declaration (<c>record X(...);</c>,
+	/// <c>class X;</c>) has no brace token at all (an absent token reports position 0, not a missing one),
+	/// so it is taken whole, semicolon included, rather than sliced to an end before the node's own start.
+	/// </summary>
+	private static string TypeHeader(BaseTypeDeclarationSyntax type, SourceText text) =>
+		type.OpenBraceToken.IsKind(SyntaxKind.None)
+			? type.ToString()
+			: Slice(type, type.OpenBraceToken.SpanStart, text);
 
 	private static string Slice(SyntaxNode node, int endPosition, SourceText text) =>
 		text.ToString(TextSpan.FromBounds(node.SpanStart, endPosition));

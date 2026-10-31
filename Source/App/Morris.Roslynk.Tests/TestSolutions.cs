@@ -46,6 +46,42 @@ internal static class TestSolutions
 	/// <summary>A clean single-project solution.</summary>
 	public static string Simple => SimpleSolution.Value;
 
+	/// <summary>
+	/// The same clean solution copied to a scratch directory, for tests that add source files. It carries
+	/// every semicolon-terminated type shape (positional records, a record struct, a bodiless class and
+	/// interface) that the committed fixture cannot, because the fixture is compiled with warnings as
+	/// errors and an unreferenced bodiless type is reported as unused.
+	/// </summary>
+	public static string CreateScratchSimpleSolutionWithBodilessTypes()
+	{
+		string path = CreateScratchSimpleSolution();
+		string library = Path.Combine(Path.GetDirectoryName(path)!, "SimpleLibrary");
+		File.WriteAllText(Path.Combine(library, "BodilessTypes.cs"), BodilessTypesSource);
+		Restore(path);
+		return path;
+	}
+
+	private const string BodilessTypesSource = """
+		namespace SimpleLibrary;
+
+		public sealed record Batch(List<string> Items, Dictionary<string, int> Targets);
+
+		public record struct Point(int X, int Y);
+
+		public readonly record struct Size(double Width, double Height);
+
+		public class BodilessClass;
+
+		public interface IBodiless;
+
+		internal static class BodilessTypes
+		{
+			public static readonly Type[] All = [typeof(Batch), typeof(Point), typeof(Size), typeof(BodilessClass), typeof(IBodiless)];
+
+			public static string Describe() => string.Join(", ", All.Select(type => type.Name));
+		}
+		""";
+
 	/// <summary>A single-project solution containing a deliberate CS0029 compile error.</summary>
 	public static string Broken => BrokenSolution.Value;
 
