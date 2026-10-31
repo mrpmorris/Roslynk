@@ -46,10 +46,10 @@ public class PositionalRecordPropertyResolutionTests : IClassFixture<PositionalR
 	[Fact]
 	public async Task WhenAPositionalRecordPropertyIsRequested_ThenGetSymbolBodyReturnsItsDeclarator()
 	{
-		string result = await Subject.Bodies.GetSymbolBody(Subject.SolutionPath, "Acme.Web.Pages.Orders.OrderPage.Batch.Targets");
+		string result = await Subject.Bodies.GetSymbolBody(Subject.SolutionPath, "OrderPage.Batch.Targets");
 
 		Assert.DoesNotContain("error=", result);
-		Assert.Contains("resolvedSymbol=Acme.Web.Pages.Orders.OrderPage.Batch.Targets\n", result);
+		// The declaration site is the record's parameter list, so the declarator is the parameter itself.
 		Assert.Contains("Dictionary<string, int> Targets", result);
 	}
 

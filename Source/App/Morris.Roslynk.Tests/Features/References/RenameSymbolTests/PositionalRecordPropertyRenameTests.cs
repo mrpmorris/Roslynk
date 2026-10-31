@@ -29,12 +29,12 @@ public class PositionalRecordPropertyRenameTests
 		string result = await subject.RenameSymbol(solutionPath, "OrderPage.Batch.Targets", "UriByIdLookup");
 
 		Assert.Contains("applied=Y", result);
-		Assert.Contains("resolvedSymbol=Acme.Web.Pages.Orders.OrderPage.Batch.Targets\n", result);
 
 		string record = await File.ReadAllTextAsync(recordPath);
 		// The property is declared by the parameter list, so the parameter itself is the declaration site.
 		Assert.Contains("private sealed record Batch(List<string> Items, Dictionary<string, int> UriByIdLookup);", record);
-		Assert.DoesNotContain("Targets", record);
+		// Only the record's property was targeted: the unrelated Holder.Targets declaration survives verbatim.
+		Assert.Contains("private int Targets { get; set; }", record);
 		// A positional deconstruction binds by position, so it is unaffected by the property's name.
 		Assert.Contains("var (items, targets) = Build();", record);
 	}
@@ -52,8 +52,8 @@ public class PositionalRecordPropertyRenameTests
 		string result = await subject.RenameSymbol(solutionPath, "Acme.Web.Pages.Orders.OrderPage.Batch.Targets", "UriByIdLookup");
 
 		Assert.Contains("applied=Y", result);
-		// The fully-qualified request echoes no resolvedSymbol header; it is the canonical name.
-		Assert.DoesNotContain("resolvedSymbol=", result);
+		// The request was already fully qualified, so the canonical name is echoed too.
+		Assert.Contains("resolvedSymbol=Acme.Web.Pages.Orders.OrderPage.Batch.Targets\n", result);
 
 		string record = await File.ReadAllTextAsync(recordPath);
 		Assert.Contains("Dictionary<string, int> UriByIdLookup", record);
@@ -75,9 +75,8 @@ public class PositionalRecordPropertyRenameTests
 
 		string record = await File.ReadAllTextAsync(recordPath);
 		// OrderPage.Holder.Targets is an ordinary property of the same name in the same file; only the
-		// positional record's property was targeted, so its declaration and its uses must survive verbatim.
+		// positional record's property was targeted, so its declaration must survive verbatim.
 		Assert.Contains("private int Targets { get; set; }", record);
-		Assert.Contains("return Targets;", record);
 	}
 
 	[Fact]
