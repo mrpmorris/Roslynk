@@ -28,6 +28,21 @@ public sealed class DiagnosticsService
 	// Keyed weakly by ProjectId, which every fork of one loaded solution shares, so entries die with the workspace.
 	private static readonly ConditionalWeakTable<ProjectId, Entry> Memo = new();
 
+	/// <summary>
+	/// Whole-solution results keyed by the <see cref="Solution"/> instance they were computed from, one entry
+	/// per <paramref name="includeAnalyzers"/> mode. Every content change produces a new instance, so an edit
+	/// always misses; a status-only publication carries the same instance, so it still hits. This is the cheap
+	/// gate in front of the per-project memo: a hit skips the <see cref="Inputs.OfAsync"/> walk entirely.
+	/// </summary>
+	private static readonly ConditionalWeakTable<Solution, SolutionResults> SolutionMemo = new();
+
+	/// <summary>One solution's whole-result pair. Each mode is stored only once it has been computed.</summary>
+	private sealed class SolutionResults
+	{
+		public ImmutableArray<Diagnostic>? CompilerOnly;
+		public ImmutableArray<Diagnostic>? WithAnalyzers;
+	}
+
 	public async Task<IReadOnlyList<Diagnostic>> GetAllDiagnosticsAsync(Solution solution, bool includeAnalyzers = false, CancellationToken cancellationToken = default)
 	{
 		if (solution is null)
@@ -37,6 +52,20 @@ public sealed class DiagnosticsService
 		{
 			activity?.SetTag("roslynk.analyzers", includeAnalyzers);
 
+			// A hit skips the per-project input walk entirely; the stored array is immutable and already in
+			// solution order, so it is returned as-is.
+			SolutionResults results = SolutionMemo.GetValue(solution, _ => new SolutionResults());
+			ImmutableArray<Diagnostic>? cached;
+			lock (results)
+				cached = includeAnalyzers ? results.WithAnalyzers : results.CompilerOnly;
+
+			if (cached is ImmutableArray<Diagnostic> hit)
+			{
+				activity?.SetTag("roslynk.diagnostic.count", hit.Length);
+				activity?.SetTag("roslynk.diagnostic.cached", true);
+				return hit;
+			}
+
 			Project[] projects = [.. solution.Projects];
 			var perProject = new ImmutableArray<Diagnostic>[projects.Length];
 			await Parallel.ForEachAsync(
@@ -45,12 +74,21 @@ public sealed class DiagnosticsService
 				async (index, token) => perProject[index] = await GetProjectDiagnosticsAsync(projects[index], includeAnalyzers, token));
 
 			// Concatenated in solution order, so the result does not depend on which project finished first.
-			var results = new List<Diagnostic>();
+			var collected = ImmutableArray.CreateBuilder<Diagnostic>();
 			foreach (ImmutableArray<Diagnostic> diagnostics in perProject)
-				results.AddRange(diagnostics);
+				collected.AddRange(diagnostics);
+			ImmutableArray<Diagnostic> computed = collected.ToImmutable();
 
-			activity?.SetTag("roslynk.diagnostic.count", results.Count);
-			return results;
+			lock (results)
+			{
+				if (includeAnalyzers)
+					results.WithAnalyzers ??= computed;
+				else
+					results.CompilerOnly ??= computed;
+			}
+
+			activity?.SetTag("roslynk.diagnostic.count", computed.Length);
+			return computed;
 		}
 	}
 
