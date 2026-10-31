@@ -74,6 +74,14 @@ internal static class TestSolutions
 		return SharedRegistry;
 	}
 
+	/// <summary>
+	/// The process-wide registry's instance for <paramref name="solutionPath"/>, loaded and ready. For a
+	/// test that reads the snapshot directly (<see cref="RoslynInstance.CurrentSolution"/>) rather than
+	/// through a tool; do not dispose the instance.
+	/// </summary>
+	public static async Task<RoslynInstance> SharedInstanceAsync(string solutionPath) =>
+		await SharedRegistry.GetOrAddAsync(solutionPath);
+
 	/// <summary>A clean single-project solution.</summary>
 	public static string Simple => SimpleSolution.Value;
 
@@ -91,6 +99,34 @@ internal static class TestSolutions
 		Restore(path);
 		return path;
 	}
+
+	/// <summary>
+	/// A positional record whose properties are declared by its parameter list, beside an ordinary
+	/// property of the same name. Read-only tests share one loaded instance of it instead of loading a
+	/// copy each; see <see cref="SharedInstanceAsync"/>.
+	/// </summary>
+	public static string CreateScratchSimpleSolutionWithPositionalRecord()
+	{
+		string path = CreateScratchSimpleSolution();
+		string library = Path.Combine(Path.GetDirectoryName(path)!, "SimpleLibrary");
+		File.WriteAllText(Path.Combine(library, "PositionalRecord.cs"), PositionalRecordSource);
+		Restore(path);
+		return path;
+	}
+
+	public const string PositionalRecordSource = """
+		namespace Acme.Web.Pages.Orders;
+
+		public partial class OrderPage
+		{
+			private sealed record Batch(List<string> Items, Dictionary<string, int> Targets);
+
+			private sealed class Holder
+			{
+				private int Targets { get; set; }
+			}
+		}
+		""";
 
 	private const string BodilessTypesSource = """
 		namespace SimpleLibrary;

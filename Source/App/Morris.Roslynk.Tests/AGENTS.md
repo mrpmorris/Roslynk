@@ -16,6 +16,7 @@ or that asserts instance state, gets its own registry and its own scratch copy.
 | Test kind | Fixture | Registry |
 |---|---|---|
 | Read-only query (`get_symbol`, `get_members`, `search_symbols`, `find_references`, `get_callers`, `get_callees`, `get_diagnostics`, `get_expression_info`, `get_type_hierarchy`, `find_definition`, `find_implementations`, `get_symbol_body`, `find_dead_code`, `find_dead_conditionals`, `get_code_actions`) | Committed fixture (`TestSolutions.Simple`, `.Razor`, `.Cshtml`, …) | `await TestSolutions.SharedAsync(path)` — **never dispose** |
+| Read-only test that reads the snapshot directly (`RoslynInstance.CurrentSolution`, a resolver call) rather than through a tool | Committed fixture, or a `CreateScratch...` copy that only adds source | `await TestSolutions.SharedInstanceAsync(path)` — **never dispose** |
 | Test that writes files, applies a fix, renames, patches, extracts or changes a signature | `TestSolutions.CreateScratch...()` — a fresh copy per test | `new InstanceRegistry()` |
 | Cold load: asserts `error=Indexing` / `status=Building` / load diagnostics | Committed or scratch | `new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero))` |
 | Asserts instance state: `IsDirty`, watcher errors, rebuild, eviction, reload, `OpenSolutionPaths` | Committed or scratch | `new InstanceRegistry()` — never the shared one |
@@ -63,6 +64,18 @@ public async Task WhenAMethodCallsOtherMembers_ThenTheCalleesAreReturned()
 	Assert.Contains("resolvedSymbol=SimpleLibrary.Caller.Run", result);
 	Assert.DoesNotContain("error=", result);
 }
+```
+
+Read-only test that reads the snapshot itself (a fixture whose only write is adding source to a scratch copy):
+
+```csharp
+public async Task InitializeAsync()
+{
+	SolutionPath = TestSolutions.CreateScratchSimpleSolutionWithPositionalRecord();
+	Instance = await TestSolutions.SharedInstanceAsync(SolutionPath);
+}
+
+public Task DisposeAsync() => Task.CompletedTask;
 ```
 
 Write test on a scratch copy:

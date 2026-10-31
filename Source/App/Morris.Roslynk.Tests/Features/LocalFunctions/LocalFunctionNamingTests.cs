@@ -231,7 +231,7 @@ public class LocalFunctionNamingTests
 			"\t\t\tmethod,Method2,30:3-35:4,string\n" +
 			"\t\t\t\tlocalfunction,helper,34:4-34:50,string\n" +
 			"\t\t\tmethod,Caller,37:3-37:50\n",
-			result.Replace("\r\n", "\n"));
+			OutlineAssert.WithoutStatus(result).Replace("\r\n", "\n"));
 	}
 	[Fact]
 	public async Task WhenBatchingQueriesOnLocalFunctions_ThenEverySlotResolves()

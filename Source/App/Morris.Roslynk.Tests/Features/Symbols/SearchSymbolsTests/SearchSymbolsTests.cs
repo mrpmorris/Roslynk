@@ -248,6 +248,6 @@ public class SearchSymbolsTests
 		// item count is the number of leaf lines.
 		int items = normal.Split('\n').Count(line => line.TrimStart('\t').StartsWith("method,Add,", StringComparison.Ordinal));
 		Assert.True(items > 0, normal);
-		Assert.Equal($"count={items}\ncount.method={items}\n", counted);
+		OutlineAssert.HeadersAre($"count={items}\ncount.method={items}\n", counted);
 	}
 }

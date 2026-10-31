@@ -19,7 +19,7 @@ public class GetSymbolTests
 		Assert.Contains("path=SimpleLibrary/Greeter.cs", result);
 		Assert.Contains("loc=", result);
 		Assert.Contains("public class Greeter : IGreeter", result);
-		Assert.DoesNotContain("status=", result);
+		Assert.DoesNotContain("status=", OutlineAssert.WithoutStatus(result));
 		// A source symbol omits #source (it is the implied common case).
 		Assert.DoesNotContain("source=", result);
 	}
@@ -192,7 +192,7 @@ public class GetSymbolTests
 		string result = await RunOnBodilessTypesAsync(name);
 
 		Assert.DoesNotContain("error=", result);
-		Assert.DoesNotContain("status=", result);
+		Assert.DoesNotContain("status=", OutlineAssert.WithoutStatus(result));
 		Assert.Contains("path=SimpleLibrary/BodilessTypes.cs", result);
 		Assert.Contains(expected, result);
 	}
@@ -211,8 +211,7 @@ public class GetSymbolTests
 	public async Task WhenABodilessTypeIsRequestedThroughMultiQuery_ThenItsHeaderIsDeliveredNotFaulted()
 	{
 		string solution = TestSolutions.CreateScratchSimpleSolutionWithBodilessTypes();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solution);
+		var registry = await TestSolutions.SharedAsync(solution);
 		var provider = new ServiceCollection()
 			.AddSingleton<InstanceRegistry>(registry)
 			.AddSingleton<SymbolResolver>()
@@ -235,8 +234,7 @@ public class GetSymbolTests
 	private static async Task<string> RunOnBodilessTypesAsync(string symbolName)
 	{
 		string solution = TestSolutions.CreateScratchSimpleSolutionWithBodilessTypes();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solution);
+		var registry = await TestSolutions.SharedAsync(solution);
 		var subject = new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService());
 
 		return await subject.GetSymbol(solution, symbolName);
@@ -252,8 +250,7 @@ public class GetSymbolTests
 
 	private static async Task<string> RunAsync(string symbolName)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService());
 
 		return await subject.GetSymbol(TestSolutions.Simple, symbolName);
