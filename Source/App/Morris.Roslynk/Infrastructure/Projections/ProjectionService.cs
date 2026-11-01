@@ -1,4 +1,5 @@
-﻿using Microsoft.CodeAnalysis;
+﻿using System.Runtime.CompilerServices;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -25,11 +26,26 @@ namespace Morris.Roslynk.Infrastructure.Projections;
 /// </summary>
 public sealed class ProjectionService
 {
+	/// <summary>
+	/// Built projections keyed by the <see cref="Solution"/> they were derived from. Building walks every
+	/// document's syntax root looking for directives, which is pure syntax and depends on nothing but the
+	/// solution, so a repeated query against the same snapshot reuses the result instead of re-walking.
+	/// Keyed weakly and by instance, so any edit that produces a new <see cref="Solution"/> misses.
+	/// </summary>
+	private static readonly ConditionalWeakTable<Solution, Task<IReadOnlyList<Projection>>> Built = new();
+
 	/// <summary>The base projection plus one derived projection per uniformly-(un)defined <c>#if</c> symbol.</summary>
-	public async Task<IReadOnlyList<Projection>> BuildAsync(Solution solution, CancellationToken cancellationToken = default)
+	public Task<IReadOnlyList<Projection>> BuildAsync(Solution solution, CancellationToken cancellationToken = default)
 	{
 		if (solution is null)
 			throw new ArgumentNullException(nameof(solution));
+
+		// The cached task is shared, so a concurrent caller joins the first build rather than starting one.
+		return Built.GetValue(solution, key => BuildCoreAsync(key, cancellationToken));
+	}
+
+	private async Task<IReadOnlyList<Projection>> BuildCoreAsync(Solution solution, CancellationToken cancellationToken)
+	{
 
 		var projections = new List<Projection> { new("base", solution) };
 
