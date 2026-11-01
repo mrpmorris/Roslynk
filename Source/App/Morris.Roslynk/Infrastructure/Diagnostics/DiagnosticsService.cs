@@ -23,7 +23,7 @@ public sealed class DiagnosticsService
 {
 	/// <summary>Each project's analyzer run is internally parallel (concurrentAnalysis: true), so a handful of
 	/// projects at a time already saturates the machine; more only thrash.</summary>
-	private const int ProjectParallelism = 8;
+	private const int ProjectParallelism = 4;
 
 	// Keyed weakly by ProjectId, which every fork of one loaded solution shares, so entries die with the workspace.
 	private static readonly ConditionalWeakTable<ProjectId, Entry> Memo = new();
