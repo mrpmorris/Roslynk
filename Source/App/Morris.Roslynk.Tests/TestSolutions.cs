@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using System.Text;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 
@@ -90,29 +90,38 @@ internal static class TestSolutions
 	/// every semicolon-terminated type shape (positional records, a record struct, a bodiless class and
 	/// interface) that the committed fixture cannot, because the fixture is compiled with warnings as
 	/// errors and an unreferenced bodiless type is reported as unused.
+	/// <para>
+	/// Prepared once per process and shared: every caller only reads it. Do not write to the returned
+	/// directory — tests that need to change files must call <see cref="CreateScratchSimpleSolution"/>.
+	/// </para>
 	/// </summary>
-	public static string CreateScratchSimpleSolutionWithBodilessTypes()
+	public static string CreateScratchSimpleSolutionWithBodilessTypes() => BodilessTypesSolution.Value;
+
+	private static readonly Lazy<string> BodilessTypesSolution = new(() =>
 	{
 		string path = CreateScratchSimpleSolution();
 		string library = Path.Combine(Path.GetDirectoryName(path)!, "SimpleLibrary");
 		File.WriteAllText(Path.Combine(library, "BodilessTypes.cs"), BodilessTypesSource);
 		Restore(path);
 		return path;
-	}
+	});
 
 	/// <summary>
 	/// A positional record whose properties are declared by its parameter list, beside an ordinary
 	/// property of the same name. Read-only tests share one loaded instance of it instead of loading a
-	/// copy each; see <see cref="SharedInstanceAsync"/>.
+	/// copy each; see <see cref="SharedInstanceAsync"/>. Prepared once per process; do not write to the
+	/// returned directory.
 	/// </summary>
-	public static string CreateScratchSimpleSolutionWithPositionalRecord()
+	public static string CreateScratchSimpleSolutionWithPositionalRecord() => PositionalRecordSolution.Value;
+
+	private static readonly Lazy<string> PositionalRecordSolution = new(() =>
 	{
 		string path = CreateScratchSimpleSolution();
 		string library = Path.Combine(Path.GetDirectoryName(path)!, "SimpleLibrary");
 		File.WriteAllText(Path.Combine(library, "PositionalRecord.cs"), PositionalRecordSource);
 		Restore(path);
 		return path;
-	}
+	});
 
 	public const string PositionalRecordSource = """
 		namespace Acme.Web.Pages.Orders;
