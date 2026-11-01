@@ -5,7 +5,6 @@ using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.GetMembersTests;
 
-[Collection(SharedSimpleCollection.Name)]
 public class GetMembersTests
 {
 	[Fact]
