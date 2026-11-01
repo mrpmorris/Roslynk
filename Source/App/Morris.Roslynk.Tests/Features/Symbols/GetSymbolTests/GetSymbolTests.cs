@@ -8,6 +8,7 @@ using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.GetSymbolTests;
 
+[Collection(SharedSimpleCollection.Name)]
 public class GetSymbolTests
 {
 	[Fact]

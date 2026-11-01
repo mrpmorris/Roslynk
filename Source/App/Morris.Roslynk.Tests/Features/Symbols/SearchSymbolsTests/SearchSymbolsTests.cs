@@ -4,6 +4,7 @@ using Morris.Roslynk.Infrastructure.Projections;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.SearchSymbolsTests;
 
+[Collection(SharedSimpleCollection.Name)]
 public class SearchSymbolsTests
 {
 	[Fact]
