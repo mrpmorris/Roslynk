@@ -399,7 +399,6 @@ public sealed class RoslynInstance : IDisposable
 		{
 			Stopwatch sw = Stopwatch.StartNew();
 			bool success = false;
-			Solution loaded = null!;
 			try
 			{
 				using (Activity? activity = RoslynkActivitySource.Instance.StartActivity("begin_initial_load"))
@@ -408,14 +407,12 @@ public sealed class RoslynInstance : IDisposable
 
 					SolutionWorkspace workspace = await loader(tracker);
 					Volatile.Write(ref WorkspaceField, workspace);
-					loaded = workspace.Solution;
-					Swap(SolutionModel.Ready(loaded));
-					activity?.SetTag(ActivityTags.ProjectCountTag, loaded.Projects.Count());
+					Swap(SolutionModel.Ready(workspace.Solution));
+					activity?.SetTag(ActivityTags.ProjectCountTag, workspace.Solution.Projects.Count());
 				}
 
 				success = true;
 				onReady(this);
-				PreWarmCompilations(loaded);
 			}
 			catch (Exception exception)
 			{
@@ -561,24 +558,6 @@ public sealed class RoslynInstance : IDisposable
 	/// Publishes an incrementally-edited snapshot (an applied change or a folded-in source edit) as the new
 	/// <see cref="SolutionStatus.Ready"/> model.
 	/// </summary>
-	/// <summary>
-	/// Starts each project's compilation in the background once a load publishes, so the first semantic query
-	/// against the snapshot finds it already built instead of paying for generators and binding inline. Errors
-	/// are ignored: a project that fails to compile reports its diagnostics through the normal path, and this
-	/// is an optimisation, not a correctness step.
-	/// </summary>
-	private void PreWarmCompilations(Solution solution)
-	{
-		foreach (Project project in solution.Projects)
-		{
-			_ = Task.Run(async () =>
-			{
-				try { await project.GetCompilationAsync(Shutdown.Token).ConfigureAwait(false); }
-				catch { /* A failed pre-warm must not fault the instance; the query path reports it. */ }
-			});
-		}
-	}
-
 	public void AdvanceTo(Solution solution)
 	{
 		if (solution is null)
