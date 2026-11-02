@@ -15,7 +15,7 @@ public class PathResolutionTests : MutatingTestBase
 	[Fact]
 	public async Task WhenGetDiagnosticsIsFilteredByABareFileName_ThenItResolvesAndEchoesResolvedPath()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		Directory.CreateDirectory(Path.Combine(projectDirectory, "Sub"));
 		await File.WriteAllTextAsync(
@@ -38,7 +38,7 @@ public class PathResolutionTests : MutatingTestBase
 	[Fact]
 	public async Task WhenGetDiagnosticsIsFilteredByABareFileNameMatchingSeveralFiles_ThenAmbiguousOffersCandidates()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		Directory.CreateDirectory(Path.Combine(projectDirectory, "Other"));
 		await File.WriteAllTextAsync(

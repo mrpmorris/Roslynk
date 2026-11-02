@@ -468,9 +468,9 @@ public class RazorSourceToolTests : MutatingTestBase
 	/// A scratch Razor solution whose Counter.razor also has an unused @using and an unused local in its
 	/// @code block, so fixes, using removal and extraction have something to act on.
 	/// </summary>
-	private static async Task<string> CreateRazorSolutionAsync()
+	private async Task<string> CreateRazorSolutionAsync()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string counterPath = FullPath(solutionPath, CounterRelativePath);
 		string counter = await File.ReadAllTextAsync(counterPath);
 		string newline = counter.Contains("\r\n") ? "\r\n" : "\n";

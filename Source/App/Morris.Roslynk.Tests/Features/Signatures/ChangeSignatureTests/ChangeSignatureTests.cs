@@ -143,9 +143,9 @@ public class ChangeSignatureTests : MutatingTestBase
 	}
 
 	/// <summary>A scratch Razor solution whose Counter declares Label, called from markup and from the @code block.</summary>
-	private static async Task<string> CreateRazorSolutionWithLabelAsync()
+	private async Task<string> CreateRazorSolutionWithLabelAsync()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string counterPath = FindFile(solutionPath, "Counter.razor");
 		string counter = await File.ReadAllTextAsync(counterPath);
 		counter = counter

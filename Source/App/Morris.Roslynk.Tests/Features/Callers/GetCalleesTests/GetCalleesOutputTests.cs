@@ -251,6 +251,7 @@ public class GetCalleesOutputTests : IClassFixture<GetCalleesOutputTests.Scratch
 		public Task DisposeAsync()
 		{
 			Registry.Dispose();
+			ScratchDirectories.Delete(SolutionPath);
 			return Task.CompletedTask;
 		}
 	}

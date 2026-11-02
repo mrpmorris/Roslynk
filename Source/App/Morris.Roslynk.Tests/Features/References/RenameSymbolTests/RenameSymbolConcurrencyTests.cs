@@ -87,7 +87,7 @@ public class RenameSymbolConcurrencyTests : MutatingTestBase
 	/// blocking write publish <paramref name="editedText"/> for <paramref name="path"/> (on disk and in the model,
 	/// as a watcher fold would) before the rename's write runs.
 	/// </summary>
-	private static async Task<string> RenameWithInterveningEditAsync(InstanceRegistry Registry, RoslynInstance instance, string solutionPath, string path, string editedText)
+	private static async Task<string> RenameWithInterveningEditAsync(InstanceRegistry registry, RoslynInstance instance, string solutionPath, string path, string editedText)
 	{
 		var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 		var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -104,7 +104,7 @@ public class RenameSymbolConcurrencyTests : MutatingTestBase
 		await started.Task.WaitAsync(Timeout);
 		int enqueued = instance.EnqueuedWrites;
 
-		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 		Task<string> rename = subject.RenameSymbol(solutionPath, "SimpleLibrary.Greeter", "Welcomer");
 
 		using (var waiting = new CancellationTokenSource(Timeout))

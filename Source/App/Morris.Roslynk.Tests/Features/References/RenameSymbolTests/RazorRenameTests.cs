@@ -15,7 +15,7 @@ namespace Morris.Roslynk.Tests.Features.References.RenameSymbolTests;
 /// Renaming symbols declared in .razor files: the Renamer's edits land in the Razor-generated .g.cs
 /// documents, are mapped back through the #line directives, and are written to the .razor sources.
 /// </summary>
-public class RazorRenameTests
+public class RazorRenameTests : MutatingTestBase
 {
 	private static RenameSymbolTool CreateSubject(InstanceRegistry registry) =>
 		new(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
@@ -23,12 +23,11 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenRenamingAFieldDeclaredInARazorCodeBlock_ThenTheRazorFileIsRewrittenOnDisk()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string counterPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Counter.razor");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		RenameSymbolTool subject = CreateSubject(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		RenameSymbolTool subject = CreateSubject(Registry);
 
 		string result = await subject.RenameSymbol(solutionPath, "RazorLib.Counter.CurrentCount", "Total");
 
@@ -47,12 +46,11 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenRenamingAMethodWiredOnlyInMarkup_ThenTheMarkupAttributeIsRewritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string counterPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Counter.razor");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		RenameSymbolTool subject = CreateSubject(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		RenameSymbolTool subject = CreateSubject(Registry);
 
 		string result = await subject.RenameSymbol(solutionPath, "RazorLib.Counter.IncrementCount", "Bump");
 
@@ -67,12 +65,11 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenCheckOnlyIsPassed_ThenTheRazorFileIsListedAndNothingIsWritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string counterPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Counter.razor");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		RenameSymbolTool subject = CreateSubject(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		RenameSymbolTool subject = CreateSubject(Registry);
 
 		string result = await subject.RenameSymbol(solutionPath, "RazorLib.Counter.CurrentCount", "Total", checkOnly: true);
 
@@ -87,12 +84,11 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenRenamingAComponentParameter_ThenAttributeUsagesInOtherComponentsAreRewritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string libraryDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		RenameSymbolTool subject = CreateSubject(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		RenameSymbolTool subject = CreateSubject(Registry);
 
 		string result = await subject.RenameSymbol(solutionPath, "RazorLib.Counter.StartAt", "StartFrom");
 
@@ -114,16 +110,15 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenARazorRenameIsApplied_ThenSubsequentReadsSeeTheNewName()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		RenameSymbolTool rename = CreateSubject(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		RenameSymbolTool rename = CreateSubject(Registry);
 
 		string renameResult = await rename.RenameSymbol(solutionPath, "RazorLib.Counter.CurrentCount", "Total");
 		Assert.Contains("applied=Y", renameResult);
 
-		var findReferences = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
+		var findReferences = new FindReferencesTool(Registry, new SymbolResolver(), new ProjectionService());
 		string referencesResult = await findReferences.FindReferences(solutionPath, "RazorLib.Counter.Total");
 
 		Assert.Contains("resolvedSymbol=RazorLib.Counter.Total", referencesResult);
@@ -136,14 +131,13 @@ public class RazorRenameTests
 	/// Runs <c>checkOnly</c> first (asserting it writes nothing), then the real rename (asserting it lists the
 	/// same .razor/.cs files and no generated file), and finally asserts the rewritten solution has no errors.
 	/// </summary>
-	private static async Task<BindRename> RenameBoundMemberAsync(string solutionPath, string symbolName, string newName)
+	private async Task<BindRename> RenameBoundMemberAsync(string solutionPath, string symbolName, string newName)
 	{
 		string directory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "BindLib");
 		Dictionary<string, string> before = await ReadSourcesAsync(directory);
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		RenameSymbolTool subject = CreateSubject(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		RenameSymbolTool subject = CreateSubject(Registry);
 
 		string preview = await subject.RenameSymbol(solutionPath, symbolName, newName, checkOnly: true);
 		Assert.Contains("applied=N", preview);
@@ -165,7 +159,7 @@ public class RazorRenameTests
 				.Order(StringComparer.OrdinalIgnoreCase)
 				.ToList());
 
-		var diagnostics = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var diagnostics = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 		Assert.Contains("errors=0", await diagnostics.GetDiagnostics(solutionPath, includeErrors: true));
 
 		return new BindRename(directory, preview, applied);
@@ -199,7 +193,7 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenRenamingAPlainClassMemberBoundWithBindValue_ThenRazorAndCsAreUpdated()
 	{
-		BindRename result = await RenameBoundMemberAsync(TestSolutions.CreateScratchBindSolution(), "BindLib.Item.Name", "Label");
+		BindRename result = await RenameBoundMemberAsync(Scratch(() => TestSolutions.CreateScratchBindSolution()), "BindLib.Item.Name", "Label");
 
 		string plain = await File.ReadAllTextAsync(Path.Combine(result.Directory, "Plain.razor"));
 		Assert.Contains("@bind-Value=\"Model.Label\"", plain);
@@ -215,7 +209,7 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenRenamingTheNestedViewModelMemberFromIssue59_ThenTheBindDeclarationAndCsReferencesAreRewritten()
 	{
-		BindRename result = await RenameBoundMemberAsync(TestSolutions.CreateScratchBindSolution(), "BindLib.Dialog.ViewModel.InstallDate", "InstallOn");
+		BindRename result = await RenameBoundMemberAsync(Scratch(() => TestSolutions.CreateScratchBindSolution()), "BindLib.Dialog.ViewModel.InstallDate", "InstallOn");
 
 		string dialog = await File.ReadAllTextAsync(Path.Combine(result.Directory, "Dialog.razor"));
 		Assert.Contains("public DateTime? InstallOn { get; set; }", dialog);
@@ -234,7 +228,7 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenRenamingAMemberBoundWithGetAndSet_ThenBothRazorExpressionsAreRewritten()
 	{
-		BindRename result = await RenameBoundMemberAsync(TestSolutions.CreateScratchBindSolution(), "BindLib.Item.Amount", "Total");
+		BindRename result = await RenameBoundMemberAsync(Scratch(() => TestSolutions.CreateScratchBindSolution()), "BindLib.Item.Amount", "Total");
 
 		string razor = await File.ReadAllTextAsync(Path.Combine(result.Directory, "GetSet.razor"));
 		Assert.Contains("@bind-Value:get=\"Model.Total\"", razor);
@@ -247,7 +241,7 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenRenamingAMemberBoundWithPlainBindAndEvent_ThenTheRazorBindIsRewritten()
 	{
-		BindRename result = await RenameBoundMemberAsync(TestSolutions.CreateScratchBindSolution(), "BindLib.Item.Title", "Heading");
+		BindRename result = await RenameBoundMemberAsync(Scratch(() => TestSolutions.CreateScratchBindSolution()), "BindLib.Item.Title", "Heading");
 
 		string razor = await File.ReadAllTextAsync(Path.Combine(result.Directory, "Native.razor"));
 		Assert.Contains("@bind=\"Model.Heading\"", razor);
@@ -258,7 +252,7 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenRenamingAMemberBoundWithAfter_ThenOnlyTheBoundExpressionIsRewritten()
 	{
-		BindRename result = await RenameBoundMemberAsync(TestSolutions.CreateScratchBindSolution(), "BindLib.Item.Level", "Rank");
+		BindRename result = await RenameBoundMemberAsync(Scratch(() => TestSolutions.CreateScratchBindSolution()), "BindLib.Item.Level", "Rank");
 
 		string razor = await File.ReadAllTextAsync(Path.Combine(result.Directory, "After.razor"));
 		Assert.Contains("@bind-Value=\"Model.Rank\"", razor);
@@ -269,7 +263,7 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenAMemberIsBoundTwiceAndAlsoUsedInPlainMarkup_ThenExactlyThreeRazorEditsAreMadeAndTheSameNamedResourceIsUntouched()
 	{
-		BindRename result = await RenameBoundMemberAsync(TestSolutions.CreateScratchBindSolution(), "BindLib.Item.Code", "Ref");
+		BindRename result = await RenameBoundMemberAsync(Scratch(() => TestSolutions.CreateScratchBindSolution()), "BindLib.Item.Code", "Ref");
 
 		string razor = await File.ReadAllTextAsync(Path.Combine(result.Directory, "Multi.razor"));
 		Assert.Equal(3, Count(razor, "Model.Ref"));
@@ -285,7 +279,7 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenTheBoundExpressionRepeatsTheMemberTwice_ThenEveryOccurrenceIsRewrittenOnce()
 	{
-		BindRename result = await RenameBoundMemberAsync(TestSolutions.CreateScratchBindSolution(), "BindLib.Item.Tag", "Marker");
+		BindRename result = await RenameBoundMemberAsync(Scratch(() => TestSolutions.CreateScratchBindSolution()), "BindLib.Item.Tag", "Marker");
 
 		string razor = await File.ReadAllTextAsync(Path.Combine(result.Directory, "Repeated.razor"));
 		Assert.Contains("Pick(Model.Marker, Model.Marker)", razor);
@@ -295,22 +289,21 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenARenameStartsFromTheRazorBindExpression_ThenItMatchesRenamingBySymbolName()
 	{
-		string solutionPath = TestSolutions.CreateScratchBindSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchBindSolution());
 		string directory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "BindLib");
 		string multi = await File.ReadAllTextAsync(Path.Combine(directory, "Multi.razor"));
 		string[] lines = multi.Split('\n');
 		int lineIndex = Array.FindIndex(lines, line => line.Contains("@bind-Value=\"Model.Code\""));
 		int column = lines[lineIndex].IndexOf("Model.Code", StringComparison.Ordinal) + "Model.".Length + 1;
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var expressionInfo = new GetExpressionInfoTool(registry, new ProjectionService());
+		await Registry.GetOrAddAsync(solutionPath);
+		var expressionInfo = new GetExpressionInfoTool(Registry, new ProjectionService());
 
 		string found = await expressionInfo.GetExpressionInfo(solutionPath, "BindLib/Multi.razor", lineIndex + 1, column);
 		string fullName = found.Split('\n').Select(line => line.Trim()).Single(line => line.StartsWith("symbol=")).Substring("symbol=".Length);
 		Assert.Equal("BindLib.Item.Code", fullName);
 
-		string applied = await CreateSubject(registry).RenameSymbol(solutionPath, fullName, "Ref");
+		string applied = await CreateSubject(Registry).RenameSymbol(solutionPath, fullName, "Ref");
 		Assert.Contains("applied=Y", applied);
 
 		string razor = await File.ReadAllTextAsync(Path.Combine(directory, "Multi.razor"));
@@ -321,13 +314,12 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenARenameContainsAnUnexplainableGeneratedEdit_ThenNothingIsWrittenIncludingCs()
 	{
-		string solutionPath = TestSolutions.CreateScratchBindSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchBindSolution());
 		string directory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "BindLib");
 		Dictionary<string, string> before = await ReadSourcesAsync(directory);
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		RenameSymbolTool subject = CreateSubject(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		RenameSymbolTool subject = CreateSubject(Registry);
 
 		// Panel is a partial component: its .razor.cs declaration is an ordinary edit, but the class
 		// declaration generated from Panel.razor has no razor origin, so the whole rename must be refused.
@@ -342,13 +334,12 @@ public class RazorRenameTests
 	[Fact]
 	public async Task WhenARenamedRazorFileHasAUtf8Bom_ThenTheBomIsPreserved()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string counterPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Counter.razor");
 		await File.WriteAllTextAsync(counterPath, await File.ReadAllTextAsync(counterPath), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		RenameSymbolTool subject = CreateSubject(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		RenameSymbolTool subject = CreateSubject(Registry);
 
 		string result = await subject.RenameSymbol(solutionPath, "RazorLib.Counter.CurrentCount", "Total");
 

@@ -393,6 +393,7 @@ internal static class TestSolutions
 	public static string CreateScratchLinkedSolution(bool withNoTargetsProject = false)
 	{
 		string root = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"), "LinkedSolution");
+		ScratchDirectories.Track(root);
 		void Write(string relative, string text)
 		{
 			string path = Path.Combine(root, relative);
@@ -446,6 +447,7 @@ internal static class TestSolutions
 	{
 		string sourceDir = Path.Combine(FindTestFixturesRoot(), fixtureName);
 		string destDir = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"), fixtureName);
+		ScratchDirectories.Track(destDir);
 		CopyExcludingBuildOutput(sourceDir, destDir);
 
 		string solutionPath = Path.Combine(destDir, solutionFile);

@@ -40,7 +40,7 @@ public class TrackedAnalyzersTests : MutatingTestBase
 	[Fact]
 	public async Task WhenTheSwapFails_ThenTheNextRefreshRetriesIt()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator());
 		using SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(solutionPath);
 		TestSolutions.BuildScratchGenerator(solutionPath);
 
@@ -62,6 +62,7 @@ public class TrackedAnalyzersTests : MutatingTestBase
 	public async Task WhenTheFirstLoadThrows_ThenItIsReportedAndTheNextRefreshStillApplies()
 	{
 		string directory = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"));
+		TrackScratch(directory);
 		Directory.CreateDirectory(directory);
 		string dll = Path.Combine(directory, "Gen.dll");
 		await File.WriteAllTextAsync(dll, "stub");

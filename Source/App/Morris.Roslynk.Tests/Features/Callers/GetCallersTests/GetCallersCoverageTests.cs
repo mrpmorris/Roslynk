@@ -359,6 +359,7 @@ public class GetCallersCoverageTests : IClassFixture<GetCallersCoverageTests.Scr
 		public Task DisposeAsync()
 		{
 			Registry.Dispose();
+			ScratchDirectories.Delete(SolutionPath);
 			return Task.CompletedTask;
 		}
 	}
@@ -556,6 +557,7 @@ public class GetCallersProjectionTests : IClassFixture<GetCallersProjectionTests
 		public Task DisposeAsync()
 		{
 			Registry.Dispose();
+			ScratchDirectories.Delete(SolutionPath);
 			return Task.CompletedTask;
 		}
 	}

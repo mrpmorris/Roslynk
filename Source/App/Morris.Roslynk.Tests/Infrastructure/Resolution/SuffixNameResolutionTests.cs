@@ -156,6 +156,7 @@ public class SuffixNameResolutionTests : IClassFixture<SuffixNameResolutionTests
 		public Task DisposeAsync()
 		{
 			Registry.Dispose();
+			ScratchDirectories.Delete(SolutionPath);
 			return Task.CompletedTask;
 		}
 

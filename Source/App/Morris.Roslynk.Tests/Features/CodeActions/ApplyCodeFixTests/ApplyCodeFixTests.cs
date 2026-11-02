@@ -7,7 +7,7 @@ using Morris.Roslynk.Tests.Helpers;
 
 namespace Morris.Roslynk.Tests.Features.CodeActions.ApplyCodeFixTests;
 
-public class ApplyCodeFixTests
+public class ApplyCodeFixTests : MutatingTestBase
 {
 	/// <summary>The 1-based column of <c>unused</c> in UnusedLocalScenario's <c>int unused = 0;</c> line (indented by two tabs).</summary>
 	private const int UnusedColumn = 7;
@@ -16,10 +16,10 @@ public class ApplyCodeFixTests
 	public async Task WhenFixingAnAnalyzerDiagnosticById_ThenTheFileIsUpdated()
 	{
 		// The point of issue #9: IDE0005 is listed by get_diagnostics, so it must be fixable here too.
-		string solutionPath = UnnecessaryUsingScenario.Create(out string greeter);
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.ApplyCodeFix(registry);
+		string greeter = default!;
+		string solutionPath = Scratch(() => UnnecessaryUsingScenario.Create(out greeter));
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.ApplyCodeFix(Registry);
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "IDE0005", UnnecessaryUsingScenario.UsingLine, 1);
 
@@ -30,11 +30,11 @@ public class ApplyCodeFixTests
 	[Fact]
 	public async Task WhenFixingAnAnalyzerDiagnosticCheckOnly_ThenNothingIsWritten()
 	{
-		string solutionPath = UnnecessaryUsingScenario.Create(out string greeter);
+		string greeter = default!;
+		string solutionPath = Scratch(() => UnnecessaryUsingScenario.Create(out greeter));
 		string before = await File.ReadAllTextAsync(greeter);
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.ApplyCodeFix(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.ApplyCodeFix(Registry);
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "IDE0005", UnnecessaryUsingScenario.UsingLine, 1, checkOnly: true);
 
@@ -46,10 +46,11 @@ public class ApplyCodeFixTests
 	[Fact]
 	public async Task WhenFixingADiagnosticById_ThenTheFileIsUpdated()
 	{
-		string solutionPath = UnusedLocalScenario.Create(out string greeter, out int unusedLine);
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.ApplyCodeFix(registry);
+		string greeter = default!;
+		int unusedLine = default!;
+		string solutionPath = Scratch(() => UnusedLocalScenario.Create(out greeter, out unusedLine));
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.ApplyCodeFix(Registry);
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS0219", unusedLine, UnusedColumn);
 
@@ -60,10 +61,11 @@ public class ApplyCodeFixTests
 	[Fact]
 	public async Task WhenNoSuchDiagnosticExists_ThenNotFoundIsReturned()
 	{
-		string solutionPath = UnusedLocalScenario.Create(out string greeter, out int unusedLine);
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.ApplyCodeFix(registry);
+		string greeter = default!;
+		int unusedLine = default!;
+		string solutionPath = Scratch(() => UnusedLocalScenario.Create(out greeter, out unusedLine));
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.ApplyCodeFix(Registry);
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS9999", unusedLine, UnusedColumn);
 
@@ -87,12 +89,13 @@ public class ApplyCodeFixTests
 	[Fact]
 	public async Task WhenTheFileHasSeveralOccurrences_ThenOnlyTheOneAtThePositionIsFixed()
 	{
-		string solutionPath = UnusedLocalScenario.Create(out string greeter, out int unusedLine);
+		string greeter = default!;
+		int unusedLine = default!;
+		string solutionPath = Scratch(() => UnusedLocalScenario.Create(out greeter, out unusedLine));
 		string content = (await File.ReadAllTextAsync(greeter)).Replace("\t\tint unused = 0;\r\n", "\t\tint unused = 0;\r\n\t\tint spare = 0;\r\n");
 		await File.WriteAllTextAsync(greeter, content);
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.ApplyCodeFix(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.ApplyCodeFix(Registry);
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS0219", unusedLine + 1, UnusedColumn);
 
@@ -105,10 +108,11 @@ public class ApplyCodeFixTests
 	[Fact]
 	public async Task WhenThePositionIsInsideTheDiagnosticSpan_ThenItIsFixed()
 	{
-		string solutionPath = UnusedLocalScenario.Create(out string greeter, out int unusedLine);
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.ApplyCodeFix(registry);
+		string greeter = default!;
+		int unusedLine = default!;
+		string solutionPath = Scratch(() => UnusedLocalScenario.Create(out greeter, out unusedLine));
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.ApplyCodeFix(Registry);
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS0219", unusedLine, UnusedColumn + "unused".Length);
 
@@ -119,11 +123,12 @@ public class ApplyCodeFixTests
 	[Fact]
 	public async Task WhenNoDiagnosticIsAtThePosition_ThenNotFoundIsReturnedAndNothingIsWritten()
 	{
-		string solutionPath = UnusedLocalScenario.Create(out string greeter, out int unusedLine);
+		string greeter = default!;
+		int unusedLine = default!;
+		string solutionPath = Scratch(() => UnusedLocalScenario.Create(out greeter, out unusedLine));
 		string before = await File.ReadAllTextAsync(greeter);
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.ApplyCodeFix(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.ApplyCodeFix(Registry);
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS0219", unusedLine - 2, 1);
 
@@ -137,10 +142,10 @@ public class ApplyCodeFixTests
 	[InlineData(1, 0)]
 	public async Task WhenThePositionIsNotOneBased_ThenInvalidIsReturned(int line, int column)
 	{
-		string solutionPath = UnusedLocalScenario.Create(out string greeter, out _);
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.ApplyCodeFix(registry);
+		string greeter = default!;
+		string solutionPath = Scratch(() => UnusedLocalScenario.Create(out greeter, out _));
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.ApplyCodeFix(Registry);
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS0219", line, column);
 
@@ -150,11 +155,13 @@ public class ApplyCodeFixTests
 	[Fact]
 	public async Task WhenTheDiagnosticHasSeveralFixes_ThenConflictListsEachOnceAndNothingIsWritten()
 	{
-		string solutionPath = CreateUnimplementedInterface(out string greeter, out int line, out int column);
+		string greeter = default!;
+		int line = default!;
+		int column = default!;
+		string solutionPath = Scratch(() => CreateUnimplementedInterface(out greeter, out line, out column));
 		string before = await File.ReadAllTextAsync(greeter);
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.ApplyCodeFix(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.ApplyCodeFix(Registry);
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS0535", line, column);
 
@@ -171,15 +178,17 @@ public class ApplyCodeFixTests
 	[Fact]
 	public async Task WhenACandidateIsPassedToApplyCodeAction_ThenThatFixIsApplied()
 	{
-		string solutionPath = CreateUnimplementedInterface(out string greeter, out int line, out int column);
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		string greeter = default!;
+		int line = default!;
+		int column = default!;
+		string solutionPath = Scratch(() => CreateUnimplementedInterface(out greeter, out line, out column));
+		await Registry.GetOrAddAsync(solutionPath);
 		CodeActionService service = TestServices.CodeActions();
-		string conflict = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, greeter, "CS0535", line, column);
+		string conflict = await TestServices.ApplyCodeFix(Registry).ApplyCodeFix(solutionPath, greeter, "CS0535", line, column);
 		string candidate = Candidates(conflict).Single(entry => entry.EndsWith(" Implement all members explicitly", StringComparison.Ordinal));
 		string actionId = candidate[..candidate.IndexOf(',')];
 
-		string result = await new ApplyCodeActionTool(registry, service, new ApplyPipeline()).ApplyCodeAction(solutionPath, actionId);
+		string result = await new ApplyCodeActionTool(Registry, service, new ApplyPipeline()).ApplyCodeAction(solutionPath, actionId);
 
 		Assert.True(result.Contains("applied=Y"), result);
 		Assert.Contains("void IThing.Run()", await File.ReadAllTextAsync(greeter));
@@ -188,12 +197,13 @@ public class ApplyCodeFixTests
 	[Fact]
 	public async Task WhenAFixIsGroupedUnderAParentAction_ThenTheNestedFixesAreCandidates()
 	{
-		string solutionPath = UnusedLocalScenario.Create(out string greeter, out int unusedLine);
+		string greeter = default!;
+		int unusedLine = default!;
+		string solutionPath = Scratch(() => UnusedLocalScenario.Create(out greeter, out unusedLine));
 		string content = (await File.ReadAllTextAsync(greeter)).Replace("\t\tint unused = 0;", "\t\tStringBuilder unused = null;");
 		await File.WriteAllTextAsync(greeter, content);
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.ApplyCodeFix(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.ApplyCodeFix(Registry);
 
 		string result = await subject.ApplyCodeFix(solutionPath, greeter, "CS0246", unusedLine, 3);
 

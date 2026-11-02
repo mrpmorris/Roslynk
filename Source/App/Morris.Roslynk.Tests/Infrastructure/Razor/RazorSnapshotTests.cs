@@ -11,7 +11,7 @@ namespace Morris.Roslynk.Tests.Infrastructure.Razor;
 /// It is a build artifact MSBuild never prunes, so these tests plant snapshots in scratch copies of the Razor
 /// fixtures and check which of their files would be used.
 /// </summary>
-public class RazorSnapshotTests
+public class RazorSnapshotTests : MutatingTestBase
 {
 	// Use Path.Combine so planted paths resolve on Linux and Windows (literal backslashes are not separators on Unix).
 	private static readonly string GeneratedSubPath = Path.Combine(
@@ -26,7 +26,7 @@ public class RazorSnapshotTests
 	public async Task WhenAGeneratedFileHasNoSource_ThenItIsDropped()
 	{
 		// An orphan: its Ghost.razor source was deleted after the last build.
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		PlantGeneratedFile(solutionPath, "RazorLib", "Counter_razor.g.cs");
 		PlantGeneratedFile(solutionPath, "RazorLib", "Ghost_razor.g.cs");
 
@@ -41,7 +41,7 @@ public class RazorSnapshotTests
 	{
 		// Hint names flatten every special character to '_', so naive un-flattening would misread this as
 		// folder My/Widget.razor and drop it.
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		File.WriteAllText(Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "My_Widget.razor"), "<p>widget</p>");
 		PlantGeneratedFile(solutionPath, "RazorLib", "My_Widget_razor.g.cs");
 
@@ -52,7 +52,7 @@ public class RazorSnapshotTests
 	public async Task WhenTheImportsFilesOwnOutputIsPresent_ThenItIsClaimed()
 	{
 		// Every SDK emits _Imports_razor.g.cs for _Imports.razor; it must count as claimed, not as an orphan.
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		File.WriteAllText(Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "_Imports.razor"), "@using Microsoft.AspNetCore.Components.Web");
 		PlantGeneratedFile(solutionPath, "RazorLib", "_Imports_razor.g.cs");
 
@@ -63,7 +63,7 @@ public class RazorSnapshotTests
 	public async Task WhenAFlatLayoutSnapshotIncludesViewImportsAndViewStartOutput_ThenTheyAreClaimed()
 	{
 		// Older SDKs flatten the whole relative path into the file name.
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchCshtmlSolution());
 		File.WriteAllText(Path.Combine(Path.GetDirectoryName(solutionPath)!, "CshtmlLib", "Views", "_ViewStart.cshtml"), "@{ Layout = null; }");
 		PlantGeneratedFile(solutionPath, "CshtmlLib", "Views_Home_Index_cshtml.g.cs");
 		PlantGeneratedFile(solutionPath, "CshtmlLib", "Views__ViewImports_cshtml.g.cs");
@@ -79,7 +79,7 @@ public class RazorSnapshotTests
 	[Fact]
 	public async Task WhenOnlyAnotherConfigurationHasASnapshot_ThenNoSnapshotIsFound()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string releaseDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "obj", "Release", "net8.0", "generated",
 			"Microsoft.CodeAnalysis.Razor.Compiler", "Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator");
 		Directory.CreateDirectory(releaseDir);
@@ -94,7 +94,7 @@ public class RazorSnapshotTests
 	public async Task WhenAGeneratorIsAvailable_ThenTheSnapshotIsNotUsed()
 	{
 		// The generator is authoritative; a snapshot can only be as fresh as the last build.
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		PlantGeneratedFile(solutionPath, "RazorLib", "Counter_razor.g.cs",
 			"namespace RazorLib { public partial class Counter { void M() { SnapshotMarker(); } } }");
 

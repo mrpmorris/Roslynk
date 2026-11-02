@@ -9,8 +9,8 @@ namespace Morris.Roslynk.Tests;
 /// <para>
 /// A class may use several different fixtures, so the copy is created by calling
 /// <see cref="ScratchAsync"/> with the <c>TestSolutions.CreateScratch...</c> helper it needs, rather than
-/// by overriding a per-class method. The first call creates the Registry; a test that never calls it
-/// leaves nothing behind.
+/// by overriding a per-class method. <see cref="Registry"/> is created on first use, so a test that only
+/// asserts instance state against a committed fixture can use the base class too.
 /// </para>
 /// <para>
 /// Teardown order matters: the Registry is disposed first, which disposes the instance, its workspace
@@ -21,37 +21,15 @@ namespace Morris.Roslynk.Tests;
 /// </summary>
 public abstract class MutatingTestBase : IAsyncLifetime
 {
-	private const int DeleteAttempts = 5;
-	private static readonly TimeSpan DeleteRetryDelay = TimeSpan.FromMilliseconds(120);
-
 	private readonly List<string> ScratchRoots = [];
 	private InstanceRegistry? RegistryField;
 
 	/// <summary>
-	/// The GUID directory a scratch copy lives under. <c>CreateScratch</c> returns
-	/// <c>%TEMP%/roslynk-tests/&lt;guid&gt;/&lt;fixture&gt;/&lt;solutionFile&gt;</c>, and a fixture whose solution sits in a
-	/// subfolder (MultiTargetSolution uses <c>src/</c>) is one level deeper, so the depth is not fixed.
-	/// Walking up to the child of the <c>roslynk-tests</c> directory is what identifies it reliably.
+	/// The registry holding this test's loaded solutions. It is created on first use and disposed when the
+	/// test finishes, so a test that asserts instance state against a committed fixture can use it without
+	/// needing a scratch copy.
 	/// </summary>
-	private static string RunRootOf(string solutionPath)
-	{
-		string rootName = "roslynk-tests";
-		string? current = Path.GetDirectoryName(solutionPath);
-		while (current is not null)
-		{
-			string? parent = Path.GetDirectoryName(current);
-			if (parent is not null && string.Equals(Path.GetFileName(parent), rootName, StringComparison.OrdinalIgnoreCase))
-				return current;
-			current = parent;
-		}
-
-		// Not under the shared root (a caller-supplied directory): delete just its own folder.
-		return Path.GetDirectoryName(solutionPath)!;
-	}
-
-	/// <summary>The registry holding this test's loaded solutions; created on the first <see cref="ScratchAsync"/>.</summary>
-	protected InstanceRegistry Registry =>
-		RegistryField ?? throw new InvalidOperationException("Call ScratchAsync or Scratch before using the registry.");
+	protected InstanceRegistry Registry => RegistryField ??= new InstanceRegistry();
 
 	/// <summary>
 	/// Creates a scratch copy of a fixture with <paramref name="create"/>, loads it into this test's private
@@ -60,71 +38,43 @@ public abstract class MutatingTestBase : IAsyncLifetime
 	protected async Task<(RoslynInstance Instance, string SolutionPath)> ScratchAsync(Func<string> create)
 	{
 		string solutionPath = create();
-		ScratchRoots.Add(RunRootOf(solutionPath));
+		ScratchRoots.Add(ScratchDirectories.RootOf(solutionPath));
 
-		RegistryField ??= new InstanceRegistry();
-		RoslynInstance instance = await RegistryField.GetOrAddAsync(solutionPath);
+		RoslynInstance instance = await Registry.GetOrAddAsync(solutionPath);
 		return (instance, solutionPath);
 	}
 
-	/// <summary>Creates a scratch copy without loading it; the registry is still created for a later load.</summary>
+	/// <summary>Creates a scratch copy without loading it; a later <see cref="Registry"/> load picks it up.</summary>
 	protected string Scratch(Func<string> create)
 	{
 		string solutionPath = create();
-		ScratchRoots.Add(RunRootOf(solutionPath));
-		RegistryField ??= new InstanceRegistry();
+		ScratchRoots.Add(ScratchDirectories.RootOf(solutionPath));
 		return solutionPath;
 	}
+
+	/// <summary>
+	/// Records a directory this test created outside <see cref="Scratch"/>, so it is deleted with the test.
+	/// Use it for a directory a test makes for itself — a moved folder, a synthetic build tree — rather
+	/// than for a solution copy.
+	/// </summary>
+	protected void TrackScratch(string path) => ScratchRoots.Add(ScratchDirectories.RootOf(path));
 
 	public Task InitializeAsync() => Task.CompletedTask;
 
 	/// <summary>
 	/// Disposes the Registry so the workspace releases its file handles, then deletes every scratch copy
-	/// this test created. A failure to delete is not a test failure: the directories are GUID-named and
-	/// never reused, and the next run's startup sweep removes anything left behind.
+	/// this test created. A copy that cannot be removed yet is retried in the background by
+	/// <see cref="ScratchDirectories"/>; a failure is never a test failure, because the directories are
+	/// GUID-named, never reused, and swept at the start of the next run.
 	/// </summary>
-	public async Task DisposeAsync()
+	public Task DisposeAsync()
 	{
 		RegistryField?.Dispose();
 		RegistryField = null;
 
 		foreach (string root in ScratchRoots)
-			await DeleteWithRetryAsync(root);
-	}
+			ScratchDirectories.Delete(root);
 
-	private static async Task DeleteWithRetryAsync(string root)
-	{
-		for (int attempt = 1; attempt <= DeleteAttempts; attempt++)
-		{
-			try
-			{
-				if (!Directory.Exists(root))
-					return;
-				Directory.Delete(root, recursive: true);
-				if (!Directory.Exists(root))
-					return;
-			}
-			catch (IOException) when (attempt < DeleteAttempts)
-			{
-				await Task.Delay(DeleteRetryDelay);
-			}
-			catch (UnauthorizedAccessException) when (attempt < DeleteAttempts)
-			{
-				await Task.Delay(DeleteRetryDelay);
-			}
-			catch (IOException)
-			{
-				return;
-			}
-			catch (UnauthorizedAccessException)
-			{
-				return;
-			}
-
-			// A recursive delete can remove every child and leave the root behind when a handle is open
-			// on it; retrying clears that up once the handle is released.
-			if (attempt < DeleteAttempts)
-				await Task.Delay(DeleteRetryDelay);
-		}
+		return Task.CompletedTask;
 	}
 }

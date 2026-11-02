@@ -16,9 +16,9 @@ public class SolutionFileSyncTests : MutatingTestBase
 	/// The read-only Simple fixture with its live watcher detached, so only the errors a test raises reach the
 	/// instance. Each test has its own Registry, so marking it dirty does not leak.
 	/// </summary>
-	private static async Task<RoslynInstance> LoadDetachedAsync(InstanceRegistry Registry)
+	private static async Task<RoslynInstance> LoadDetachedAsync(InstanceRegistry registry)
 	{
-		RoslynInstance instance = await Registry.GetOrAddAsync(TestSolutions.Simple);
+		RoslynInstance instance = await registry.GetOrAddAsync(TestSolutions.Simple);
 		instance.DetachWatcher();
 		return instance;
 	}
@@ -389,7 +389,7 @@ public class SolutionFileSyncTests : MutatingTestBase
 	[Fact]
 	public async Task WhenACsAnalyzerAdditionalFileIsModified_ThenItIsFoldedInAsAnAdditionalFileOnly()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string additional = await AddAnalyzerAdditionalFileAsync(
 			solutionPath, "Extra.cs", "namespace SimpleLibrary; public class Extra { }", removeFromCompile: true);
 
@@ -409,7 +409,7 @@ public class SolutionFileSyncTests : MutatingTestBase
 	[Fact]
 	public async Task WhenACsFileThatIsBothCompiledAndAnAnalyzerAdditionalFileIsModified_ThenBothAreFoldedIn()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string additional = await AddAnalyzerAdditionalFileAsync(
 			solutionPath, "Shared.cs", "namespace SimpleLibrary; public class Shared { }", removeFromCompile: false);
 
@@ -429,7 +429,7 @@ public class SolutionFileSyncTests : MutatingTestBase
 	[Fact]
 	public async Task WhenACsAnalyzerAdditionalFileIsDeleted_ThenTheInstanceIsMarkedDirty()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string additional = await AddAnalyzerAdditionalFileAsync(
 			solutionPath, "Extra.cs", "namespace SimpleLibrary; public class Extra { }", removeFromCompile: true);
 
@@ -569,7 +569,7 @@ public class SolutionFileSyncTests : MutatingTestBase
 	[Fact]
 	public async Task WhenANonRazorAdditionalFileChanges_ThenOnlyARealChangeIsFoldedInWithoutReload()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string additional = await AddAnalyzerAdditionalFileAsync(solutionPath, "settings.json", "{ \"a\": 1 }", removeFromCompile: false);
 
 		using var registry = new InstanceRegistry();
@@ -640,7 +640,7 @@ public class SolutionFileSyncTests : MutatingTestBase
 	public async Task WhenANewFileAGlobCouldAddAppears_ThenTheInstanceIsMarkedDirty(string name)
 	{
 		// .json is the extension of an additional file already loaded, so a glob may well add this one too.
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		_ = await AddAnalyzerAdditionalFileAsync(solutionPath, "settings.json", "{ }", removeFromCompile: false);
 		using var registry = new InstanceRegistry();
 		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
@@ -656,7 +656,7 @@ public class SolutionFileSyncTests : MutatingTestBase
 	[Fact]
 	public async Task WhenAKnownAdditionalFileIsDeleted_ThenTheInstanceIsMarkedDirty()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string additional = await AddAnalyzerAdditionalFileAsync(solutionPath, "settings.json", "{ }", removeFromCompile: false);
 		using var registry = new InstanceRegistry();
 		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
@@ -672,7 +672,7 @@ public class SolutionFileSyncTests : MutatingTestBase
 	public async Task WhenADirectoryHoldingLoadedDocumentsIsMovedAway_ThenTheInstanceIsMarkedDirty()
 	{
 		// Moving a directory out raises one event for its old path, none for the files it took along.
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
 		string folder = Path.Combine(projectDir, "Nested");
 		Directory.CreateDirectory(folder);
@@ -681,7 +681,9 @@ public class SolutionFileSyncTests : MutatingTestBase
 		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
 		var subject = new SolutionFileSync(instance);
 
-		Directory.Move(folder, Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N")));
+		string moved = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"));
+		TrackScratch(moved);
+		Directory.Move(folder, moved);
 		await subject.OnFileChangedAsync(folder);
 
 		Assert.True(instance.IsDirty);

@@ -92,7 +92,7 @@ public class GetSolutionStatusTests : MutatingTestBase
 	[Fact]
 	public async Task WhileTheSolutionIsStillLoading_ThenNoLoadDiagnosticsAreListed()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator());
 		using var registry = new InstanceRegistry();
 		registry.GetOrBegin(solutionPath);
 		var subject = new GetSolutionStatusTool(registry);

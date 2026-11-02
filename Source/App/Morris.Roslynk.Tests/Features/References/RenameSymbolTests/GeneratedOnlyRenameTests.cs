@@ -20,7 +20,7 @@ public class GeneratedOnlyRenameTests : MutatingTestBase
 		// Greeting is reachable today (UsesGenerated.cs mentions it), so this also documents the latent
 		// partial-rename being closed: before the guard the call sites were rewritten and the generator
 		// re-emitted the old name.
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchGeneratorSolution());
 		string usesGenerated = FindFile(solutionPath, "UsesGenerated.cs");
 		string before = await File.ReadAllTextAsync(usesGenerated);
 		using var registry = new InstanceRegistry();

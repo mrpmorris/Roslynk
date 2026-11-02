@@ -3,15 +3,14 @@ using Morris.Roslynk.Infrastructure.Lifecycle;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Lifecycle.InstanceRegistryTests;
 
-public class GetOrBeginTests
+public class GetOrBeginTests : MutatingTestBase
 {
 	[Fact]
 	public void WhenTheSameSolutionIsRequestedTwice_ThenTheSameInstanceIsShared()
 	{
-		using var subject = new InstanceRegistry();
 
-		RoslynInstance first = subject.GetOrBegin(TestSolutions.Simple);
-		RoslynInstance second = subject.GetOrBegin(TestSolutions.Simple);
+		RoslynInstance first = Registry.GetOrBegin(TestSolutions.Simple);
+		RoslynInstance second = Registry.GetOrBegin(TestSolutions.Simple);
 
 		Assert.Same(first, second);
 	}
@@ -19,9 +18,8 @@ public class GetOrBeginTests
 	[Fact]
 	public async Task WhenADirtyInstanceIsRequested_ThenItIsRebuiltAndPicksUpTheDiskChange()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var subject = new InstanceRegistry();
-		RoslynInstance instance = await subject.GetOrAddAsync(solutionPath);
+		string solutionPath = Scratch(TestSolutions.CreateScratchSimpleSolution);
+		RoslynInstance instance = await Registry.GetOrAddAsync(solutionPath);
 
 		// Mimic a build-file / additional-document edit: change a source file on disk and mark the snapshot
 		// dirty (what SolutionFileSync does for a change it cannot fold incrementally, e.g. a .mixin edit).
@@ -32,7 +30,7 @@ public class GetOrBeginTests
 		instance.MarkDirty();
 
 		// The non-blocking read path serves the stale snapshot while a background rebuild runs.
-		RoslynInstance same = subject.GetOrBegin(solutionPath);
+		RoslynInstance same = Registry.GetOrBegin(solutionPath);
 		Assert.Same(instance, same);
 		await WaitForReadyAsync(instance);
 
@@ -45,11 +43,10 @@ public class GetOrBeginTests
 	[Fact]
 	public async Task WhenACleanInstanceIsRequested_ThenTheSnapshotIsNotReplaced()
 	{
-		using var subject = new InstanceRegistry();
-		RoslynInstance instance = await subject.GetOrAddAsync(TestSolutions.Simple);
+		RoslynInstance instance = await Registry.GetOrAddAsync(TestSolutions.Simple);
 		Solution before = instance.CurrentSolution;
 
-		subject.GetOrBegin(TestSolutions.Simple);
+		Registry.GetOrBegin(TestSolutions.Simple);
 
 		Assert.Same(before, instance.CurrentSolution);
 	}
@@ -57,9 +54,8 @@ public class GetOrBeginTests
 	[Fact]
 	public async Task WhenADirtyInstanceIsRequestedViaGetOrBeginAsync_ThenOneCallReturnsTheRebuiltSnapshot()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var subject = new InstanceRegistry();
-		RoslynInstance instance = await subject.GetOrAddAsync(solutionPath);
+		string solutionPath = Scratch(TestSolutions.CreateScratchSimpleSolution);
+		RoslynInstance instance = await Registry.GetOrAddAsync(solutionPath);
 
 		// Mimic an additional-document edit (e.g. a .mixin): change a source file on disk and mark dirty.
 		string greeter = Directory
@@ -69,7 +65,7 @@ public class GetOrBeginTests
 		instance.MarkDirty();
 
 		// The blocking read path awaits the rebuild, so a single call returns a Ready, up-to-date snapshot.
-		RoslynInstance same = await subject.GetOrBeginAsync(solutionPath);
+		RoslynInstance same = await Registry.GetOrBeginAsync(solutionPath);
 
 		Assert.Same(instance, same);
 		Assert.Equal(SolutionStatus.Ready, instance.CurrentModel.Status);
@@ -82,11 +78,10 @@ public class GetOrBeginTests
 	[Fact]
 	public async Task WhenACleanInstanceIsRequestedViaGetOrBeginAsync_ThenTheSnapshotIsNotReplaced()
 	{
-		using var subject = new InstanceRegistry();
-		RoslynInstance instance = await subject.GetOrAddAsync(TestSolutions.Simple);
+		RoslynInstance instance = await Registry.GetOrAddAsync(TestSolutions.Simple);
 		Solution before = instance.CurrentSolution;
 
-		RoslynInstance same = await subject.GetOrBeginAsync(TestSolutions.Simple);
+		RoslynInstance same = await Registry.GetOrBeginAsync(TestSolutions.Simple);
 
 		Assert.Same(instance, same);
 		Assert.Same(before, instance.CurrentSolution);
@@ -113,7 +108,7 @@ public class GetOrBeginTests
 		using var subject = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.FromMinutes(5)));
 
 		// No prior load: this call joins the in-flight initial load and waits up to the configured timeout.
-		RoslynInstance instance = await subject.GetOrBeginAsync(TestSolutions.Simple);
+		RoslynInstance instance = await Registry.GetOrBeginAsync(TestSolutions.Simple);
 
 		Assert.Equal(SolutionStatus.Ready, instance.CurrentModel.Status);
 		Assert.NotNull(instance.CurrentModel.Solution);

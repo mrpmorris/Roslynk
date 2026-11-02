@@ -24,7 +24,7 @@ public class GeneratorDiagnosticsTests : MutatingTestBase
 	{
 		// A scratch copy excludes bin/obj; plant a corrupt DLL at the generator's output path so the
 		// analyzer reference resolves to a file that cannot possibly load.
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator());
 		string corruptDll = Path.Combine(
 			Path.GetDirectoryName(solutionPath)!, "GeneratorLib", "bin", "Debug", "netstandard2.0", "GeneratorLib.dll");
 		Directory.CreateDirectory(Path.GetDirectoryName(corruptDll)!);
@@ -42,7 +42,7 @@ public class GeneratorDiagnosticsTests : MutatingTestBase
 	[Fact]
 	public async Task WhenTheGeneratorDllIsMissing_ThenTheLoadDiagnosticNamesTheConsumerTheGeneratorProjectAndThePath()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator());
 
 		using SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(solutionPath);
 
@@ -70,7 +70,7 @@ public class GeneratorDiagnosticsTests : MutatingTestBase
 	[Fact]
 	public async Task WhenTheGeneratorIsRebuiltWithChangedOutput_ThenTheNextCallCompilesTheNewOutputWithoutReload()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchGeneratorSolution());
 		string directory = Path.GetDirectoryName(solutionPath)!;
 
 		// The consumer wants a member the built generator does not emit yet.
@@ -100,7 +100,7 @@ public class GeneratorDiagnosticsTests : MutatingTestBase
 	public async Task WhenTheGeneratorBuildsOutsideEveryProjectDirectory_ThenItIsStillPickedUpWithoutReload()
 	{
 		// An artifacts-style layout: the DLL lands in a directory no project owns, which the watcher never sees.
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator());
 		string directory = Path.GetDirectoryName(solutionPath)!;
 		await ReplaceInFileAsync(
 			Path.Combine(directory, "GeneratorLib", "GeneratorLib.csproj"),
@@ -123,7 +123,7 @@ public class GeneratorDiagnosticsTests : MutatingTestBase
 	[Fact]
 	public async Task WhenARebuiltGeneratorCannotBeLoaded_ThenTheFailureIsReportedUntilAGoodBuildReplacesIt()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchGeneratorSolution());
 		string dll = Path.Combine(Path.GetDirectoryName(solutionPath)!, "GeneratorLib", "bin", "Debug", "netstandard2.0", "GeneratorLib.dll");
 		byte[] good = await File.ReadAllBytesAsync(dll);
 		using var registry = new InstanceRegistry();

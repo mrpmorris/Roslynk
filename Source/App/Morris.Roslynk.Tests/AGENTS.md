@@ -17,11 +17,11 @@ or that asserts instance state, gets its own registry and its own scratch copy.
 |---|---|---|
 | Read-only query (`get_symbol`, `get_members`, `search_symbols`, `find_references`, `get_callers`, `get_callees`, `get_diagnostics`, `get_expression_info`, `get_type_hierarchy`, `find_definition`, `find_implementations`, `get_symbol_body`, `find_dead_code`, `find_dead_conditionals`, `get_code_actions`) | Committed fixture (`TestSolutions.Simple`, `.Razor`, `.Cshtml`, …) | `await TestSolutions.SharedAsync(path)` — **never dispose** |
 | Read-only test that reads the snapshot directly (`RoslynInstance.CurrentSolution`, a resolver call) rather than through a tool | Committed fixture, or a `CreateScratch...` copy that only adds source | `await TestSolutions.SharedInstanceAsync(path)` — **never dispose** |
-| Test that writes files, applies a fix, renames, patches, extracts or changes a signature | `TestSolutions.CreateScratch...()` — a fresh copy per test | `new InstanceRegistry()` |
-| Cold load: asserts `error=Indexing` / `status=Building` / load diagnostics | Committed or scratch | `new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero))` |
-| Asserts instance state: `IsDirty`, watcher errors, rebuild, eviction, reload, `OpenSolutionPaths` | Committed or scratch | `new InstanceRegistry()` — never the shared one |
-| Asserts metrics state (`error=Computing`) or tracked-analyzer swaps | Committed or scratch | `new InstanceRegistry()` |
-| Advances the snapshot itself (`AdvanceTo`, a queued write, a stub operation that publishes) | Committed or scratch | `new InstanceRegistry()` |
+| Test that writes files, applies a fix, renames, patches, extracts or changes a signature | `Scratch(...)` in a `MutatingTestBase` class — a fresh copy per test | `Registry` (the base class's private registry) |
+| Cold load: asserts `error=Indexing` / `status=Building` / load diagnostics | Committed or scratch | `new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero))` — not the base class's |
+| Asserts instance state: `IsDirty`, watcher errors, rebuild, eviction, reload, `OpenSolutionPaths` | Committed or scratch | `Registry` in a `MutatingTestBase` class — never the shared one |
+| Asserts metrics state (`error=Computing`) or tracked-analyzer swaps | Committed or scratch | `Registry` in a `MutatingTestBase` class |
+| Advances the snapshot itself (`AdvanceTo`, a queued write, a stub operation that publishes) | Committed or scratch | `Registry` in a `MutatingTestBase` class |
 
 ## Rules
 
@@ -47,6 +47,18 @@ or that asserts instance state, gets its own registry and its own scratch copy.
    threads both measured ~20% slower, and higher counts make the analyzer budget flaky.
 7. **Do not merge fixtures into one solution.** A shared registry already loads each fixture once;
    merging changes project counts, path resolution and name-resolution ambiguity that tests assert.
+8. **Delete every scratch copy you create.** Derive the class from `MutatingTestBase` and create the
+   copy with `Scratch(...)` or `ScratchAsync(...)`; `DisposeAsync` disposes the registry first, which
+   releases the build host's file handles, and then deletes the copy. A class that owns its own
+   `IAsyncLifetime` teardown, or an `IClassFixture` that creates the copy for its class, calls
+   `ScratchDirectories.Delete(path)` after disposing the registry. Use `TrackScratch(path)` for a
+   directory a test makes for itself outside `Scratch` — a moved folder, a synthetic build tree.
+   A copy a shared instance keeps open for the whole run is deleted when the process exits.
+
+   Deletion costs about 8 ms and succeeds first time when the registry is disposed first, so do not
+   wrap it in a retry loop with a delay. `ScratchDirectories` retries in the background when a build
+   host is slow to release a file, and the next run's `ScratchDirectorySweeper` clears anything a
+   killed run left behind.
 
 ## Patterns
 
@@ -81,17 +93,19 @@ public Task DisposeAsync() => Task.CompletedTask;
 Write test on a scratch copy:
 
 ```csharp
-[Fact]
-public async Task WhenRenamingAType_ThenItsDeclarationAndReferencesAreRewrittenOnDisk()
+public class RenameSymbolTests : MutatingTestBase
 {
-	string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-	using var registry = new InstanceRegistry();
-	await registry.GetOrAddAsync(solutionPath);
+	[Fact]
+	public async Task WhenRenamingAType_ThenItsDeclarationAndReferencesAreRewrittenOnDisk()
+	{
+		string solutionPath = Scratch(TestSolutions.CreateScratchSimpleSolution);
+		await Registry.GetOrAddAsync(solutionPath);
 
-	string result = await new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline())
-		.RenameSymbol(solutionPath, "SimpleLibrary.Greeter", "Welcomer");
+		string result = await new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline())
+			.RenameSymbol(solutionPath, "SimpleLibrary.Greeter", "Welcomer");
 
-	Assert.Contains("applied=Y", result);
+		Assert.Contains("applied=Y", result);
+	}
 }
 ```
 
@@ -115,9 +129,10 @@ public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 
 ## Checklist for a new test
 
-- Does it write? → scratch copy (`CreateScratch...`), private registry.
-- Does it assert or mutate instance state (cold load, dirty, watcher, reload, metrics, `AdvanceTo`)? → private registry.
+- Does it write? → derive from `MutatingTestBase`, create the copy with `Scratch(...)`, use `Registry`.
+- Does it assert or mutate instance state (cold load, dirty, watcher, reload, metrics, `AdvanceTo`)? → `Registry` in a `MutatingTestBase` class; a cold load keeps its own registry with a timeout.
 - Otherwise → `TestSolutions.SharedAsync(committedFixture)` and no `using`.
+- Does it create a directory of its own outside `Scratch`? → `TrackScratch(path)` so teardown removes it.
 - Does the fixture have a `PackageReference`, `FrameworkReference` or `netstandard` target? → it
   needs restore; leave that to `TestSolutions`.
 - Does it assert that a query returned nothing, or an exact header set? → `OutlineAssert`, not `Assert.Equal`.

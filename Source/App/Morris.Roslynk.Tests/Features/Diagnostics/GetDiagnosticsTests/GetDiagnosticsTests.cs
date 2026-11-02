@@ -48,7 +48,7 @@ public class GetDiagnosticsTests : MutatingTestBase
 	[Fact]
 	public async Task WhenARazorFileHasARazorSyntaxError_ThenTheRazorDiagnosticIsReportedAgainstThatFile()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string broken = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Broken.razor");
 		await File.WriteAllTextAsync(broken, "<h1>Broken</h1>\n@code {\n    private string Value = \"\";\n");
 		using var registry = new InstanceRegistry();
@@ -312,7 +312,7 @@ public class GetDiagnosticsTests : MutatingTestBase
 	[Fact]
 	public async Task WhenFilteredByARazorFile_ThenRazorAndMappedDiagnosticsAreReturned()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string razorLib = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib");
 		await File.WriteAllTextAsync(
 			Path.Combine(razorLib, "Broken.razor"), "<h1>Broken</h1>\n@code {\n    private string Value = \"\";\n");
@@ -353,7 +353,7 @@ public class GetDiagnosticsTests : MutatingTestBase
 	[Fact]
 	public async Task WhenMaxSizeIsExceeded_ThenTheKeptLeavesAreTheFirstInBodyOrder()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		Directory.CreateDirectory(Path.Combine(projectDirectory, "Sub"));
 		await File.WriteAllTextAsync(
@@ -540,9 +540,9 @@ public class GetDiagnosticsTests : MutatingTestBase
 	/// scratch copy lives outside Source/, so it does not inherit TreatWarningsAsErrors and CS0169 stays a
 	/// warning.
 	/// </summary>
-	private static async Task<string> CreateScratchWithEverySeverityAsync()
+	private async Task<string> CreateScratchWithEverySeverityAsync()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		await File.WriteAllTextAsync(
 			Path.Combine(projectDirectory, "Broken.cs"),
@@ -561,9 +561,9 @@ public class GetDiagnosticsTests : MutatingTestBase
 	/// A scratch SimpleSolution whose project carries <paramref name="conversionErrors"/> CS0029s in
 	/// Broken.cs and one CS0103 in AlsoBroken.cs, so file/id/count tests have two files to filter between.
 	/// </summary>
-	private static async Task<string> CreateScratchWithBrokenFilesAsync(int conversionErrors)
+	private async Task<string> CreateScratchWithBrokenFilesAsync(int conversionErrors)
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 
 		string methods = string.Join("\n", Enumerable.Range(0, conversionErrors)

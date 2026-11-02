@@ -8,7 +8,7 @@ namespace Morris.Roslynk.Tests.Infrastructure.Workspaces.CompilerArgumentCacheTe
 /// A change to anything the captured arguments were worked out from loads through MSBuild, which captures again;
 /// an ordinary source edit, a file-local <c>#define</c> included, keeps the cache.
 /// </summary>
-public class InvalidationTests
+public class InvalidationTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenASourceFileIsEdited_ThenTheNextLoadUsesTheCacheAndReadsTheEdit()
@@ -60,7 +60,7 @@ public class InvalidationTests
 	[Fact]
 	public async Task WhenAFileAProjectImportsChanges_ThenTheNextLoadGoesThroughMSBuildAndSeesIt()
 	{
-		string solutionPath = TestSolutions.CreateScratchLinkedSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchLinkedSolution());
 		string shared = Path.Combine(Path.GetDirectoryName(solutionPath)!, "build", "Shared.props");
 		Directory.CreateDirectory(Path.GetDirectoryName(shared)!);
 		File.WriteAllText(shared, "<Project />");
@@ -88,7 +88,7 @@ public class InvalidationTests
 	public async Task WhenAnEnvironmentVariableAProjectReadsChanges_ThenTheNextLoadGoesThroughMSBuildAndSeesIt()
 	{
 		string variable = $"ROSLYNK_TEST_{Guid.NewGuid():N}";
-		string solutionPath = TestSolutions.CreateScratchLinkedSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchLinkedSolution());
 		string project = Path.Combine(LibDirectory(solutionPath), "Lib.csproj");
 		File.WriteAllText(project, File.ReadAllText(project).Replace(
 			"</Project>",
@@ -150,9 +150,9 @@ public class InvalidationTests
 	}
 
 	/// <summary>A fresh linked solution (Lib, multi-targeted, and App), loaded through MSBuild into a new cache.</summary>
-	private static async Task<(string SolutionPath, CompilerArgumentCache Cache)> LoadedOnceAsync()
+	private async Task<(string SolutionPath, CompilerArgumentCache Cache)> LoadedOnceAsync()
 	{
-		string solutionPath = TestSolutions.CreateScratchLinkedSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchLinkedSolution());
 		CompilerArgumentCache cache = TestCaches.New();
 		await LoadAsync(solutionPath, cache, fromCache: false);
 		return (solutionPath, cache);
