@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
+﻿using Morris.Roslynk.Features.CodeActions.ApplyCodeAction;
 using Morris.Roslynk.Features.CodeActions.GetCodeActions;
 using Morris.Roslynk.Features.Patching.ApplyPatch;
 using Morris.Roslynk.Features.References.RenameSymbol;
@@ -17,7 +17,7 @@ namespace Morris.Roslynk.Tests.Features.RazorSupport;
 /// Every tool that takes a document path or edits code works on .razor and .cshtml sources: positions are
 /// given in the Razor file, Roslyn runs on the generated C#, and the edits are written to the Razor file.
 /// </summary>
-public class RazorSourceToolTests
+public class RazorSourceToolTests : MutatingTestBase
 {
 	private const string CounterRelativePath = "RazorLib/Counter.razor";
 	private const string IndexRelativePath = "CshtmlLib/Views/Home/Index.cshtml";
@@ -43,10 +43,8 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenListingActionsInsideACshtmlFunctionsBlock_ThenTheCompilerFixIsOffered()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new GetCodeActionsTool(registry, TestServices.CodeActions());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
+		var subject = new GetCodeActionsTool(Registry, TestServices.CodeActions());
 		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "unused");
 
 		string result = await subject.GetCodeActions(solutionPath, IndexRelativePath, line, column);
@@ -94,12 +92,10 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenApplyingAnActionDiscoveredInACshtmlFile_ThenTheCshtmlFileIsRewrittenOnDisk()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
 		CodeActionService service = TestServices.CodeActions();
-		var getActions = new GetCodeActionsTool(registry, service);
-		var subject = new ApplyCodeActionTool(registry, service, new ApplyPipeline());
+		var getActions = new GetCodeActionsTool(Registry, service);
+		var subject = new ApplyCodeActionTool(Registry, service, new ApplyPipeline());
 		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "unused");
 
 		string actions = await getActions.GetCodeActions(solutionPath, IndexRelativePath, line, column);
@@ -131,13 +127,11 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenFixingACompilerDiagnosticInACshtmlFileWithCheckOnly_ThenNothingIsWritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
 		string before = await ReadAsync(solutionPath, IndexRelativePath);
 		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "unused");
 
-		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", line, column, checkOnly: true);
+		string result = await TestServices.ApplyCodeFix(Registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", line, column, checkOnly: true);
 
 		Assert.Contains("applied=N", result);
 		Assert.Contains(result.Split('\n'), entry => entry.TrimStart('\t') == "Index.cshtml");
@@ -147,12 +141,10 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenFixingACompilerDiagnosticInACshtmlFile_ThenTheCshtmlFileIsRewrittenOnDisk()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
 		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "unused");
 
-		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", line, column);
+		string result = await TestServices.ApplyCodeFix(Registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", line, column);
 
 		Assert.Contains("applied=Y", result);
 		Assert.DoesNotContain("unused", await ReadAsync(solutionPath, IndexRelativePath));
@@ -161,12 +153,10 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenFixingIDE0005InACshtmlFile_ThenTheUnusedUsingLineAtThePositionIsRemoved()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
 		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "System.CodeDom");
 
-		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "IDE0005", line, column);
+		string result = await TestServices.ApplyCodeFix(Registry).ApplyCodeFix(solutionPath, IndexRelativePath, "IDE0005", line, column);
 
 		Assert.Contains("applied=Y", result);
 		string index = await ReadAsync(solutionPath, IndexRelativePath);
@@ -177,13 +167,11 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenFixingIDE0005OnAUsedCshtmlUsingLine_ThenItIsNotFoundAndNothingIsWritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
 		string before = await ReadAsync(solutionPath, IndexRelativePath);
 		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "System.Text");
 
-		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "IDE0005", line, column);
+		string result = await TestServices.ApplyCodeFix(Registry).ApplyCodeFix(solutionPath, IndexRelativePath, "IDE0005", line, column);
 
 		Assert.Contains("error=NotFound", result);
 		Assert.Equal(before, await ReadAsync(solutionPath, IndexRelativePath));
@@ -236,12 +224,10 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenRemovingUnusedUsingsFromACshtmlFile_ThenOnlyItsOwnUnusedDirectiveIsRemoved()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
 		string imports = await ReadAsync(solutionPath, "CshtmlLib/Views/_ViewImports.cshtml");
 
-		string result = await TestServices.RemoveUnusedUsings(registry).RemoveUnusedUsings(solutionPath, IndexRelativePath);
+		string result = await TestServices.RemoveUnusedUsings(Registry).RemoveUnusedUsings(solutionPath, IndexRelativePath);
 
 		Assert.Contains("applied=Y", result);
 		Assert.Contains("removedCount=1", result);
@@ -254,12 +240,10 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenRemovingUnusedUsingsAcrossTheSolution_ThenRazorFilesAreIncludedAndImportsAreLeftAlone()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
 		string imports = await ReadAsync(solutionPath, "CshtmlLib/Views/_ViewImports.cshtml");
 
-		string result = await TestServices.RemoveUnusedUsings(registry).RemoveUnusedUsings(solutionPath);
+		string result = await TestServices.RemoveUnusedUsings(Registry).RemoveUnusedUsings(solutionPath);
 
 		Assert.Contains("applied=Y", result);
 		Assert.Contains(result.Split('\n'), entry => entry.TrimStart('\t') == "Index.cshtml");
@@ -309,10 +293,8 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenExtractingALocalFunctionFromACshtmlFunctionsBlock_ThenTheCshtmlFileIsRewrittenOnDisk()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 		(int line, int column, int endLine, int endColumn) = await GreetingSelectionAsync(solutionPath);
 
 		string result = await subject.ExtractMethod(solutionPath, IndexRelativePath, line, column, endLine, endColumn, methodName: "AppendGreeting", asLocalFunction: true);
@@ -325,15 +307,13 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenASecondEditFollowsAFoldedCshtmlEdit_ThenItStillMapsWithoutAReload()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var extract = new ExtractMethodTool(registry, new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
+		var extract = new ExtractMethodTool(Registry, new ApplyPipeline());
 		(int line, int column, int endLine, int endColumn) = await GreetingSelectionAsync(solutionPath);
 
 		string extracted = await extract.ExtractMethod(solutionPath, IndexRelativePath, line, column, endLine, endColumn, methodName: "AppendGreeting", asLocalFunction: true);
 		(int unusedLine, int unusedColumn) = await PositionOfAsync(solutionPath, IndexRelativePath, "unused");
-		string fixedResult = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", unusedLine, unusedColumn);
+		string fixedResult = await TestServices.ApplyCodeFix(Registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", unusedLine, unusedColumn);
 
 		Assert.Contains("applied=Y", extracted);
 		Assert.True(fixedResult.Contains("applied=Y"), fixedResult);
@@ -369,10 +349,8 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenRoslynCannotAddAMethodToACshtmlView_ThenTheLocalFunctionAlternativeIsSuggested()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 		(int line, int column, int endLine, int endColumn) = await GreetingSelectionAsync(solutionPath);
 		string before = await ReadAsync(solutionPath, IndexRelativePath);
 
@@ -427,10 +405,8 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenChangingTheSignatureOfACshtmlMethod_ThenTheDeclarationAndCallSitesAreRewritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
+		var subject = new ChangeSignatureTool(Registry, new SymbolResolver(), new ApplyPipeline());
 
 		string result = await subject.ChangeSignature(solutionPath, $"{IndexTypeName}.Format", "int", "times", "1", callSiteArgument: "2");
 
@@ -445,10 +421,8 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenRenamingACshtmlMethod_ThenTheDeclarationAndCallSitesAreRewritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, $"{IndexTypeName}.Format", "Greet");
 
@@ -463,10 +437,8 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenRenamingACshtmlMethodParameter_ThenTheCshtmlFileIsRewritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameParameterTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
+		var subject = new RenameParameterTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameParameter(solutionPath, $"{IndexTypeName}.Format", "name", "who");
 
@@ -479,10 +451,8 @@ public class RazorSourceToolTests
 	[Fact]
 	public async Task WhenPatchingACshtmlFile_ThenItIsApplied()
 	{
-		string solutionPath = TestSolutions.CreateScratchCshtmlSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
+		var subject = new ApplyPatchTool(Registry);
 		string patch =
 			$"--- a/{IndexRelativePath}\n+++ b/{IndexRelativePath}\n@@ -6,1 +6,1 @@\n-<p>@greeting</p>\n+<p><b>@greeting</b></p>\n";
 

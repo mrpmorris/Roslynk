@@ -5,7 +5,7 @@ using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.Symbols.GetMembersTests;
 
-public class GetMembersTests
+public class GetMembersTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenATypesMembersAreRequested_ThenItsPublicMethodsAreReturned()
@@ -190,7 +190,7 @@ public class GetMembersTests
 	[Fact]
 	public async Task WhenASourceTypeHasExplicitPropertyAndEventAccessors_ThenOnlyTheirLeavesAreReturned()
 	{
-		string solution = TestSolutions.CreateScratchSimpleSolution();
+		string solution = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string library = Path.Combine(Path.GetDirectoryName(solution)!, "SimpleLibrary");
 		await File.WriteAllTextAsync(Path.Combine(library, "AccessorProbe.cs"), """
 			namespace SimpleLibrary;
@@ -216,9 +216,8 @@ public class GetMembersTests
 			}
 			""");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solution);
-		var subject = new GetMembersTool(registry, new SymbolResolver(), new ProjectionService());
+		await Registry.GetOrAddAsync(solution);
+		var subject = new GetMembersTool(Registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetMembers(solution, "SimpleLibrary.AccessorProbe");
 
@@ -262,8 +261,8 @@ public class GetMembersTests
 		bool includeNestedTypes = true,
 		bool countOnly = false)
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
-		var subject = new GetMembersTool(registry, new SymbolResolver(), new ProjectionService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
+		var subject = new GetMembersTool(Registry, new SymbolResolver(), new ProjectionService());
 
 		return await subject.GetMembers(
 			TestSolutions.Simple,

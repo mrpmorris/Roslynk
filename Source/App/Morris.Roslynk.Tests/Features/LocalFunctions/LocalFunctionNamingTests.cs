@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.CodeAnalysis;
 using Microsoft.Extensions.DependencyInjection;
 using Morris.Roslynk.Features.Callers.GetCallers;
@@ -26,7 +26,7 @@ namespace Morris.Roslynk.Tests.Features.LocalFunctions;
 /// local function declared inside another: LocalFunctionLib.ParentClass.Widget.Method1.localMethod.inner.
 /// Every name-based tool resolves that form, and every name a tool emits for a local function is one it accepts.
 /// </summary>
-public class LocalFunctionNamingTests
+public class LocalFunctionNamingTests : MutatingTestBase
 {
 	private const string Widget = "LocalFunctionLib.ParentClass.Widget";
 	private const string LocalMethod = Widget + ".Method1.localMethod";
@@ -126,8 +126,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenGettingTheBodyOfALocalFunctionInsideALocalFunction_ThenItsSourceIsReturnedVerbatim()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
-		var subject = new GetSymbolBodyTool(registry, new SymbolResolver(), new ProjectionService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
+		var subject = new GetSymbolBodyTool(Registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetSymbolBody(TestSolutions.LocalFunctions, Inner);
 
@@ -137,8 +137,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenGettingALocalFunctionSymbol_ThenItsKindAndDeclarationAreReported()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
-		var subject = new GetSymbolTool(registry, new SymbolResolver(), new ProjectionService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
+		var subject = new GetSymbolTool(Registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetSymbol(TestSolutions.LocalFunctions, LocalMethod);
 
@@ -148,8 +148,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenAnAmbiguousLocalFunctionIsRequested_ThenTheCandidatesAreTheQualifiedOverloads()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
-		var subject = new GetSymbolBodyTool(registry, new SymbolResolver(), new ProjectionService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
+		var subject = new GetSymbolBodyTool(Registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetSymbolBody(TestSolutions.LocalFunctions, Widget + ".Method2.helper");
 
@@ -160,8 +160,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenFindingReferencesToANestedLocalFunction_ThenTheReferenceNestsUnderItsContainingLocalFunction()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
-		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
+		var subject = new FindReferencesTool(Registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindReferences(TestSolutions.LocalFunctions, Inner);
 
@@ -175,8 +175,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenGettingTheCallersOfANestedLocalFunction_ThenTheCallingLocalFunctionNestsUnderItsMethod()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
-		var subject = new GetCallersTool(registry, new SymbolResolver(), new ProjectionService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
+		var subject = new GetCallersTool(Registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetCallers(TestSolutions.LocalFunctions, Inner);
 
@@ -189,8 +189,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenSearchingForALocalFunctionName_ThenTheLocalFunctionIsListedUnderItsContainers()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
-		var subject = new SearchSymbolsTool(registry, new ProjectionService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
+		var subject = new SearchSymbolsTool(Registry, new ProjectionService());
 
 		string result = await subject.SearchSymbols(TestSolutions.LocalFunctions, "inner");
 
@@ -200,8 +200,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenFindingTheDefinitionOfANestedLocalFunctionCall_ThenItsFullNameIsReturned()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
-		var subject = new FindDefinitionTool(registry, new SymbolResolver(), new ProjectionService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
+		var subject = new FindDefinitionTool(Registry, new SymbolResolver(), new ProjectionService());
 
 		// Line 13 is 'int length = inner(p1);'.
 		string result = await subject.FindDefinition(TestSolutions.LocalFunctions, FixtureFile, 13, 19);
@@ -212,8 +212,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenListingTheMembersOfANestedClass_ThenEachMembersLocalFunctionsNestBeneathIt()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
-		var subject = new GetMembersTool(registry, new SymbolResolver(), new ProjectionService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
+		var subject = new GetMembersTool(Registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetMembers(TestSolutions.LocalFunctions, Widget);
 
@@ -236,14 +236,14 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenBatchingQueriesOnLocalFunctions_ThenEverySlotResolves()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.LocalFunctions);
 		var provider = new ServiceCollection()
-			.AddSingleton(registry)
+			.AddSingleton(Registry)
 			.AddSingleton<SymbolResolver>()
 			.AddSingleton<ProjectionService>()
 			.AddSingleton<ConditionalCoverage>()
 			.BuildServiceProvider();
-		var subject = new MultiQueryTool(provider, registry);
+		var subject = new MultiQueryTool(provider, Registry);
 
 		string envelope = await subject.MultiQuery(
 			TestSolutions.LocalFunctions,
@@ -262,10 +262,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenRenamingAParameterOfALocalFunctionInANestedClass_ThenTheDeclarationAndUsesAreRenamed()
 	{
-		string solutionPath = TestSolutions.CreateScratchLocalFunctionSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameParameterTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchLocalFunctionSolution());
+		var subject = new RenameParameterTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameParameter(solutionPath, LocalMethod, "p1", "value");
 
@@ -280,10 +278,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenRenamingAParameterOfALocalFunctionInsideALocalFunction_ThenOnlyThatFunctionChanges()
 	{
-		string solutionPath = TestSolutions.CreateScratchLocalFunctionSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameParameterTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchLocalFunctionSolution());
+		var subject = new RenameParameterTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameParameter(solutionPath, Inner, "text", "word");
 
@@ -297,10 +293,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenRenamingAParameterOfAnAmbiguousLocalFunction_ThenTheOverloadCandidatesAreReturned()
 	{
-		string solutionPath = TestSolutions.CreateScratchLocalFunctionSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameParameterTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchLocalFunctionSolution());
+		var subject = new RenameParameterTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 		string before = await ReadAsync(solutionPath);
 
 		string ambiguous = await subject.RenameParameter(solutionPath, Widget + ".Method2.helper", "text", "value");
@@ -317,10 +311,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenRenamingALocalFunctionInsideALocalFunction_ThenItsDeclarationAndCallAreRenamed()
 	{
-		string solutionPath = TestSolutions.CreateScratchLocalFunctionSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchLocalFunctionSolution());
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, Inner, "Measure");
 
@@ -334,10 +326,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenAddingAParameterToALocalFunctionInsideALocalFunction_ThenItsCallSiteIsUpdated()
 	{
-		string solutionPath = TestSolutions.CreateScratchLocalFunctionSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchLocalFunctionSolution());
+		var subject = new ChangeSignatureTool(Registry, new SymbolResolver(), new ApplyPipeline());
 
 		string result = await subject.ChangeSignature(solutionPath, Inner, "int", "factor", "1", callSiteArgument: "2");
 
@@ -352,10 +342,8 @@ public class LocalFunctionNamingTests
 	[Fact]
 	public async Task WhenExtractingALocalFunctionFromALocalFunctionInsideALocalFunction_ThenItsFullNameIsReported()
 	{
-		string solutionPath = TestSolutions.CreateScratchLocalFunctionSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchLocalFunctionSolution());
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 
 		// Line 18 is '\t\t\t\t\treturn text.Length;'; select the expression 'text.Length'.
 		string result = await subject.ExtractMethod(solutionPath, FixtureFile, 18, 13, 18, 24, methodName: "LengthOf", asLocalFunction: true);
@@ -365,7 +353,7 @@ public class LocalFunctionNamingTests
 		Assert.Contains($"symbolName={InnerSignature}.LengthOf(string)", result);
 
 		// The reported name resolves straight back to the new local function.
-		Solution solution = registry.GetOrBegin(solutionPath).CurrentModel.Solution!;
+		Solution solution = Registry.GetOrBegin(solutionPath).CurrentModel.Solution!;
 		IMethodSymbol extracted = await ResolveSingleAsync(solution, $"{Inner}.LengthOf");
 		Assert.Equal(MethodKind.LocalFunction, extracted.MethodKind);
 	}
@@ -374,8 +362,8 @@ public class LocalFunctionNamingTests
 
 	private static async Task<Solution> LoadAsync(string solutionPath)
 	{
-		var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var Registry = new InstanceRegistry();
+		RoslynInstance instance = await Registry.GetOrAddAsync(solutionPath);
 		return instance.CurrentModel.Solution!;
 	}
 

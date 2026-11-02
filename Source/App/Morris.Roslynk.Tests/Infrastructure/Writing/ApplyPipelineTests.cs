@@ -1,16 +1,16 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Writing;
 
-public class ApplyPipelineTests
+public class ApplyPipelineTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenARazorFileOnDiskDiffersFromTheLoadedText_ThenTheWriteIsRefusedAsStale()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string counterPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Counter.razor");
 
 		using var registry = new InstanceRegistry();
@@ -34,7 +34,7 @@ public class ApplyPipelineTests
 	[Fact]
 	public async Task WhenAnAdditionalDocumentChanges_ThenItsPathIsListedForCheckOnly()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string counterPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Counter.razor");
 
 		using var registry = new InstanceRegistry();
@@ -54,7 +54,7 @@ public class ApplyPipelineTests
 	[Fact]
 	public async Task WhenAChangedDocumentWasEditedAfterTheBaseSnapshot_ThenTheWriteIsRefusedAsStale()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string greeterPath = Directory.EnumerateFiles(Path.GetDirectoryName(solutionPath)!, "Greeter.cs", SearchOption.AllDirectories).First();
 
 		using var registry = new InstanceRegistry();
@@ -75,7 +75,7 @@ public class ApplyPipelineTests
 	[Fact]
 	public async Task WhenOnlyAnUnrelatedDocumentChangedAfterTheBaseSnapshot_ThenTheWriteSucceeds()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string directory = Path.GetDirectoryName(solutionPath)!;
 		string greeterPath = Directory.EnumerateFiles(directory, "Greeter.cs", SearchOption.AllDirectories).First();
 		string widgetPath = Directory.EnumerateFiles(directory, "Widget.cs", SearchOption.AllDirectories).First();

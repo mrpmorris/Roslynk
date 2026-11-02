@@ -1,11 +1,11 @@
-using Morris.Roslynk.Features.Solutions.GetSolutionStatus;
+﻿using Morris.Roslynk.Features.Solutions.GetSolutionStatus;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Outlines;
 using Morris.Roslynk.Infrastructure.Watching;
 
 namespace Morris.Roslynk.Tests.Features.Solutions.GetSolutionStatusTests;
 
-public class GetSolutionStatusTests
+public class GetSolutionStatusTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenTheFileWatcherReportedAnError_ThenGetSolutionStatusListsIt()
@@ -67,10 +67,8 @@ public class GetSolutionStatusTests
 	[Fact]
 	public async Task WhenTheSolutionHasLoadDiagnostics_ThenGetSolutionStatusListsTheirMessages()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new GetSolutionStatusTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator());
+		var subject = new GetSolutionStatusTool(Registry);
 
 		string result = subject.GetSolutionStatus();
 
@@ -110,10 +108,8 @@ public class GetSolutionStatusTests
 	[Fact]
 	public async Task WhenAllLoadDiagnosticsAreRequested_ThenTheMessagesAreStillListed()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new GetSolutionStatusTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator());
+		var subject = new GetSolutionStatusTool(Registry);
 
 		string result = subject.GetSolutionStatus(allLoadDiagnostics: true);
 

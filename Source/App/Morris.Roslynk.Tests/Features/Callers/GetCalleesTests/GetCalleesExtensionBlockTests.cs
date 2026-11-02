@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.Callers.GetCallees;
+﻿using Morris.Roslynk.Features.Callers.GetCallees;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
@@ -10,7 +10,7 @@ namespace Morris.Roslynk.Tests.Features.Callers.GetCalleesTests;
 /// parameter list does not include the receiver (unlike a classic <c>this</c> extension method). The scratch
 /// SimpleSolution targets net8.0, so the test raises its LangVersion to 14.
 /// </summary>
-public class GetCalleesExtensionBlockTests
+public class GetCalleesExtensionBlockTests : MutatingTestBase
 {
 	private const string Source = """
 		using System.Collections.Generic;
@@ -40,16 +40,15 @@ public class GetCalleesExtensionBlockTests
 	[Fact]
 	public async Task WhenAnExtensionBlockMemberIsCalled_ThenItIsReportedAsDeclaredInTheBlock()
 	{
-		string solution = TestSolutions.CreateScratchSimpleSolution();
+		string solution = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string library = Path.Combine(Path.GetDirectoryName(solution)!, "SimpleLibrary");
 		string project = Path.Combine(library, "SimpleLibrary.csproj");
 		await File.WriteAllTextAsync(project, (await File.ReadAllTextAsync(project))
 			.Replace("<Nullable>enable</Nullable>", "<Nullable>enable</Nullable><LangVersion>14</LangVersion>"));
 		await File.WriteAllTextAsync(Path.Combine(library, "Ext14.cs"), Source);
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solution);
-		var subject = new GetCalleesTool(registry, new SymbolResolver(), new ProjectionService());
+		await Registry.GetOrAddAsync(solution);
+		var subject = new GetCalleesTool(Registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.GetCallees(solution, "SimpleLibrary.Ext14.User.Run");
 

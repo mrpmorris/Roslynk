@@ -7,17 +7,16 @@ using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Features.References.RenameSymbolTests;
 
-public class RenameSymbolTests
+public class RenameSymbolTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenRenamingAType_ThenItsDeclarationAndReferencesAreRewrittenOnDisk()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string libraryDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, "SimpleLibrary.Greeter", "Welcomer");
 
@@ -36,8 +35,8 @@ public class RenameSymbolTests
 	[Fact]
 	public async Task WhenTheNewNameIsNotAValidIdentifier_ThenItIsRefusedAndNothingIsWritten()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(TestSolutions.Simple, "SimpleLibrary.Greeter", "1nvalid");
 
@@ -59,12 +58,11 @@ public class RenameSymbolTests
 	[Fact]
 	public async Task WhenAnOverloadIsTargetedBySignature_ThenOnlyThatOverloadIsRenamed()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string libraryDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, "SimpleLibrary.Ledger.Add(int, int)", "AddRepeatedly");
 
@@ -80,8 +78,8 @@ public class RenameSymbolTests
 	[Fact]
 	public async Task WhenTheNameMatchesSeveralOverloads_ThenAmbiguousCandidatesAreDistinguishable()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(TestSolutions.Simple, "SimpleLibrary.Ledger.Add", "Accumulate");
 
@@ -92,12 +90,11 @@ public class RenameSymbolTests
 	[Fact]
 	public async Task WhenAGenericTypeIsNamedByItsBareName_ThenTheGenericTypeIsTargeted()
 	{
-		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchMultiTargetSolution());
 		string projectDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "Multi");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, "Repro.Box", "Crate", checkOnly: true);
 
@@ -114,13 +111,12 @@ public class RenameSymbolTests
 	[Fact]
 	public async Task WhenARenamedFileHasAUtf8Bom_ThenTheBomIsPreserved()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string greeterPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "Greeter.cs");
 		await File.WriteAllTextAsync(greeterPath, await File.ReadAllTextAsync(greeterPath), new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, "SimpleLibrary.Greeter", "Welcomer");
 
@@ -134,12 +130,11 @@ public class RenameSymbolTests
 	[Fact]
 	public async Task WhenARenamedFileHasNoBom_ThenNoBomIsAdded()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string callerPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "Caller.cs");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, "SimpleLibrary.Greeter", "Welcomer");
 

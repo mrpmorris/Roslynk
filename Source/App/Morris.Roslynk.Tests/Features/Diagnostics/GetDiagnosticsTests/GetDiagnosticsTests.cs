@@ -1,16 +1,16 @@
-using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
+﻿using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 
 namespace Morris.Roslynk.Tests.Features.Diagnostics.GetDiagnosticsTests;
 
-public class GetDiagnosticsTests
+public class GetDiagnosticsTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenASolutionHasACompileError_ThenItIsReturnedAsAnError()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeErrors: true);
 
@@ -23,8 +23,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenSeveritiesAreNotWidened_ThenOnlyErrorsAreReturnedButTheCountsStillSeeWarnings()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeErrors: true);
 
@@ -35,8 +35,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenWarningsAreIncluded_ThenTheyAppearAlongsideErrors()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeWarnings: true);
@@ -123,8 +123,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenFilteredByIds_ThenOnlyThoseIdsAreReturned()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, ids: ["CS0029"]);
@@ -138,8 +138,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenIdsDifferInCase_ThenTheyStillMatch()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, ids: ["cs0029"]);
@@ -152,8 +152,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenMaxSizeIsExceeded_ThenTheFirstEntriesAreKeptAndCountsStayComplete()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeWarnings: true, includeAnalyzers: false, maxSize: 1);
@@ -190,10 +190,8 @@ public class GetDiagnosticsTests
 	{
 		// The scratch copy keeps both target frameworks: under Source/, Directory.Build.props forces the
 		// committed fixture to a single net10.0 target framework.
-		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchMultiTargetSolution());
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			solutionPath, includeErrors: true, includeAnalyzers: false, projectName: "Multi");
@@ -211,10 +209,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenProjectNameCarriesTheExtensionOrCase_ThenItStillMatches()
 	{
-		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchMultiTargetSolution());
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string withExtension = await subject.GetDiagnostics(
 			solutionPath, includeErrors: true, includeAnalyzers: false, projectName: "Multi.csproj");
@@ -231,10 +227,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenProjectNameMatchesNothing_ThenNotFoundOffersCandidates()
 	{
-		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchMultiTargetSolution());
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			solutionPath, includeErrors: true, includeAnalyzers: false, projectName: "Nope");
@@ -251,8 +245,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenFilePathMatchesNoDocument_ThenNotFoundOffersCandidates()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, filePath: "Nope/Missing.cs");
@@ -279,8 +273,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenMaxSizeIsNegative_ThenTheResultIsHeadersOnly()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, maxSize: -5);
@@ -346,8 +340,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenNoFiltersAreSupplied_ThenTheOutputIsUnchanged()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeErrors: true, includeAnalyzers: false);
 
@@ -388,8 +382,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenSummaryOnlyIsRequestedWithoutSeverityFlags_ThenNonHiddenIdsAreListedAndCountsStayComplete()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeAnalyzers: false, summaryOnly: true);
 
@@ -470,8 +464,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenFilteredByAPrivateFixTriggerId_ThenNothingMatches()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken,
@@ -488,8 +482,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenCountOnlyIsRequested_ThenTheHeadersAndCountAreReturnedWithoutRows()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, countOnly: true);

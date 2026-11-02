@@ -1,17 +1,17 @@
-using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
+﻿using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Tests.Features.Diagnostics.GeneratorDiagnosticsTests;
 
-public class GeneratorDiagnosticsTests
+public class GeneratorDiagnosticsTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenAProjectReferencesASourceGenerator_ThenGeneratedTypesAreInTheCompilation()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Generator);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Generator);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Generator);
 
@@ -55,11 +55,9 @@ public class GeneratorDiagnosticsTests
 	[Fact]
 	public async Task WhenTheGeneratorIsBuiltAfterLoad_ThenTheNextCallCompilesItsGeneratedCodeWithoutReload()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator());
 		SolutionWorkspace? loaded = instance.Workspace;
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 		Assert.Contains("errors=2", await subject.GetDiagnostics(solutionPath, includeErrors: true, includeAnalyzers: false));
 
 		TestSolutions.BuildScratchGenerator(solutionPath);

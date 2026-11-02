@@ -5,15 +5,13 @@ using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Features.Signatures.ChangeSignatureTests;
 
-public class ChangeSignatureTests
+public class ChangeSignatureTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenAddingAParameterWithACallSiteValue_ThenTheMethodAndItsCallsAreUpdated()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ChangeSignatureTool(Registry, new SymbolResolver(), new ApplyPipeline());
 
 		string result = await subject.ChangeSignature(
 			solutionPath, "SimpleLibrary.Widget.Compute", "int", "factor", "1", callSiteArgument: "1");
@@ -28,10 +26,8 @@ public class ChangeSignatureTests
 	[Fact]
 	public async Task WhenAddingAParameterWithCheckOnly_ThenNothingIsWritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ChangeSignatureTool(Registry, new SymbolResolver(), new ApplyPipeline());
 		string widget = FindFile(solutionPath, "Widget.cs");
 		string before = await File.ReadAllTextAsync(widget);
 
@@ -46,8 +42,8 @@ public class ChangeSignatureTests
 	[Fact]
 	public async Task WhenTheMethodImplementsAnInterfaceMember_ThenItIsNotSupported()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
-		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
+		var subject = new ChangeSignatureTool(Registry, new SymbolResolver(), new ApplyPipeline());
 
 		string result = await subject.ChangeSignature(
 			TestSolutions.Simple, "SimpleLibrary.Greeter.Greet", "int", "times", "1");
@@ -58,8 +54,8 @@ public class ChangeSignatureTests
 	[Fact]
 	public async Task WhenNoDefaultValueIsGiven_ThenItIsRefused()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
-		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
+		var subject = new ChangeSignatureTool(Registry, new SymbolResolver(), new ApplyPipeline());
 
 		string result = await subject.ChangeSignature(
 			TestSolutions.Simple, "SimpleLibrary.Widget.Compute", "int", "factor", "");
@@ -70,8 +66,8 @@ public class ChangeSignatureTests
 	[Fact]
 	public async Task WhenTheMethodIsNotFound_ThenNotFoundIsReturned()
 	{
-		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
-		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
+		var subject = new ChangeSignatureTool(Registry, new SymbolResolver(), new ApplyPipeline());
 
 		string result = await subject.ChangeSignature(
 			TestSolutions.Simple, "SimpleLibrary.DoesNotExist", "int", "factor", "1");
@@ -96,10 +92,8 @@ public class ChangeSignatureTests
 	[Fact]
 	public async Task WhenAnOverloadIsTargetedBySignature_ThenThatOverloadIsChanged()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ChangeSignatureTool(Registry, new SymbolResolver(), new ApplyPipeline());
 
 		string result = await subject.ChangeSignature(
 			solutionPath, "SimpleLibrary.Ledger.Add(int, int)", "int", "step", "1", callSiteArgument: "1");

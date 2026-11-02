@@ -1,22 +1,19 @@
 ﻿using System.Text.RegularExpressions;
 using Morris.Roslynk.Features.References.RenameSymbol;
-using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Features.References.RenameSymbolTests;
 
-public class ConditionalRenameTests
+public class ConditionalRenameTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenRenamingASymbolUsedInBothBranches_ThenBothIfAndElseOccurrencesAreRewritten()
 	{
 		// A scratch copy, because rename writes to disk; Caller.Run calls Target.Ping in both #if DEBUG and #else.
-		string scratch = TestSolutions.CreateScratchConditionalSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(scratch);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var (_, scratch) = await ScratchAsync(() => TestSolutions.CreateScratchConditionalSolution());
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(scratch, "ConditionalLib.Target.Ping", "Pong");
 
