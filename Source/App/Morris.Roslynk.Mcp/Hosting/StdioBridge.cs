@@ -12,7 +12,11 @@ namespace Morris.Roslynk.Mcp.Hosting;
 /// </summary>
 public static class StdioBridge
 {
-	public static async Task RunAsync()
+	/// <summary>
+	/// Bridges to Roslynk's own endpoint, or, with <paramref name="pluginName"/>, to that plugin's endpoint
+	/// (<c>roslynk stdio --plugin &lt;name&gt;</c>), which serves the plugin's tools instead of Roslynk's.
+	/// </summary>
+	public static async Task RunAsync(string? pluginName = null)
 	{
 		// Same loader and object shape as the daemon, so bridge and daemon cannot disagree on the port.
 		int port = RoslynkSettings.Load().EffectivePort;
@@ -21,7 +25,7 @@ public static class StdioBridge
 
 		var transport = new HttpClientTransport(new HttpClientTransportOptions
 		{
-			Endpoint = new Uri($"http://localhost:{port}"),
+			Endpoint = new Uri($"http://localhost:{port}{(pluginName is null ? "" : PluginEndpoints.PathFor(pluginName))}"),
 			TransportMode = HttpTransportMode.StreamableHttp,
 			Name = "Roslynk daemon",
 		});

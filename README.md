@@ -322,6 +322,7 @@ All `Roslynk:*` settings come from one typed object bound from the `Roslynk` sec
 | `Roslynk:LoadWaitSeconds` | 30 | How long solution-scoped tools wait server-side for an in-flight initial load before returning `error=Indexing`; `0` means do not wait. |
 | `Roslynk:IdleEvictionMinutes` | 30 | Minutes a solution may sit unused before the daemon evicts it; 0 disables eviction. |
 | `Roslynk:EvictionCheckMinutes` | 5 | Minutes between idle-eviction sweeps; floored at 1. |
+| `Roslynk:PluginsPath` | `Roslynk/Plugins` under local application data | Folder the daemon loads plugins from at startup (see [Plugins](#plugins)). |
 
 To change a setting, copy or rename `appsettings.json.example` to `appsettings.json` beside the executable and uncomment what you need, then restart the daemon. The loader accepts JavaScript/C#-style comments, but VS Code flags them as errors in `.json` files unless you associate the file with JSONC in your settings:
 
@@ -329,9 +330,30 @@ To change a setting, copy or rename `appsettings.json.example` to `appsettings.j
 "files.associations": { "appsettings*.json": "jsonc" }
 ```
 
-An `appsettings.json` beside the executable lives inside the tool's version directory (`~/.dotnet/tools/.store/roslynk/<version>/...`), so the next `dotnet tool update` extracts a fresh tool and silently loses your edit. For durable overrides use the equivalent environment variables, which the same configuration reads: `Roslynk__Port`, `Roslynk__MaxResponseChars`, `Roslynk__LoadWaitSeconds`, `Roslynk__IdleEvictionMinutes`, `Roslynk__EvictionCheckMinutes`.
+An `appsettings.json` beside the executable lives inside the tool's version directory (`~/.dotnet/tools/.store/roslynk/<version>/...`), so the next `dotnet tool update` extracts a fresh tool and silently loses your edit. For durable overrides use the equivalent environment variables, which the same configuration reads: `Roslynk__Port`, `Roslynk__MaxResponseChars`, `Roslynk__LoadWaitSeconds`, `Roslynk__IdleEvictionMinutes`, `Roslynk__EvictionCheckMinutes`, `Roslynk__PluginsPath`.
 
 A shared daemon serves every client with one set of values — set the smallest response cap your clients need.
+
+### Plugins
+
+A plugin runs inside the daemon and reads the solutions it has loaded, the same in-memory models Roslynk's tools use, so a tool built on Roslyn does not load and compile a solution a second time. A plugin references the `Roslynk.Plugins` package and implements `IRoslynkPlugin`:
+
+```csharp
+public sealed class CallGraphPlugin : IRoslynkPlugin
+{
+    public async Task RunAsync(ISolutionProvider solutions, CancellationToken stopping)
+    {
+        GetModelResponse model = await solutions.GetModelAsync("/src/App/App.slnx", stopping);
+        // model.Status, model.Model (a Roslyn Solution), model.ModelId (new with each snapshot)
+    }
+}
+```
+
+- **Installing.** Put the plugin's build output in a folder of its own, named after its assembly, under the plugins folder (`Roslynk/Plugins/CallGraph/CallGraph.dll` beside its dependencies), and restart the daemon. A folder that fails to load is logged and skipped.
+- **Running.** The daemon creates each `IRoslynkPlugin` with its parameterless constructor and runs `RunAsync` for as long as it runs, cancelling `stopping` at shutdown. A plugin that throws is logged; the daemon and other plugins carry on.
+- **Reading solutions.** `ISolutionProvider.GetModelAsync` opens the solution if it is not open and waits as `open_solution` does, then returns its current model, `Building` with no model if the first load has not finished. Each call counts as use for idle eviction.
+- **Shared assemblies.** Each plugin loads in an isolation context of its own, but any assembly the daemon has (the contract, Roslyn, the MCP SDK) comes from the daemon, so build a plugin against the Roslyn version the daemon ships.
+- **Tools.** Public classes marked `[McpServerToolType]` in the plugin's assembly are served on the plugin's own endpoint, `/plugins/<name>`, not alongside Roslynk's tools. Their constructors can take `ISolutionProvider` and the plugin's `IRoslynkPlugin` instances. An MCP client connects with `roslynk stdio --plugin <name>`, which starts the daemon if needed, as plain `stdio` does.
 
 ## Run (Windows)
 

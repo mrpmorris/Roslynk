@@ -17,7 +17,11 @@
 		// 	"IdleEvictionMinutes": 30,
 		
 		// Minutes between idle-eviction sweeps; floored at 1.
-		// 	"EvictionCheckMinutes": 5
+		// 	"EvictionCheckMinutes": 5,
+
+		// Folder of plugins, each in a subfolder named after its assembly; defaults to Roslynk/Plugins under
+		// local application data.
+		// 	"PluginsPath": "/path/to/plugins"
 		
 	},
 	"Logging": {
