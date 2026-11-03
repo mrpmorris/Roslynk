@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 
@@ -57,6 +58,8 @@ internal static class TestSolutions
 		"GeneratorSolution",
 		"MultiTargetSolution",
 	};
+
+	private static readonly ConcurrentDictionary<string, Lazy<bool>> SourceRestores = new(StringComparer.OrdinalIgnoreCase);
 
 	// One registry for the whole test process. Committed fixtures are never written to, so every test
 	// that only reads one shares this registry's loaded snapshot (and Roslyn's compilation and
@@ -257,9 +260,11 @@ internal static class TestSolutions
 
 	private static string Prepare(params string[] relativeParts)
 	{
-		string path = Path.Combine([FindTestFixturesRoot(), .. relativeParts]);
+		string root = FindTestFixturesRoot();
+		string path = Path.Combine([root, .. relativeParts]);
 		if (FixturesNeedingRestore.Contains(relativeParts[0]))
-			Restore(path);
+			EnsureSourceRestored(relativeParts[0], Path.Combine(root, relativeParts[0]), Path.Combine(relativeParts[1..]));
+
 		return path;
 	}
 
@@ -280,6 +285,56 @@ internal static class TestSolutions
 	// One project at a time: a parallel restore of a solution whose projects reference each other can write the same
 	// project's restore files twice and fail with "already exists", which happens under load.
 	private static void Restore(string solutionPath) => RunDotnet("restore --disable-parallel", solutionPath);
+
+	/// <summary>
+	/// Restores a fixture once per process. Every scratch copy of it then clones that restore output
+	/// instead of spawning a restore of its own, which is what a copy paid for before.
+	/// </summary>
+	private static void EnsureSourceRestored(string fixtureName, string sourceDir, string solutionFile) =>
+		_ = SourceRestores.GetOrAdd(
+			fixtureName,
+			name => new Lazy<bool>(
+				() =>
+				{
+					Restore(Path.Combine(sourceDir, solutionFile));
+					return true;
+				},
+				LazyThreadSafetyMode.ExecutionAndPublication))
+			.Value;
+
+	/// <summary>
+	/// Copies the files a restore writes to the top of each <c>obj</c> folder into a scratch copy,
+	/// rewriting the fixture's absolute path to the copy's, so the copy has an assets file without
+	/// running a restore. A copy that is built by a test still re-restores: the copied
+	/// <c>project.nuget.cache</c> carries the old paths, so NuGet decides it is stale.
+	/// </summary>
+	private static void CloneRestoreOutputs(string sourceDir, string destDir)
+	{
+		foreach (string file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
+		{
+			string relative = Path.GetRelativePath(sourceDir, file);
+			string? parent = Path.GetDirectoryName(relative);
+			if (parent is null || !string.Equals(Path.GetFileName(parent), "obj", StringComparison.OrdinalIgnoreCase))
+				continue;
+
+			if (!IsRestoreOutput(Path.GetFileName(file)))
+				continue;
+
+			string text = File.ReadAllText(file);
+			if (text.Contains(sourceDir, StringComparison.OrdinalIgnoreCase))
+				text = text.Replace(sourceDir, destDir, StringComparison.OrdinalIgnoreCase);
+
+			string target = Path.Combine(destDir, relative);
+			Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+			File.WriteAllText(target, text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+		}
+	}
+
+	private static bool IsRestoreOutput(string name) =>
+		name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+		|| name.EndsWith(".props", StringComparison.OrdinalIgnoreCase)
+		|| name.EndsWith(".targets", StringComparison.OrdinalIgnoreCase)
+		|| name.EndsWith(".cache", StringComparison.OrdinalIgnoreCase);
 
 	private static void Build(string projectPath) => RunDotnet("build", projectPath);
 
@@ -451,7 +506,12 @@ internal static class TestSolutions
 		CopyExcludingBuildOutput(sourceDir, destDir);
 
 		string solutionPath = Path.Combine(destDir, solutionFile);
-		Restore(solutionPath);
+
+		// One restore per fixture, then a clone of its restore output for every copy, rather than a
+		// restore process per copy.
+		EnsureSourceRestored(fixtureName, sourceDir, solutionFile);
+		CloneRestoreOutputs(sourceDir, destDir);
+
 		return solutionPath;
 	}
 
