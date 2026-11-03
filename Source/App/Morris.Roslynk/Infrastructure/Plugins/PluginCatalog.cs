@@ -28,6 +28,10 @@ public sealed class PluginCatalog
 	public LoadedPlugin? Find(string name) =>
 		Plugins.FirstOrDefault(plugin => string.Equals(plugin.Name, name, StringComparison.OrdinalIgnoreCase));
 
+	/// <summary>Why the plugin folder named <paramref name="name"/> was skipped, or null.</summary>
+	public string? ErrorFor(string name) =>
+		Errors.FirstOrDefault(error => error.StartsWith(name + ": ", StringComparison.OrdinalIgnoreCase))?[(name.Length + 2)..];
+
 	/// <summary>The plugins in <paramref name="pluginsPath"/>; none when the folder does not exist.</summary>
 	public static PluginCatalog Load(string pluginsPath)
 	{
@@ -69,13 +73,15 @@ public sealed class PluginCatalog
 		if (!IsValidName(name))
 			throw new InvalidOperationException("A plugin folder's name may contain only letters, digits, '.', '-' and '_'.");
 
-		string assemblyPath = Path.Combine(folder, name + ".dll");
-		if (!File.Exists(assemblyPath))
-			throw new InvalidOperationException($"No {name}.dll in its folder.");
+		// Matched without regard to case, so a folder loads the same on Linux as on macOS and Windows.
+		string assemblyPath = Directory.EnumerateFiles(folder, "*.dll")
+			.FirstOrDefault(path => string.Equals(Path.GetFileName(path), name + ".dll", StringComparison.OrdinalIgnoreCase))
+			?? throw new InvalidOperationException($"No {name}.dll in its folder.");
+
+		if (PluginLoadContext.CheckSharedVersions(folder) is string versionProblem)
+			throw new InvalidOperationException(versionProblem);
 
 		Assembly assembly = new PluginLoadContext(assemblyPath).LoadFromAssemblyPath(assemblyPath);
-		if (PluginLoadContext.CheckSharedVersions(assembly) is string versionProblem)
-			throw new InvalidOperationException(versionProblem);
 
 		Type[] types = assembly.GetExportedTypes();
 

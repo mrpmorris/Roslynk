@@ -43,6 +43,28 @@ public class CreateTests
 	}
 
 	[Fact]
+	public void WhenAToolMethodIsNotPublic_ThenItIsServedAsRoslynksOwnWouldBe()
+	{
+		string plugins = TestPlugins.NewPluginsFolder();
+		TestPlugins.Write(plugins, "Internal", """
+			using ModelContextProtocol.Server;
+
+			namespace Internal;
+
+			[McpServerToolType]
+			public sealed class InternalTools
+			{
+				[McpServerTool(Name = "internal_tool")] internal static string InternalTool() => "internal";
+			}
+			""");
+		using ServiceProvider services = new ServiceCollection().BuildServiceProvider();
+
+		var subject = new PluginToolSets(PluginCatalog.Load(plugins), services);
+
+		Assert.Equal("internal_tool", Assert.Single(subject.For("Internal")!).ProtocolTool.Name);
+	}
+
+	[Fact]
 	public void WhenAToolMethodIsInheritedFromABaseClass_ThenItIsServed()
 	{
 		string plugins = TestPlugins.NewPluginsFolder();

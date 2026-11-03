@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Runtime.Loader;
 
 namespace Morris.Roslynk.Infrastructure.Plugins;
@@ -37,21 +39,39 @@ internal sealed class PluginLoadContext : AssemblyLoadContext
 	}
 
 	/// <summary>
-	/// Why <paramref name="assembly"/> cannot run in this daemon, or null: it references a shared assembly at a
-	/// higher version than the daemon has, which the runtime would refuse at first use, far from the cause.
+	/// Why the plugin in <paramref name="folder"/> cannot run in this daemon, or null: one of its assemblies
+	/// references a shared assembly at a higher version than the daemon has, which the runtime would refuse at
+	/// first use, far from the cause. Every assembly in the folder is read, without loading any of them.
 	/// </summary>
-	public static string? CheckSharedVersions(Assembly assembly)
+	public static string? CheckSharedVersions(string folder)
 	{
-		foreach (AssemblyName reference in assembly.GetReferencedAssemblies())
+		foreach (string path in Directory.EnumerateFiles(folder, "*.dll"))
 		{
-			if (reference.Name is not string name || reference.Version is not Version wanted || DaemonVersion(name) is not Version have)
-				continue;
+			if (DaemonVersion(Path.GetFileNameWithoutExtension(path)) is not null)
+				continue; // A copy of a shared assembly; the daemon's is used instead.
 
-			if (wanted > have)
-				return $"It was built against {name} {wanted}; this daemon has {have}. Build it against the versions the daemon ships.";
+			foreach ((string name, Version wanted) in References(path))
+			{
+				if (DaemonVersion(name) is Version have && wanted > have)
+					return $"{Path.GetFileName(path)} was built against {name} {wanted}; this daemon has {have}. Build it against the versions the daemon ships.";
+			}
 		}
 
 		return null;
+	}
+
+	private static IEnumerable<(string Name, Version Version)> References(string path)
+	{
+		using FileStream stream = File.OpenRead(path);
+		using var reader = new PEReader(stream);
+		if (!reader.HasMetadata)
+			return [];
+
+		MetadataReader metadata = reader.GetMetadataReader();
+		return metadata.AssemblyReferences
+			.Select(handle => metadata.GetAssemblyReference(handle))
+			.Select(reference => (metadata.GetString(reference.Name), reference.Version))
+			.ToArray();
 	}
 
 	protected override Assembly? Load(AssemblyName assemblyName)

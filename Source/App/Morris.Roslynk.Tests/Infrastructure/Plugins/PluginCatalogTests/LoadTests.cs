@@ -115,7 +115,43 @@ public class LoadTests
 
 		Assert.Empty(subject.Plugins);
 		string error = Assert.Single(subject.Errors);
-		Assert.StartsWith("TooNew: It was built against ModelContextProtocol.Core 99.0.0.0; this daemon has ", error);
+		Assert.StartsWith("TooNew: TooNew.dll was built against ModelContextProtocol.Core 99.0.0.0; this daemon has ", error);
+	}
+
+	[Fact]
+	public void WhenAPluginsOwnDependencyIsBuiltAgainstANewerSharedAssembly_ThenItIsReportedAtLoad()
+	{
+		string plugins = TestPlugins.NewPluginsFolder();
+		string folder = Path.Combine(plugins, "DeepTooNew");
+		string newer = TestPlugins.WriteAssembly(Path.Combine(plugins, "build"), "ModelContextProtocol.Core", """
+			[assembly: System.Reflection.AssemblyVersion("99.0.0.0")]
+			namespace ModelContextProtocol.Server;
+			[System.AttributeUsage(System.AttributeTargets.Class)]
+			public sealed class McpServerToolTypeAttribute : System.Attribute { }
+			""");
+		string core = TestPlugins.WriteAssembly(folder, "DeepTooNew.Core", """
+			namespace DeepTooNew.Core;
+			[ModelContextProtocol.Server.McpServerToolType]
+			public sealed class CoreTools { }
+			""", newer);
+		TestPlugins.WriteAssembly(folder, "DeepTooNew", """
+			using System.Threading;
+			using System.Threading.Tasks;
+			using Morris.Roslynk.Plugins;
+
+			namespace DeepTooNew;
+
+			public sealed class DeepTooNewPlugin : IRoslynkPlugin
+			{
+				public Task RunAsync(ISolutionProvider solutionProvider, CancellationToken stopping) => Task.CompletedTask;
+			}
+			""", core);
+		Directory.Delete(Path.Combine(plugins, "build"), recursive: true);
+
+		PluginCatalog subject = PluginCatalog.Load(plugins);
+
+		Assert.Empty(subject.Plugins);
+		Assert.StartsWith("DeepTooNew: DeepTooNew.Core.dll was built against ModelContextProtocol.Core 99.0.0.0", Assert.Single(subject.Errors));
 	}
 
 	[Fact]
@@ -141,6 +177,42 @@ public class LoadTests
 		PluginCatalog subject = PluginCatalog.Load(plugins);
 
 		Assert.Equal("Throws: Set THROWS_SOLUTION first.", Assert.Single(subject.Errors));
+		Assert.Equal("Set THROWS_SOLUTION first.", subject.ErrorFor("throws"));
+	}
+
+	[Fact]
+	public void WhenAPluginsStaticInitializerThrows_ThenItsOwnMessageIsReported()
+	{
+		string plugins = TestPlugins.NewPluginsFolder();
+		TestPlugins.Write(plugins, "StaticThrows", """
+			using System;
+			using System.Threading;
+			using System.Threading.Tasks;
+			using Morris.Roslynk.Plugins;
+
+			namespace StaticThrows;
+
+			public sealed class StaticThrowsPlugin : IRoslynkPlugin
+			{
+				static StaticThrowsPlugin() => throw new InvalidOperationException("Static setup failed.");
+
+				public Task RunAsync(ISolutionProvider solutionProvider, CancellationToken stopping) => Task.CompletedTask;
+			}
+			""");
+
+		Assert.Equal("StaticThrows: Static setup failed.", Assert.Single(PluginCatalog.Load(plugins).Errors));
+	}
+
+	[Fact]
+	public void WhenAPluginsAssemblyNameDiffersFromItsFolderOnlyInCase_ThenItStillLoads()
+	{
+		string plugins = TestPlugins.NewPluginsFolder();
+		TestPlugins.WriteAssembly(Path.Combine(plugins, "sample"), "Sample", SamplePlugin);
+
+		PluginCatalog subject = PluginCatalog.Load(plugins);
+
+		Assert.Empty(subject.Errors);
+		Assert.Equal("sample", Assert.Single(subject.Plugins).Name);
 	}
 
 	[Fact]

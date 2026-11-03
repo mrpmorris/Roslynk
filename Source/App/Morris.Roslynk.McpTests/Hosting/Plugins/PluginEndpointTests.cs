@@ -112,7 +112,7 @@ public class PluginEndpointTests
 	}
 
 	[Fact]
-	public async Task WhenAPluginsToolIsCalled_ThenItReadsModelsThroughTheProviderAndSeesItsPluginInstance()
+	public async Task WhenAPluginsToolIsCalled_ThenItReachesTheProviderAndItsPluginInstance()
 	{
 		await using PluginTestHost host = await PluginTestHost.StartAsync(("Echo", EchoPlugin));
 		await TaskOf(host.Instance("EchoPlugin"), "Started").WaitAsync(TimeSpan.FromSeconds(10));

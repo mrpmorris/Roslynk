@@ -10,7 +10,7 @@ using Morris.Roslynk.Mcp.Observability;
 // and pipes one MCP session to it over HTTP. `stdio --plugin <name>` pipes it to that plugin's endpoint.
 if (args is ["stdio", "--plugin", ..])
 {
-	if (args is not ["stdio", "--plugin", string pluginName, ..] || pluginName.StartsWith('-'))
+	if (args is not ["stdio", "--plugin", string pluginName, ..] || string.IsNullOrWhiteSpace(pluginName) || pluginName.StartsWith('-'))
 	{
 		await Console.Error.WriteLineAsync("Usage: roslynk stdio --plugin <name>");
 		Environment.ExitCode = 1;

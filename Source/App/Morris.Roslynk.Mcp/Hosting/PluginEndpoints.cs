@@ -73,8 +73,11 @@ public static class PluginEndpoints
 			IServiceProvider services = context.HttpContext.RequestServices;
 			string name = context.HttpContext.GetRouteValue(RouteParameter) as string ?? "";
 
-			if (services.GetRequiredService<PluginCatalog>().Find(name) is null)
-				return Results.NotFound($"No plugin named '{name}' is loaded. Plugins that failed to load are listed in the daemon's log.");
+			PluginCatalog catalog = services.GetRequiredService<PluginCatalog>();
+			if (catalog.Find(name) is null)
+				return Results.NotFound(catalog.ErrorFor(name) is string loadError
+					? $"Plugin '{name}' did not load: {loadError}"
+					: $"No plugin named '{name}' is loaded.");
 
 			if (services.GetRequiredService<PluginToolSets>().ErrorFor(name) is string error)
 				return Results.NotFound($"Plugin '{name}' serves no tools: {error}");

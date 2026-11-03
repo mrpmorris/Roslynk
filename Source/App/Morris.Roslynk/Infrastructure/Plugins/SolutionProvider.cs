@@ -21,12 +21,12 @@ public sealed class SolutionProvider : ISolutionProvider
 	{
 		ArgumentException.ThrowIfNullOrWhiteSpace(solutionId);
 
-		string fullPath = Path.GetFullPath(solutionId);
-		if (!File.Exists(fullPath))
-			return Faulted($"No solution file was found at '{fullPath}'.");
-
 		try
 		{
+			string fullPath = Path.GetFullPath(solutionId);
+			if (!File.Exists(fullPath))
+				return Faulted($"No solution file was found at '{fullPath}'.");
+
 			// GetOrBeginAsync touches the instance, so a plugin's reads count as use for idle eviction.
 			RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(fullPath, cancellationToken);
 			SolutionModel model = await instance.ReadModelAsync(cancellationToken);
@@ -41,8 +41,9 @@ public sealed class SolutionProvider : ISolutionProvider
 		{
 			throw;
 		}
-		catch (ObjectDisposedException)
+		catch (Exception exception) when (exception is ObjectDisposedException or OperationCanceledException)
 		{
+			// Not the caller's cancellation: the instance was closed (idle eviction, a reload) during the read.
 			return Faulted("The solution was closed while it was being read.");
 		}
 		catch (Exception exception)

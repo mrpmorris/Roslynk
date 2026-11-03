@@ -39,7 +39,9 @@ public static class StdioBridge
 		}
 		catch (HttpRequestException exception) when (pluginName is not null && exception.StatusCode == System.Net.HttpStatusCode.NotFound)
 		{
-			await Console.Error.WriteLineAsync($"No plugin named '{pluginName}' is loaded, or it serves no tools; the daemon's log says why.");
+			// The daemon's 404 says why (no such plugin, a load error, tools that could not be created); the
+			// SDK puts that body in the exception's message.
+			await Console.Error.WriteLineAsync($"Plugin '{pluginName}' is not available: {exception.Message}");
 			Environment.ExitCode = 1;
 			return;
 		}

@@ -53,7 +53,8 @@ public sealed class PluginToolSets
 
 		foreach (Type toolType in plugin.ToolTypes)
 		{
-			foreach (MethodInfo method in toolType.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static))
+			// Non-public too, as the SDK's own discovery (and so Roslynk's tools) does.
+			foreach (MethodInfo method in toolType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.Static))
 			{
 				if (!method.IsDefined(typeof(McpServerToolAttribute), inherit: false))
 					continue;

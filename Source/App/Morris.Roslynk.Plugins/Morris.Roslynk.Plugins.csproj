@@ -6,6 +6,10 @@
 		<PackageId>Roslynk.Plugins</PackageId>
 		<!-- CI overrides Version from the release tag; this is only the local-build fallback. -->
 		<Version>0.0.1-local</Version>
+		<!-- The assembly version is the contract's, not the release's: a plugin binds to it, so it moves only when
+		     the contract breaks. Following the release would make every patch release, and every daemon built
+		     from source, refuse plugins built against another release of an unchanged contract. -->
+		<AssemblyVersion>1.0.0.0</AssemblyVersion>
 		<Description>The contract a Roslynk plugin implements: run inside the Roslynk daemon and read the solutions it has loaded, without loading them again.</Description>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageProjectUrl>https://github.com/mrpmorris/Roslynk</PackageProjectUrl>
