@@ -10,8 +10,9 @@ namespace Morris.Roslynk.Mcp.Hosting;
 /// a one-line fix (a Windows path with an unescaped backslash) into repeated blind retries.
 /// </summary>
 /// <remarks>
-/// Only POSTs to the MCP route are inspected, and only when the body is non-empty. The body is buffered
-/// with <see cref="HttpRequest.EnableBuffering()"/> and rewound, so a valid request - including a chunked
+/// Only POSTs to the MCP routes (Roslynk's own and each plugin's) are inspected, and only when the body is
+/// non-empty. The body is buffered with <see cref="HttpRequest.EnableBuffering()"/> and rewound, so a valid
+/// request - including a chunked
 /// or streaming one - reaches the transport exactly as it arrived. Validation reads the raw UTF-8 bytes
 /// once and walks them with <see cref="Utf8JsonReader"/>: no decoded string and no document tree are
 /// built, so a valid body pays only for the single streaming pass. Everything else, including the
@@ -19,7 +20,7 @@ namespace Morris.Roslynk.Mcp.Hosting;
 /// </remarks>
 public static class McpBodyValidationExtensions
 {
-	/// <summary>The route <c>MapMcp()</c> maps by default; the only path this middleware inspects.</summary>
+	/// <summary>The route <c>MapMcp()</c> maps by default; with the plugins' endpoints, the paths this middleware inspects.</summary>
 	public const string McpPath = "/";
 
 	private const int InitialBufferSize = 16 * 1024;
@@ -34,9 +35,14 @@ public static class McpBodyValidationExtensions
 		return app.Use(ValidateMcpBodyAsync);
 	}
 
+	/// <summary><c>/plugins/&lt;name&gt;</c>, and not <c>/plugins</c> itself, which no endpoint serves.</summary>
+	private static bool IsPluginEndpoint(PathString path) =>
+		path.StartsWithSegments(PluginEndpoints.PathPrefix, out PathString rest) && rest.HasValue && rest.Value!.Length > 1;
+
 	private static async Task ValidateMcpBodyAsync(HttpContext context, RequestDelegate next)
 	{
-		if (!HttpMethods.IsPost(context.Request.Method) || context.Request.Path != McpPath)
+		if (!HttpMethods.IsPost(context.Request.Method)
+			|| (context.Request.Path != McpPath && !IsPluginEndpoint(context.Request.Path)))
 		{
 			await next(context);
 			return;

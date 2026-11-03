@@ -1,12 +1,26 @@
 using Morris.Roslynk;
 using Morris.Roslynk.Infrastructure.Observability;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Plugins;
 using Morris.Roslynk.Mcp;
 using Morris.Roslynk.Mcp.Hosting;
 using Morris.Roslynk.Mcp.Observability;
 
 // `stdio` runs the client-launched bridge instead of the daemon: it starts the daemon if needed
-// and pipes one MCP session to it over HTTP.
+// and pipes one MCP session to it over HTTP. `stdio --plugin <name>` pipes it to that plugin's endpoint.
+if (args is ["stdio", "--plugin", ..])
+{
+	if (args is not ["stdio", "--plugin", string pluginName, ..] || string.IsNullOrWhiteSpace(pluginName) || pluginName.StartsWith('-'))
+	{
+		await Console.Error.WriteLineAsync("Usage: roslynk stdio --plugin <name>");
+		Environment.ExitCode = 1;
+		return;
+	}
+
+	await StdioBridge.RunAsync(pluginName);
+	return;
+}
+
 if (args is ["stdio", ..])
 {
 	await StdioBridge.RunAsync();
@@ -39,10 +53,11 @@ builder.Services.AddRoslynk(
 	settings.EffectiveLoadWaitTimeout);
 builder.Services.AddSingleton(settings);
 builder.Services.AddHostedService<IdleEvictionService>();
+builder.Services.AddRoslynkPlugins(PluginCatalog.Load(settings.EffectivePluginsPath));
 
 builder.Services
 	.AddMcpServer(McpServerRegistration.Configure)
-	.WithHttpTransport()
+	.WithHttpTransport(options => options.ConfigureSessionOptions = PluginEndpoints.ConfigureSessionOptionsAsync)
 	.WithRoslynkTools();
 
 WebApplication app = builder.Build();
@@ -53,6 +68,7 @@ app.Services.GetRequiredService<SolutionMetrics>();
 
 app.UseMcpBodyValidation();
 app.MapMcp();
+app.MapRoslynkPlugins();
 app.MapDaemonEndpoints();
 
 app.Run();

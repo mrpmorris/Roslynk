@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<!-- What a plugin compiles against. At run time the daemon supplies this assembly and Roslyn, so a
+		     plugin's own copies are never loaded and the Solution it is handed has the types it compiled against. -->
+		<PackageId>Roslynk.Plugins</PackageId>
+		<!-- CI overrides Version from the release tag; this is only the local-build fallback. -->
+		<Version>0.0.1-local</Version>
+		<!-- The assembly version is the contract's, not the release's: a plugin binds to it, so it moves only when
+		     the contract breaks. Following the release would make every patch release, and every daemon built
+		     from source, refuse plugins built against another release of an unchanged contract. -->
+		<AssemblyVersion>1.0.0.0</AssemblyVersion>
+		<Description>The contract a Roslynk plugin implements: run inside the Roslynk daemon and read the solutions it has loaded, without loading them again.</Description>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/mrpmorris/Roslynk</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/mrpmorris/Roslynk</RepositoryUrl>
+		<PackageTags>roslynk;roslyn;csharp;plugin</PackageTags>
+		<!-- The XML docs are the contract's documentation, so they ship in the package. -->
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+	</ItemGroup>
+
+</Project>

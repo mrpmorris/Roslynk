@@ -1,6 +1,7 @@
 <Solution>
 	<Project Path="App/Morris.Roslynk/Morris.Roslynk.csproj" />
 	<Project Path="App/Morris.Roslynk.Mcp/Morris.Roslynk.Mcp.csproj" />
+	<Project Path="App/Morris.Roslynk.Plugins/Morris.Roslynk.Plugins.csproj" />
 	<Folder Name="/Solution Items/">
 		<File Path="../releases.md" />
 	</Folder>

@@ -37,6 +37,13 @@ jobs:
           -p:Version=$VERSION
           --output ./nupkgs
 
+      - name: Pack plugin contract
+        run: >
+          dotnet pack Source/App/Morris.Roslynk.Plugins/Morris.Roslynk.Plugins.csproj
+          --configuration Release
+          -p:Version=$VERSION
+          --output ./nupkgs
+
       - name: NuGet login (Trusted Publishing)
         id: login
         uses: NuGet/login@v1

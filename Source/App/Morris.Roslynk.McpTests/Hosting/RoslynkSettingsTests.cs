@@ -26,6 +26,7 @@ public class RoslynkSettingsTests
 		Assert.Null(settings.IdleEvictionMinutes);
 		Assert.Null(settings.EvictionCheckMinutes);
 		Assert.Null(settings.Port);
+		Assert.Null(settings.PluginsPath);
 	}
 
 	[Fact]
@@ -114,5 +115,26 @@ public class RoslynkSettingsTests
 	public void WhenPortIsConfigured_ThenItIsUsed()
 	{
 		Assert.Equal(7000, Bind(("Port", "7000")).EffectivePort);
+	}
+
+	[Fact]
+	public void WhenPluginsPathIsAbsent_ThenTheDefaultFolderApplies()
+	{
+		Assert.Equal(RoslynkSettings.DefaultPluginsPath, Bind().EffectivePluginsPath);
+		Assert.EndsWith(Path.Combine("Roslynk", "Plugins"), RoslynkSettings.DefaultPluginsPath);
+	}
+
+	[Fact]
+	public void WhenPluginsPathIsRelative_ThenItIsTakenFromTheExecutablesFolder()
+	{
+		Assert.Equal(Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "plugins")), Bind(("PluginsPath", "plugins")).EffectivePluginsPath);
+	}
+
+	[Fact]
+	public void WhenPluginsPathIsAbsolute_ThenItIsUsed()
+	{
+		string folder = Path.Combine(Path.GetTempPath(), "roslynk-plugins");
+
+		Assert.Equal(folder, Bind(("PluginsPath", folder)).EffectivePluginsPath);
 	}
 }

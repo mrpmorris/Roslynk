@@ -322,6 +322,7 @@ All `Roslynk:*` settings come from one typed object bound from the `Roslynk` sec
 | `Roslynk:LoadWaitSeconds` | 30 | How long solution-scoped tools wait server-side for an in-flight initial load before returning `error=Indexing`; `0` means do not wait. |
 | `Roslynk:IdleEvictionMinutes` | 30 | Minutes a solution may sit unused before the daemon evicts it; 0 disables eviction. |
 | `Roslynk:EvictionCheckMinutes` | 5 | Minutes between idle-eviction sweeps; floored at 1. |
+| `Roslynk:PluginsPath` | `Roslynk/Plugins` under local application data | Folder the daemon loads plugins from at startup (see [Plugins](#plugins)). |
 
 To change a setting, copy or rename `appsettings.json.example` to `appsettings.json` beside the executable and uncomment what you need, then restart the daemon. The loader accepts JavaScript/C#-style comments, but VS Code flags them as errors in `.json` files unless you associate the file with JSONC in your settings:
 
@@ -329,9 +330,31 @@ To change a setting, copy or rename `appsettings.json.example` to `appsettings.j
 "files.associations": { "appsettings*.json": "jsonc" }
 ```
 
-An `appsettings.json` beside the executable lives inside the tool's version directory (`~/.dotnet/tools/.store/roslynk/<version>/...`), so the next `dotnet tool update` extracts a fresh tool and silently loses your edit. For durable overrides use the equivalent environment variables, which the same configuration reads: `Roslynk__Port`, `Roslynk__MaxResponseChars`, `Roslynk__LoadWaitSeconds`, `Roslynk__IdleEvictionMinutes`, `Roslynk__EvictionCheckMinutes`.
+An `appsettings.json` beside the executable lives inside the tool's version directory (`~/.dotnet/tools/.store/roslynk/<version>/...`), so the next `dotnet tool update` extracts a fresh tool and silently loses your edit. For durable overrides use the equivalent environment variables, which the same configuration reads: `Roslynk__Port`, `Roslynk__MaxResponseChars`, `Roslynk__LoadWaitSeconds`, `Roslynk__IdleEvictionMinutes`, `Roslynk__EvictionCheckMinutes`, `Roslynk__PluginsPath`.
 
 A shared daemon serves every client with one set of values — set the smallest response cap your clients need.
+
+### Plugins
+
+A plugin runs inside the daemon and reads the solutions it has loaded, the same in-memory models Roslynk's tools use, so a tool built on Roslyn does not load and compile a solution a second time. A plugin references the `Roslynk.Plugins` package and implements `IRoslynkPlugin`:
+
+```csharp
+public sealed class CallGraphPlugin : IRoslynkPlugin
+{
+    public async Task RunAsync(ISolutionProvider solutions, CancellationToken stopping)
+    {
+        GetModelResponse model = await solutions.GetModelAsync("/src/App/App.slnx", stopping);
+        // model.Status, model.Model (a Roslyn Solution), model.ModelId (new with each publication)
+    }
+}
+```
+
+- **Installing.** Put the plugin's build output in a folder of its own, named after its assembly, under the plugins folder (`Roslynk/Plugins/CallGraph/CallGraph.dll` beside its dependencies), and restart the daemon. A folder that fails to load is logged with the plugin's own error and skipped.
+- **Running.** The daemon creates each `IRoslynkPlugin` with its parameterless constructor before it starts listening, so keep constructors quick and do the work in `RunAsync`, which it runs for as long as it runs, cancelling `stopping` at shutdown. A plugin that throws is logged and not run again until the daemon restarts; the daemon and other plugins carry on. At shutdown a plugin has 5 seconds to stop; one that ignores `stopping` is logged and left behind.
+- **Reading solutions.** `ISolutionProvider.GetModelAsync` opens the solution if it is not open and waits as `open_solution` does, then returns its current model, `Building` with no model if the first load has not finished. A solution that must be reloaded after a project or build file changed is reloaded and awaited in full. A missing file, a failed load or a solution closed mid-read comes back as `Faulted` with the reason, not as an exception. Each call counts as use for idle eviction.
+- **Noticing changes.** `ModelId` is new each time the daemon publishes a model, including when only its status changes (a diagnostics build, an edit that changed nothing), so it is not a content version. To tell whether the solution changed, compare `Model` with the previous one by reference: Roslyn solutions are immutable.
+- **Shared assemblies.** Each plugin loads in an isolation context of its own. The contract, Roslyn (`Microsoft.CodeAnalysis.*`), the MCP SDK (`ModelContextProtocol.*`), `Microsoft.Extensions.*` and the .NET framework always come from the daemon, so a plugin's own copies of them are ignored; anything else comes from the plugin's folder. Build a plugin against versions of those no newer than the daemon's (those in `Source/Directory.Packages.props` for the Roslynk release it runs on); a plugin built against newer ones is reported when it loads and skipped.
+- **Tools.** Public classes marked `[McpServerToolType]` in the plugin's assembly are served on the plugin's own endpoint, `/plugins/<name>`, not alongside Roslynk's tools, and fail and page as Roslynk's own tools do. Their constructors can take `ISolutionProvider` and the plugin's `IRoslynkPlugin` instances by their concrete types. A plugin whose tools cannot be created (two with one name) serves none, and its endpoint says why. An MCP client connects with `roslynk stdio --plugin <name>`, which starts the daemon if needed, as plain `stdio` does.
 
 ## Run (Windows)
 

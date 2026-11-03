@@ -37,6 +37,9 @@ public sealed class RoslynkSettings
 	/// <summary>The loopback port the daemon listens on; absent means <see cref="LoopbackOnlyExtensions.DefaultPort"/>.</summary>
 	public int? Port { get; set; }
 
+	/// <summary>The folder the daemon loads plugins from; absent means <see cref="DefaultPluginsPath"/>.</summary>
+	public string? PluginsPath { get; set; }
+
 	/// <summary>
 	/// Binds the 'Roslynk' section. Absent keys stay null so the Effective members own every default.
 	/// </summary>
@@ -83,4 +86,21 @@ public sealed class RoslynkSettings
 
 	/// <summary>The configured port, or 6502 when absent.</summary>
 	public int EffectivePort => Port ?? LoopbackOnlyExtensions.DefaultPort;
+
+	/// <summary>
+	/// The configured plugins folder, or <see cref="DefaultPluginsPath"/> when absent. A relative path is taken from
+	/// the folder holding the executable and its appsettings.json, not from wherever the daemon was started.
+	/// </summary>
+	public string EffectivePluginsPath =>
+		string.IsNullOrWhiteSpace(PluginsPath) ? DefaultPluginsPath : Path.GetFullPath(PluginsPath, AppContext.BaseDirectory);
+
+	/// <summary><c>Roslynk/Plugins</c> under local application data, beside the compiler argument cache.</summary>
+	public static string DefaultPluginsPath
+	{
+		get
+		{
+			string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.DoNotVerify);
+			return Path.Combine(string.IsNullOrEmpty(local) ? Path.GetTempPath() : local, "Roslynk", "Plugins");
+		}
+	}
 }

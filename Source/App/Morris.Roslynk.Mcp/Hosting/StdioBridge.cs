@@ -12,7 +12,11 @@ namespace Morris.Roslynk.Mcp.Hosting;
 /// </summary>
 public static class StdioBridge
 {
-	public static async Task RunAsync()
+	/// <summary>
+	/// Bridges to Roslynk's own endpoint, or, with <paramref name="pluginName"/>, to that plugin's endpoint
+	/// (<c>roslynk stdio --plugin &lt;name&gt;</c>), which serves the plugin's tools instead of Roslynk's.
+	/// </summary>
+	public static async Task RunAsync(string? pluginName = null)
 	{
 		// Same loader and object shape as the daemon, so bridge and daemon cannot disagree on the port.
 		int port = RoslynkSettings.Load().EffectivePort;
@@ -21,14 +25,28 @@ public static class StdioBridge
 
 		var transport = new HttpClientTransport(new HttpClientTransportOptions
 		{
-			Endpoint = new Uri($"http://localhost:{port}"),
+			Endpoint = new Uri($"http://localhost:{port}{(pluginName is null ? "" : PluginEndpoints.PathFor(pluginName))}"),
 			TransportMode = HttpTransportMode.StreamableHttp,
 			Name = "Roslynk daemon",
 		});
 
 		// Disposing the client on the way out sends the session DELETE, so the daemon releases this
 		// session's solution ref-counts and idle eviction can reclaim the workspaces.
-		await using McpClient daemon = await McpClient.CreateAsync(transport);
+		McpClient daemon;
+		try
+		{
+			daemon = await McpClient.CreateAsync(transport);
+		}
+		catch (HttpRequestException exception) when (pluginName is not null && exception.StatusCode == System.Net.HttpStatusCode.NotFound)
+		{
+			// The daemon's 404 says why (no such plugin, a load error, tools that could not be created); the
+			// SDK puts that body in the exception's message.
+			await Console.Error.WriteLineAsync($"Plugin '{pluginName}' is not available: {exception.Message}");
+			Environment.ExitCode = 1;
+			return;
+		}
+
+		await using McpClient _ = daemon;
 
 		// An empty builder registers no logging providers: nothing may write to stdout but JSON-RPC.
 		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(settings: null);
