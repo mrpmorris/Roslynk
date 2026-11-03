@@ -19,7 +19,7 @@ namespace Morris.Roslynk.Mcp.Hosting;
 /// </remarks>
 public static class McpBodyValidationExtensions
 {
-	/// <summary>The route <c>MapMcp()</c> maps by default; the only path this middleware inspects.</summary>
+	/// <summary>The route <c>MapMcp()</c> maps by default; with the plugins' endpoints, the paths this middleware inspects.</summary>
 	public const string McpPath = "/";
 
 	private const int InitialBufferSize = 16 * 1024;
@@ -36,7 +36,8 @@ public static class McpBodyValidationExtensions
 
 	private static async Task ValidateMcpBodyAsync(HttpContext context, RequestDelegate next)
 	{
-		if (!HttpMethods.IsPost(context.Request.Method) || context.Request.Path != McpPath)
+		if (!HttpMethods.IsPost(context.Request.Method)
+			|| (context.Request.Path != McpPath && !context.Request.Path.StartsWithSegments(PluginEndpoints.PathPrefix)))
 		{
 			await next(context);
 			return;

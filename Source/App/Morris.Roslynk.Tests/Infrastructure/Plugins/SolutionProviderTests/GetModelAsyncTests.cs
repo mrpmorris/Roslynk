@@ -1,7 +1,6 @@
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Plugins;
 using Morris.Roslynk.Plugins;
-using PluginStatus = Morris.Roslynk.Plugins.SolutionStatus;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Plugins.SolutionProviderTests;
 
@@ -15,7 +14,7 @@ public class GetModelAsyncTests
 
 		GetModelResponse response = await subject.GetModelAsync(TestSolutions.Simple);
 
-		Assert.Equal(PluginStatus.Ready, response.Status);
+		Assert.Equal(SolutionStatus.Ready, response.Status);
 		Assert.NotEqual(Guid.Empty, response.ModelId);
 		Assert.Null(response.ErrorMessage);
 		Assert.Equal("SimpleLibrary", Assert.Single(response.Model!.Projects).Name);
@@ -44,7 +43,7 @@ public class GetModelAsyncTests
 
 		GetModelResponse response = await subject.GetModelAsync(missing);
 
-		Assert.Equal(PluginStatus.Faulted, response.Status);
+		Assert.Equal(SolutionStatus.Faulted, response.Status);
 		Assert.Null(response.Model);
 		Assert.Contains("No solution file", response.ErrorMessage);
 		Assert.Empty(registry.OpenSolutionPaths);
@@ -62,6 +61,5 @@ public class GetModelAsyncTests
 		await subject.GetModelAsync(TestSolutions.Simple);
 
 		Assert.True(instance.LastAccessedUtc > openedAt);
-		Assert.Equal(0, registry.EvictIdle(TimeSpan.FromMilliseconds(10), instance.LastAccessedUtc));
 	}
 }

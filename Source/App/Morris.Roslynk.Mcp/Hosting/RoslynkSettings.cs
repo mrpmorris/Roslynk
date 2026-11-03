@@ -87,8 +87,12 @@ public sealed class RoslynkSettings
 	/// <summary>The configured port, or 6502 when absent.</summary>
 	public int EffectivePort => Port ?? LoopbackOnlyExtensions.DefaultPort;
 
-	/// <summary>The configured plugins folder, or <see cref="DefaultPluginsPath"/> when absent.</summary>
-	public string EffectivePluginsPath => string.IsNullOrWhiteSpace(PluginsPath) ? DefaultPluginsPath : PluginsPath;
+	/// <summary>
+	/// The configured plugins folder, or <see cref="DefaultPluginsPath"/> when absent. A relative path is taken from
+	/// the folder holding the executable and its appsettings.json, not from wherever the daemon was started.
+	/// </summary>
+	public string EffectivePluginsPath =>
+		string.IsNullOrWhiteSpace(PluginsPath) ? DefaultPluginsPath : Path.GetFullPath(PluginsPath, AppContext.BaseDirectory);
 
 	/// <summary><c>Roslynk/Plugins</c> under local application data, beside the compiler argument cache.</summary>
 	public static string DefaultPluginsPath

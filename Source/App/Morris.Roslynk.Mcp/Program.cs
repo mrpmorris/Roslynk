@@ -8,8 +8,15 @@ using Morris.Roslynk.Mcp.Observability;
 
 // `stdio` runs the client-launched bridge instead of the daemon: it starts the daemon if needed
 // and pipes one MCP session to it over HTTP. `stdio --plugin <name>` pipes it to that plugin's endpoint.
-if (args is ["stdio", "--plugin", string pluginName, ..])
+if (args is ["stdio", "--plugin", ..])
 {
+	if (args is not ["stdio", "--plugin", string pluginName, ..] || pluginName.StartsWith('-'))
+	{
+		await Console.Error.WriteLineAsync("Usage: roslynk stdio --plugin <name>");
+		Environment.ExitCode = 1;
+		return;
+	}
+
 	await StdioBridge.RunAsync(pluginName);
 	return;
 }

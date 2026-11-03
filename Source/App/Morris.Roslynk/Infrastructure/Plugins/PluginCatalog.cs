@@ -7,7 +7,7 @@ namespace Morris.Roslynk.Infrastructure.Plugins;
 /// <summary>
 /// The plugins found in a plugins folder, each in a subfolder of its own named after its assembly
 /// (<c>plugins/Contoso.CallGraph/Contoso.CallGraph.dll</c>, with its dependencies beside it). A folder that
-/// cannot be loaded is reported in <see cref="Errors"/> and skipped; it does not stop the others.
+/// cannot be loaded is reported in <see cref="Errors"/> and skipped; it does not stop the others or the daemon.
 /// </summary>
 public sealed class PluginCatalog
 {
@@ -21,7 +21,7 @@ public sealed class PluginCatalog
 
 	public IReadOnlyList<LoadedPlugin> Plugins { get; }
 
-	/// <summary>Why each plugin folder that was skipped could not be loaded.</summary>
+	/// <summary>Why each plugin folder that was skipped could not be loaded, as <c>&lt;name&gt;: &lt;reason&gt;</c>.</summary>
 	public IReadOnlyList<string> Errors { get; }
 
 	/// <summary>The plugin named <paramref name="name"/> (its folder's name, any case), or null.</summary>
@@ -31,23 +31,33 @@ public sealed class PluginCatalog
 	/// <summary>The plugins in <paramref name="pluginsPath"/>; none when the folder does not exist.</summary>
 	public static PluginCatalog Load(string pluginsPath)
 	{
-		if (!Directory.Exists(pluginsPath))
-			return Empty;
+		string[] folders;
+		try
+		{
+			if (!Directory.Exists(pluginsPath))
+				return Empty;
+
+			folders = Directory.GetDirectories(pluginsPath);
+		}
+		catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+		{
+			return new PluginCatalog([], [$"The plugins folder '{pluginsPath}' could not be read: {exception.Message}"]);
+		}
 
 		var plugins = new List<LoadedPlugin>();
 		var errors = new List<string>();
 
-		foreach (string folder in Directory.GetDirectories(pluginsPath).Order(StringComparer.Ordinal))
+		foreach (string folder in folders.Order(StringComparer.Ordinal))
 		{
 			string name = Path.GetFileName(folder);
 			try
 			{
 				plugins.Add(LoadOne(name, folder));
 			}
-			catch (Exception exception) when (exception is IOException or BadImageFormatException or TypeLoadException
-				or ReflectionTypeLoadException or MissingMethodException or TargetInvocationException or InvalidOperationException)
+			catch (Exception exception)
 			{
-				errors.Add($"{name}: {exception.Message}");
+				// A plugin's own code (a constructor, a static initializer) can throw anything; none of it may stop the daemon.
+				errors.Add($"{name}: {Reason(exception)}");
 			}
 		}
 
@@ -64,6 +74,9 @@ public sealed class PluginCatalog
 			throw new InvalidOperationException($"No {name}.dll in its folder.");
 
 		Assembly assembly = new PluginLoadContext(assemblyPath).LoadFromAssemblyPath(assemblyPath);
+		if (PluginLoadContext.CheckSharedVersions(assembly) is string versionProblem)
+			throw new InvalidOperationException(versionProblem);
+
 		Type[] types = assembly.GetExportedTypes();
 
 		IRoslynkPlugin[] instances = types
@@ -81,6 +94,16 @@ public sealed class PluginCatalog
 
 		return new LoadedPlugin(name, assembly, instances, toolTypes);
 	}
+
+	/// <summary>The plugin's own message, not the reflection wrapper's.</summary>
+	internal static string Reason(Exception exception) =>
+		exception switch
+		{
+			TargetInvocationException { InnerException: Exception inner } => Reason(inner),
+			TypeInitializationException { InnerException: Exception inner } => Reason(inner),
+			ReflectionTypeLoadException { LoaderExceptions: [Exception first, ..] } => Reason(first),
+			_ => exception.Message,
+		};
 
 	private static bool IsValidName(string name) =>
 		name.Length > 0 && name.All(c => char.IsAsciiLetterOrDigit(c) || c is '.' or '-' or '_');

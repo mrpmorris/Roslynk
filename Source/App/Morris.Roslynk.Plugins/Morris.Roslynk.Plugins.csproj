@@ -11,6 +11,8 @@
 		<PackageProjectUrl>https://github.com/mrpmorris/Roslynk</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/mrpmorris/Roslynk</RepositoryUrl>
 		<PackageTags>roslynk;roslyn;csharp;plugin</PackageTags>
+		<!-- The XML docs are the contract's documentation, so they ship in the package. -->
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 	</PropertyGroup>
 
 	<ItemGroup>

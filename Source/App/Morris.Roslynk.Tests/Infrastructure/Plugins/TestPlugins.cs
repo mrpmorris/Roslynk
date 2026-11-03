@@ -21,17 +21,23 @@ internal static class TestPlugins
 		WriteAssembly(Path.Combine(pluginsFolder, name), name, source);
 
 	/// <summary>
-	/// Compiles <paramref name="source"/> to <c>&lt;folder&gt;/&lt;assemblyName&gt;.dll</c>, referencing the
-	/// assemblies in <paramref name="alsoReferencing"/> as well as the daemon's.
+	/// Compiles <paramref name="source"/> to <c>&lt;folder&gt;/&lt;assemblyName&gt;.dll</c> against the daemon's
+	/// assemblies, with <paramref name="alsoReferencing"/> in place of any daemon assembly of the same name.
 	/// </summary>
 	public static string WriteAssembly(string folder, string assemblyName, string source, params string[] alsoReferencing)
 	{
 		Directory.CreateDirectory(folder);
 
+		HashSet<string> replaced = alsoReferencing.Select(Path.GetFileName).ToHashSet(StringComparer.OrdinalIgnoreCase)!;
+		IEnumerable<MetadataReference> references = DaemonAssemblies()
+			.Where(path => !replaced.Contains(Path.GetFileName(path)))
+			.Concat(alsoReferencing)
+			.Select(path => MetadataReference.CreateFromFile(path));
+
 		CSharpCompilation compilation = CSharpCompilation.Create(
 			assemblyName,
 			[CSharpSyntaxTree.ParseText(source)],
-			References().Concat(alsoReferencing.Select(path => MetadataReference.CreateFromFile(path))),
+			references,
 			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
 
 		string path = Path.Combine(folder, assemblyName + ".dll");
@@ -40,12 +46,10 @@ internal static class TestPlugins
 		return path;
 	}
 
-	private static IEnumerable<MetadataReference> References()
+	private static IEnumerable<string> DaemonAssemblies()
 	{
 		string[] trusted = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!).Split(Path.PathSeparator);
 		string[] contract = [typeof(IRoslynkPlugin).Assembly.Location, typeof(McpServerToolTypeAttribute).Assembly.Location];
-		return trusted.Concat(contract)
-			.DistinctBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase)
-			.Select(path => MetadataReference.CreateFromFile(path));
+		return trusted.Concat(contract).DistinctBy(path => Path.GetFileName(path), StringComparer.OrdinalIgnoreCase);
 	}
 }

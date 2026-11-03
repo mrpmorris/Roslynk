@@ -1,13 +1,12 @@
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Plugins;
-using EngineStatus = Morris.Roslynk.Infrastructure.Lifecycle.SolutionStatus;
-using PluginStatus = Morris.Roslynk.Plugins.SolutionStatus;
 
 namespace Morris.Roslynk.Infrastructure.Plugins;
 
 /// <summary>
-/// The plugins' view of <see cref="InstanceRegistry"/>: <c>open_solution</c>'s open-and-wait, then the
-/// published model, and nothing else of the registry or an instance's lifecycle.
+/// The plugins' view of <see cref="InstanceRegistry"/>: the data tools' open-and-wait, then the published model,
+/// and nothing else of the registry or an instance's lifecycle. Failures come back as a faulted response, as the
+/// tools report them, so one bad read does not end a plugin's run.
 /// </summary>
 public sealed class SolutionProvider : ISolutionProvider
 {
@@ -24,26 +23,34 @@ public sealed class SolutionProvider : ISolutionProvider
 
 		string fullPath = Path.GetFullPath(solutionId);
 		if (!File.Exists(fullPath))
-			return new GetModelResponse(Guid.Empty, PluginStatus.Faulted, Model: null, $"No solution file was found at '{fullPath}'.");
+			return Faulted($"No solution file was found at '{fullPath}'.");
 
-		// GetOrBeginAsync touches the instance, so a plugin's reads count as use for idle eviction.
-		RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(fullPath, cancellationToken);
-		SolutionModel model = await instance.ReadModelAsync(cancellationToken);
+		try
+		{
+			// GetOrBeginAsync touches the instance, so a plugin's reads count as use for idle eviction.
+			RoslynInstance instance = await InstanceRegistry.GetOrBeginAsync(fullPath, cancellationToken);
+			SolutionModel model = await instance.ReadModelAsync(cancellationToken);
 
-		return new GetModelResponse(
-			model.Id,
-			ToPluginStatus(model.Status),
-			model.Solution,
-			model.Status == EngineStatus.Faulted ? model.FaultMessage ?? "The solution failed to load." : null);
+			return new GetModelResponse(
+				model.Id,
+				model.Status,
+				model.Solution,
+				model.Status == SolutionStatus.Faulted ? model.FaultMessage ?? "The solution failed to load." : null);
+		}
+		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+		{
+			throw;
+		}
+		catch (ObjectDisposedException)
+		{
+			return Faulted("The solution was closed while it was being read.");
+		}
+		catch (Exception exception)
+		{
+			return Faulted(exception.Message);
+		}
 	}
 
-	private static PluginStatus ToPluginStatus(EngineStatus status) =>
-		status switch
-		{
-			EngineStatus.Building => PluginStatus.Building,
-			EngineStatus.Updating => PluginStatus.Updating,
-			EngineStatus.Ready => PluginStatus.Ready,
-			EngineStatus.Faulted => PluginStatus.Faulted,
-			_ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
-		};
+	private static GetModelResponse Faulted(string message) =>
+		new(Guid.Empty, SolutionStatus.Faulted, Model: null, message);
 }

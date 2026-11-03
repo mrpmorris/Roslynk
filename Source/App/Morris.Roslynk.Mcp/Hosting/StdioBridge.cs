@@ -32,7 +32,19 @@ public static class StdioBridge
 
 		// Disposing the client on the way out sends the session DELETE, so the daemon releases this
 		// session's solution ref-counts and idle eviction can reclaim the workspaces.
-		await using McpClient daemon = await McpClient.CreateAsync(transport);
+		McpClient daemon;
+		try
+		{
+			daemon = await McpClient.CreateAsync(transport);
+		}
+		catch (HttpRequestException exception) when (pluginName is not null && exception.StatusCode == System.Net.HttpStatusCode.NotFound)
+		{
+			await Console.Error.WriteLineAsync($"No plugin named '{pluginName}' is loaded, or it serves no tools; the daemon's log says why.");
+			Environment.ExitCode = 1;
+			return;
+		}
+
+		await using McpClient _ = daemon;
 
 		// An empty builder registers no logging providers: nothing may write to stdout but JSON-RPC.
 		HostApplicationBuilder builder = Host.CreateEmptyApplicationBuilder(settings: null);

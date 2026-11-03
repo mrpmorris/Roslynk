@@ -24,7 +24,7 @@ This is a source-based implementation guide for future changes. Paths below are 
 | --- | --- |
 | `Source/App/Morris.Roslynk` | Engine, feature tools, shared infrastructure, DI and MCP tool registration. |
 | `Source/App/Morris.Roslynk.Mcp` | ASP.NET Core host, loopback HTTP transport, stdio bridge/daemon startup, idle eviction and OpenTelemetry integration. Ships as the `Roslynk` .NET tool, command `roslynk`. |
-| `Source/App/Morris.Roslynk.Plugins` | The plugin contract (`IRoslynkPlugin`, `ISolutionProvider`, `GetModelResponse`, `SolutionStatus`). Ships as the `Roslynk.Plugins` package; the engine implements it and the host loads and runs plugins. |
+| `Source/App/Morris.Roslynk.Plugins` | The plugin contract (`IRoslynkPlugin`, `ISolutionProvider`, `GetModelResponse`, `SolutionStatus`). Ships as the `Roslynk.Plugins` package; the engine implements it, uses its `SolutionStatus` as its own (a global alias), and the host loads and runs plugins. |
 | `Source/App/Morris.Roslynk.AppHost` | Aspire development host. |
 | `Source/App/Morris.Roslynk.Tests` | Engine, feature, concurrency, file synchronization and writing tests. |
 | `Source/App/Morris.Roslynk.McpTests` | Host composition, published MCP schemas, tool invocation and transport-facing tests. |

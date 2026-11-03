@@ -18,17 +18,18 @@ using Morris.Roslynk.Plugins;
 namespace Morris.Roslynk.McpTests.Hosting.Plugins;
 
 /// <summary>
-/// A daemon composed as Program.cs composes it, with Roslynk's tools and the plugins compiled from the given
-/// sources, listening on a free loopback port.
+/// A daemon composed as Program.cs composes it (Roslynk's tools, request body validation, the plugins compiled
+/// from the given sources), listening on a free loopback port, with what it logs kept in <see cref="Log"/>.
 /// </summary>
 internal sealed class PluginTestHost : IAsyncDisposable
 {
 	private readonly WebApplication App;
 
-	private PluginTestHost(WebApplication app, int port, PluginCatalog catalog)
+	private PluginTestHost(WebApplication app, int port, PluginCatalog catalog, LogCollector log)
 	{
 		App = app;
 		Catalog = catalog;
+		Log = log;
 		BaseUri = new Uri($"http://127.0.0.1:{port}");
 		Client = new HttpClient { BaseAddress = BaseUri, Timeout = TimeSpan.FromSeconds(30) };
 	}
@@ -39,7 +40,12 @@ internal sealed class PluginTestHost : IAsyncDisposable
 
 	public PluginCatalog Catalog { get; }
 
-	public static async Task<PluginTestHost> StartAsync(params (string Name, string Source)[] plugins)
+	public LogCollector Log { get; }
+
+	public static Task<PluginTestHost> StartAsync(params (string Name, string Source)[] plugins) =>
+		StartAsync(stopBudget: null, plugins);
+
+	public static async Task<PluginTestHost> StartAsync(TimeSpan? stopBudget, params (string Name, string Source)[] plugins)
 	{
 		string pluginsFolder = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"), "plugins");
 		foreach ((string name, string source) in plugins)
@@ -47,6 +53,7 @@ internal sealed class PluginTestHost : IAsyncDisposable
 
 		PluginCatalog catalog = PluginCatalog.Load(pluginsFolder);
 		Assert.Empty(catalog.Errors);
+		var log = new LogCollector();
 
 		int port = FreePort();
 		WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -55,20 +62,22 @@ internal sealed class PluginTestHost : IAsyncDisposable
 			EnvironmentName = Environments.Production,
 		});
 		builder.Logging.ClearProviders();
+		builder.Logging.AddProvider(log);
 		builder.WebHost.ConfigureKestrel(options => options.ListenLocalhost(port));
 
 		builder.Services.AddRoslynk();
-		builder.Services.AddRoslynkPlugins(catalog);
+		builder.Services.AddRoslynkPlugins(catalog, stopBudget);
 		builder.Services
 			.AddMcpServer(McpServerRegistration.Configure)
 			.WithHttpTransport(options => options.ConfigureSessionOptions = PluginEndpoints.ConfigureSessionOptionsAsync)
 			.WithRoslynkTools();
 
 		WebApplication app = builder.Build();
+		app.UseMcpBodyValidation();
 		app.MapMcp();
 		app.MapRoslynkPlugins();
 		await app.StartAsync();
-		return new PluginTestHost(app, port, catalog);
+		return new PluginTestHost(app, port, catalog, log);
 	}
 
 	/// <summary>An MCP client on Roslynk's own endpoint, or on <paramref name="pluginName"/>'s.</summary>
@@ -117,5 +126,29 @@ internal sealed class PluginTestHost : IAsyncDisposable
 		using var probe = new TcpListener(IPAddress.Loopback, 0);
 		probe.Start();
 		return ((IPEndPoint)probe.LocalEndpoint).Port;
+	}
+}
+
+/// <summary>Every message the host logs, for tests that check what a failure reported.</summary>
+internal sealed class LogCollector : ILoggerProvider
+{
+	private readonly System.Collections.Concurrent.ConcurrentQueue<string> Messages = new();
+
+	public IReadOnlyList<string> Entries => Messages.ToArray();
+
+	public ILogger CreateLogger(string categoryName) => new Logger(Messages);
+
+	public void Dispose()
+	{
+	}
+
+	private sealed class Logger(System.Collections.Concurrent.ConcurrentQueue<string> messages) : ILogger
+	{
+		public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+		public bool IsEnabled(LogLevel logLevel) => true;
+
+		public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+			messages.Enqueue($"{logLevel}: {formatter(state, exception)}");
 	}
 }

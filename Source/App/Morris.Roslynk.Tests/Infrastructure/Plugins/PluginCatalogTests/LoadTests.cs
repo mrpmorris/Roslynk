@@ -1,4 +1,5 @@
 using Microsoft.CodeAnalysis;
+using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.Plugins;
 using Morris.Roslynk.Plugins;
 
@@ -18,6 +19,7 @@ public class LoadTests
 		public sealed class SamplePlugin : IRoslynkPlugin
 		{
 			public Type SolutionType => typeof(Microsoft.CodeAnalysis.Solution);
+			public Type ContractType => typeof(IRoslynkPlugin);
 
 			public Task RunAsync(ISolutionProvider solutionProvider, CancellationToken stopping) => Task.CompletedTask;
 		}
@@ -44,15 +46,19 @@ public class LoadTests
 	}
 
 	[Fact]
-	public void WhenAPluginIsLoaded_ThenItUsesTheDaemonsRoslynNotItsOwn()
+	public void WhenAPluginShipsItsOwnCopiesOfTheSharedAssemblies_ThenTheDaemonsAreUsed()
 	{
 		string plugins = TestPlugins.NewPluginsFolder();
 		TestPlugins.Write(plugins, "Sample", SamplePlugin);
+		// What `dotnet build` puts beside a plugin that references the contract package: its own copies.
+		string folder = Path.Combine(plugins, "Sample");
+		foreach (string shared in new[] { typeof(Solution), typeof(IRoslynkPlugin), typeof(McpServerToolTypeAttribute) }.Select(type => type.Assembly.Location))
+			File.Copy(shared, Path.Combine(folder, Path.GetFileName(shared)));
 
 		IRoslynkPlugin instance = Assert.Single(Assert.Single(PluginCatalog.Load(plugins).Plugins).Instances);
-		object? solutionType = instance.GetType().GetProperty("SolutionType")!.GetValue(instance);
 
-		Assert.Same(typeof(Solution), solutionType);
+		Assert.Same(typeof(Solution), instance.GetType().GetProperty("SolutionType")!.GetValue(instance));
+		Assert.Same(typeof(IRoslynkPlugin), instance.GetType().GetProperty("ContractType")!.GetValue(instance));
 	}
 
 	[Fact]
@@ -82,6 +88,59 @@ public class LoadTests
 		IRoslynkPlugin instance = Assert.Single(Assert.Single(PluginCatalog.Load(plugins).Plugins).Instances);
 
 		Assert.Equal("helper", instance.GetType().GetProperty("HelperName")!.GetValue(instance));
+	}
+
+	[Fact]
+	public void WhenAPluginIsBuiltAgainstANewerSharedAssemblyThanTheDaemons_ThenItIsReportedAtLoad()
+	{
+		string plugins = TestPlugins.NewPluginsFolder();
+		string folder = Path.Combine(plugins, "TooNew");
+		// A stand-in for a newer MCP SDK than the daemon ships: same name, higher version.
+		string newer = TestPlugins.WriteAssembly(Path.Combine(folder, "build"), "ModelContextProtocol.Core", """
+			[assembly: System.Reflection.AssemblyVersion("99.0.0.0")]
+			namespace ModelContextProtocol.Server;
+			[System.AttributeUsage(System.AttributeTargets.Class)]
+			public sealed class McpServerToolTypeAttribute : System.Attribute { }
+			""");
+		TestPlugins.WriteAssembly(folder, "TooNew", """
+			using ModelContextProtocol.Server;
+
+			namespace TooNew;
+
+			[McpServerToolType]
+			public sealed class TooNewTools { }
+			""", newer);
+
+		PluginCatalog subject = PluginCatalog.Load(plugins);
+
+		Assert.Empty(subject.Plugins);
+		string error = Assert.Single(subject.Errors);
+		Assert.StartsWith("TooNew: It was built against ModelContextProtocol.Core 99.0.0.0; this daemon has ", error);
+	}
+
+	[Fact]
+	public void WhenAPluginsConstructorThrows_ThenItsOwnMessageIsReported()
+	{
+		string plugins = TestPlugins.NewPluginsFolder();
+		TestPlugins.Write(plugins, "Throws", """
+			using System;
+			using System.Threading;
+			using System.Threading.Tasks;
+			using Morris.Roslynk.Plugins;
+
+			namespace Throws;
+
+			public sealed class ThrowsPlugin : IRoslynkPlugin
+			{
+				public ThrowsPlugin() => throw new InvalidOperationException("Set THROWS_SOLUTION first.");
+
+				public Task RunAsync(ISolutionProvider solutionProvider, CancellationToken stopping) => Task.CompletedTask;
+			}
+			""");
+
+		PluginCatalog subject = PluginCatalog.Load(plugins);
+
+		Assert.Equal("Throws: Set THROWS_SOLUTION first.", Assert.Single(subject.Errors));
 	}
 
 	[Fact]
