@@ -92,7 +92,7 @@ public sealed class PluginCatalog
 		if (instances.Length == 0 && toolTypes.Length == 0)
 			throw new InvalidOperationException($"{name}.dll has no public {nameof(IRoslynkPlugin)} and no MCP tool types.");
 
-		return new LoadedPlugin(name, assembly, instances, toolTypes);
+		return new LoadedPlugin(name, instances, toolTypes);
 	}
 
 	/// <summary>The plugin's own message, not the reflection wrapper's.</summary>
@@ -115,6 +115,5 @@ public sealed class PluginCatalog
 /// </summary>
 public sealed record LoadedPlugin(
 	string Name,
-	Assembly Assembly,
 	IReadOnlyList<IRoslynkPlugin> Instances,
 	IReadOnlyList<Type> ToolTypes);
