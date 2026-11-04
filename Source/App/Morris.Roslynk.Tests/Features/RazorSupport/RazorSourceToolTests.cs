@@ -28,9 +28,7 @@ public class RazorSourceToolTests : MutatingTestBase
 	[Fact]
 	public async Task WhenListingActionsInsideARazorCodeBlock_ThenTheCompilerFixIsOffered()
 	{
-		string solutionPath = await CreateRazorSolutionAsync();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		(InstanceRegistry registry, string solutionPath) = await SharedRazorAsync();
 		var subject = new GetCodeActionsTool(registry, TestServices.CodeActions());
 		(int line, int column) = await PositionOfAsync(solutionPath, CounterRelativePath, "unused");
 
@@ -43,8 +41,9 @@ public class RazorSourceToolTests : MutatingTestBase
 	[Fact]
 	public async Task WhenListingActionsInsideACshtmlFunctionsBlock_ThenTheCompilerFixIsOffered()
 	{
-		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
-		var subject = new GetCodeActionsTool(Registry, TestServices.CodeActions());
+		string solutionPath = TestSolutions.Cshtml;
+		InstanceRegistry registry = await TestSolutions.SharedAsync(solutionPath);
+		var subject = new GetCodeActionsTool(registry, TestServices.CodeActions());
 		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "unused");
 
 		string result = await subject.GetCodeActions(solutionPath, IndexRelativePath, line, column);
@@ -56,9 +55,7 @@ public class RazorSourceToolTests : MutatingTestBase
 	[Fact]
 	public async Task WhenListingActionsOnRazorMarkup_ThenItIsNotSupported()
 	{
-		string solutionPath = await CreateRazorSolutionAsync();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		(InstanceRegistry registry, string solutionPath) = await SharedRazorAsync();
 		var subject = new GetCodeActionsTool(registry, TestServices.CodeActions());
 		(int line, int column) = await PositionOfAsync(solutionPath, CounterRelativePath, "<p>Starting");
 
@@ -127,11 +124,12 @@ public class RazorSourceToolTests : MutatingTestBase
 	[Fact]
 	public async Task WhenFixingACompilerDiagnosticInACshtmlFileWithCheckOnly_ThenNothingIsWritten()
 	{
-		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
+		string solutionPath = TestSolutions.Cshtml;
+		InstanceRegistry registry = await TestSolutions.SharedAsync(solutionPath);
 		string before = await ReadAsync(solutionPath, IndexRelativePath);
 		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "unused");
 
-		string result = await TestServices.ApplyCodeFix(Registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", line, column, checkOnly: true);
+		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "CS0219", line, column, checkOnly: true);
 
 		Assert.Contains("applied=N", result);
 		Assert.Contains(result.Split('\n'), entry => entry.TrimStart('\t') == "Index.cshtml");
@@ -167,11 +165,12 @@ public class RazorSourceToolTests : MutatingTestBase
 	[Fact]
 	public async Task WhenFixingIDE0005OnAUsedCshtmlUsingLine_ThenItIsNotFoundAndNothingIsWritten()
 	{
-		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
+		string solutionPath = TestSolutions.Cshtml;
+		InstanceRegistry registry = await TestSolutions.SharedAsync(solutionPath);
 		string before = await ReadAsync(solutionPath, IndexRelativePath);
 		(int line, int column) = await PositionOfAsync(solutionPath, IndexRelativePath, "System.Text");
 
-		string result = await TestServices.ApplyCodeFix(Registry).ApplyCodeFix(solutionPath, IndexRelativePath, "IDE0005", line, column);
+		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, IndexRelativePath, "IDE0005", line, column);
 
 		Assert.Contains("error=NotFound", result);
 		Assert.Equal(before, await ReadAsync(solutionPath, IndexRelativePath));
@@ -180,9 +179,7 @@ public class RazorSourceToolTests : MutatingTestBase
 	[Fact]
 	public async Task WhenFixingARazorDiagnosticAwayFromItsPosition_ThenItIsNotFound()
 	{
-		string solutionPath = await CreateRazorSolutionAsync();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		(InstanceRegistry registry, string solutionPath) = await SharedRazorAsync();
 		(int line, _) = await PositionOfAsync(solutionPath, CounterRelativePath, "@code");
 
 		string result = await TestServices.ApplyCodeFix(registry).ApplyCodeFix(solutionPath, CounterRelativePath, "CS0219", line, 1);
@@ -193,9 +190,7 @@ public class RazorSourceToolTests : MutatingTestBase
 	[Fact]
 	public async Task WhenFixingADiagnosticAbsentFromTheRazorFile_ThenItIsNotFound()
 	{
-		string solutionPath = await CreateRazorSolutionAsync();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		(InstanceRegistry registry, string solutionPath) = await SharedRazorAsync();
 
 		(int line, int column) = await PositionOfAsync(solutionPath, CounterRelativePath, "unused");
 
@@ -254,9 +249,7 @@ public class RazorSourceToolTests : MutatingTestBase
 	[Fact]
 	public async Task WhenRemovingUnusedUsingsFromARazorFileWithCheckOnly_ThenNothingIsWritten()
 	{
-		string solutionPath = await CreateRazorSolutionAsync();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		(InstanceRegistry registry, string solutionPath) = await SharedRazorAsync();
 		string before = await ReadAsync(solutionPath, CounterRelativePath);
 
 		string result = await TestServices.RemoveUnusedUsings(registry).RemoveUnusedUsings(solutionPath, CounterRelativePath, checkOnly: true);
@@ -349,8 +342,9 @@ public class RazorSourceToolTests : MutatingTestBase
 	[Fact]
 	public async Task WhenRoslynCannotAddAMethodToACshtmlView_ThenTheLocalFunctionAlternativeIsSuggested()
 	{
-		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchCshtmlSolution());
-		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
+		string solutionPath = TestSolutions.Cshtml;
+		InstanceRegistry registry = await TestSolutions.SharedAsync(solutionPath);
+		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
 		(int line, int column, int endLine, int endColumn) = await GreetingSelectionAsync(solutionPath);
 		string before = await ReadAsync(solutionPath, IndexRelativePath);
 
@@ -372,9 +366,7 @@ public class RazorSourceToolTests : MutatingTestBase
 	[Fact]
 	public async Task WhenExtractingFromARazorFileWithCheckOnly_ThenNothingIsWritten()
 	{
-		string solutionPath = await CreateRazorSolutionAsync();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		(InstanceRegistry registry, string solutionPath) = await SharedRazorAsync();
 		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
 		(int line, int column) = await PositionOfAsync(solutionPath, CounterRelativePath, "CurrentCount++;");
 		string before = await ReadAsync(solutionPath, CounterRelativePath);
@@ -389,9 +381,7 @@ public class RazorSourceToolTests : MutatingTestBase
 	[Fact]
 	public async Task WhenExtractingFromRazorMarkup_ThenItIsNotSupported()
 	{
-		string solutionPath = await CreateRazorSolutionAsync();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		(InstanceRegistry registry, string solutionPath) = await SharedRazorAsync();
 		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
 		(int line, int column) = await PositionOfAsync(solutionPath, CounterRelativePath, "<p>Starting");
 
@@ -468,6 +458,15 @@ public class RazorSourceToolTests : MutatingTestBase
 	/// A scratch Razor solution whose Counter.razor also has an unused @using and an unused local in its
 	/// @code block, so fixes, using removal and extraction have something to act on.
 	/// </summary>
+
+	/// <summary>The shared Razor copy with the unused code the read-only tests need, loaded once for the run.</summary>
+	private static async Task<(InstanceRegistry Registry, string SolutionPath)> SharedRazorAsync()
+	{
+		string solutionPath = TestSolutions.RazorWithUnusedCode;
+		InstanceRegistry registry = await TestSolutions.SharedAsync(solutionPath);
+		return (registry, solutionPath);
+	}
+
 	private async Task<string> CreateRazorSolutionAsync()
 	{
 		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());

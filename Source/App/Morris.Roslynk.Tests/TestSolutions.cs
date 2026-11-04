@@ -374,7 +374,33 @@ internal static class TestSolutions
 	public static string CreateScratchBindSolution() => CreateScratch("BindSolution", "BindSolution.slnx");
 
 	/// <summary>
-	/// A writable scratch copy of the CshtmlSolution fixture: an MVC view (Views/Home/Index.cshtml) with a used
+	/// An MVC view (Views/Home/Index.cshtml) with a used and an unused @using, a CS0219 unused local in its
+	/// @functions block, and a _ViewImports.cshtml whose unused @using is shared and must be left alone.
+	/// </summary>
+	public static string Cshtml => CshtmlSolutionPath.Value;
+
+	/// <summary>
+	/// A scratch RazorSolution copy with an unused @using and an unused local added to Counter.razor,
+	/// prepared once and shared by the tests that only read it.
+	/// </summary>
+	public static string RazorWithUnusedCode => RazorWithUnusedCodePath.Value;
+
+	private static readonly Lazy<string> CshtmlSolutionPath = new(() => Prepare("CshtmlSolution", "CshtmlSolution.slnx"));
+
+	private static readonly Lazy<string> RazorWithUnusedCodePath = new(() =>
+	{
+		string solutionPath = CreateScratchRazorSolution();
+		string counterPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Counter.razor");
+		string counter = File.ReadAllText(counterPath);
+		string newline = counter.Contains("\r\n") ? "\r\n" : "\n";
+		counter = counter
+			.Replace("@using Microsoft.AspNetCore.Components.Web" + newline, "@using Microsoft.AspNetCore.Components.Web" + newline + "@using System.CodeDom" + newline)
+			.Replace("\t\tCurrentCount++;", "\t\tint unused = 1;" + newline + "\t\tCurrentCount++;");
+		File.WriteAllText(counterPath, counter);
+		return solutionPath;
+	});
+
+	/// <summary>A writable scratch copy of the CshtmlSolution fixture: an MVC view (Views/Home/Index.cshtml) with a used
 	/// and an unused @using, a CS0219 unused local in its @functions block, and a _ViewImports.cshtml whose
 	/// unused @using is shared and must be left alone.
 	/// </summary>
