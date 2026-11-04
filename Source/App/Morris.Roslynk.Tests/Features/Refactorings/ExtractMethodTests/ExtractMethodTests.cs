@@ -4,7 +4,7 @@ using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Features.Refactorings.ExtractMethodTests;
 
-public class ExtractMethodTests
+public class ExtractMethodTests : MutatingTestBase
 {
 	private const string Content =
 		"namespace SimpleLibrary;\r\n\r\n" +
@@ -24,9 +24,8 @@ public class ExtractMethodTests
 	public async Task WhenExtractingStatementsWithAName_ThenTheMethodIsCreatedAndCalled()
 	{
 		(string solutionPath, string greeter) = CreateScenario();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 		(int line, int endLine) = Lines("int total = a + b;", "total *= 2;");
 
 		string result = await subject.ExtractMethod(solutionPath, greeter, line, 1, endLine + 1, 1, methodName: "DoubleSum");
@@ -45,7 +44,7 @@ public class ExtractMethodTests
 		Assert.Matches(@"int total = DoubleSum\(a, b\);\r?\n\s*return total;", written);
 		Assert.Contains("\tpublic string Greet(string name) => $\"Hello, {name}!\";\r\n", written);
 
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		RoslynInstance instance = await Registry.GetOrAddAsync(solutionPath);
 		Assert.Contains("DoubleSum", (await instance.CurrentSolution.Projects.SelectMany(project => project.Documents)
 			.First(document => document.FilePath == greeter).GetTextAsync()).ToString());
 	}
@@ -54,9 +53,8 @@ public class ExtractMethodTests
 	public async Task WhenCheckOnly_ThenThePreviewIsReturnedAndNothingIsWritten()
 	{
 		(string solutionPath, string greeter) = CreateScenario();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 		(int line, int endLine) = Lines("int total = a + b;", "total *= 2;");
 
 		string result = await subject.ExtractMethod(solutionPath, greeter, line, 1, endLine + 1, 1, checkOnly: true);
@@ -71,9 +69,8 @@ public class ExtractMethodTests
 	public async Task WhenExtractingAnExpression_ThenTheExpressionIsReplacedByTheCall()
 	{
 		(string solutionPath, string greeter) = CreateScenario();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 		(int line, int column) = Position("a + b");
 
 		string result = await subject.ExtractMethod(solutionPath, greeter, line, column, line, column + "a + b".Length, methodName: "Add");
@@ -86,9 +83,8 @@ public class ExtractMethodTests
 	public async Task WhenAskedForALocalFunction_ThenALocalFunctionIsCreated()
 	{
 		(string solutionPath, string greeter) = CreateScenario();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 		(int line, int endLine) = Lines("int total = a + b;", "total *= 2;");
 
 		string result = await subject.ExtractMethod(solutionPath, greeter, line, 1, endLine + 1, 1, methodName: "Local", asLocalFunction: true);
@@ -102,9 +98,8 @@ public class ExtractMethodTests
 	public async Task WhenTheSelectionAwaits_ThenTheExtractedMethodIsAsync()
 	{
 		(string solutionPath, string greeter) = CreateScenario();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 		(int line, _) = Position("await System.Threading.Tasks.Task.Delay(value);");
 
 		string result = await subject.ExtractMethod(solutionPath, greeter, line, 1, line + 1, 1, methodName: "WaitAsync");
@@ -118,9 +113,8 @@ public class ExtractMethodTests
 	public async Task WhenTheSelectionCannotBeExtracted_ThenNotSupportedIsReturnedAndNothingIsWritten()
 	{
 		(string solutionPath, string greeter) = CreateScenario();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 		(int line, int endLine) = Lines("return total;", "await System.Threading.Tasks.Task.Delay(value);");
 
 		// The selection spans the end of one method and the start of another.
@@ -134,9 +128,8 @@ public class ExtractMethodTests
 	public async Task WhenTheNameWouldIntroduceACompileError_ThenNothingIsWritten()
 	{
 		(string solutionPath, string greeter) = CreateScenario();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 		(int line, int endLine) = Lines("int total = a + b;", "total *= 2;");
 
 		// A member cannot share its enclosing type's name (CS0542).
@@ -153,42 +146,38 @@ public class ExtractMethodTests
 	[InlineData("two words")]
 	public async Task WhenTheMethodNameIsInvalid_ThenInvalidIsReturned(string methodName)
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 
 		string result = await subject.ExtractMethod(TestSolutions.Simple, "SimpleLibrary/Greeter.cs", 1, 1, 1, 2, methodName: methodName);
 
 		Assert.Contains("error=Invalid", result);
 	}
-
 	[Fact]
 	public async Task WhenTheSelectionIsOutsideTheDocument_ThenInvalidIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 
 		string result = await subject.ExtractMethod(TestSolutions.Simple, "SimpleLibrary/Greeter.cs", 1, 1, 9999, 1);
 
 		Assert.Contains("error=Invalid", result);
 	}
-
 	[Fact]
 	public async Task WhenTheDocumentIsNotInTheSolution_ThenNotFoundIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new ExtractMethodTool(registry, new ApplyPipeline());
+		using var Registry = new InstanceRegistry();
+		await Registry.GetOrAddAsync(TestSolutions.Simple);
+		var subject = new ExtractMethodTool(Registry, new ApplyPipeline());
 
 		string result = await subject.ExtractMethod(TestSolutions.Simple, "Nope.cs", 1, 1, 1, 2);
 
 		Assert.Contains("error=NotFound", result);
 	}
 
-	private static (string SolutionPath, string Greeter) CreateScenario()
+	private (string SolutionPath, string Greeter) CreateScenario()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(TestSolutions.CreateScratchSimpleSolution);
 		string greeter = Directory.EnumerateFiles(Path.GetDirectoryName(solutionPath)!, "Greeter.cs", SearchOption.AllDirectories).First();
 		File.WriteAllText(greeter, Content);
 		return (solutionPath, greeter);

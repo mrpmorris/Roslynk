@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Morris.Roslynk.Features.Callers.GetCallees;
 using Morris.Roslynk.Features.References.FindReferences;
 using Morris.Roslynk.Features.Signatures.RenameParameter;
@@ -19,7 +19,7 @@ namespace Morris.Roslynk.Tests.Features.MultiTarget;
 /// representative rule removes: every discriminating test keeps the fixture's own precondition as a guard,
 /// so a future TFM-order or Roslyn change cannot make them pass vacuously.
 /// </summary>
-public class MultiTargetBindingTests
+public class MultiTargetBindingTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenTheFirstCopyCannotBindAParameterType_ThenResolvedSymbolUsesTheBoundRendering()
@@ -103,9 +103,8 @@ public class MultiTargetBindingTests
 	[Fact]
 	public async Task WhenEveryTargetFrameworkBindsTheParameterTypes_ThenEchoedNameIsUnchanged()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.MultiTarget);
-		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.MultiTarget);
+		var subject = new FindReferencesTool(Registry, new SymbolResolver(), new ProjectionService());
 
 		// Both copies of Echo bind, so discovery order still decides and the echo is byte-for-byte stable.
 		string echo = await subject.FindReferences(TestSolutions.MultiTarget, "Repro.Api.Echo");
@@ -116,7 +115,6 @@ public class MultiTargetBindingTests
 		string accepts = await subject.FindReferences(TestSolutions.MultiTarget, "Repro.Api.Accepts");
 		Assert.Contains("resolvedSymbol=Repro.Api.Accepts(Type)", accepts);
 	}
-
 	[Fact]
 	public async Task WhenTheFirstDocumentCannotBindTheParameterType_ThenFindDefinitionReportsTheBoundName()
 	{
@@ -144,10 +142,8 @@ public class MultiTargetBindingTests
 		// A bare name matches every copy, so the previewed rename must reach the declaration in both
 		// projections — representative selection narrows nothing. (A parameterized spelling matches only the
 		// copies its parameter types bind in, so it would rename one.)
-		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameParameterTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchMultiTargetSolution());
+		var subject = new RenameParameterTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameParameter(solutionPath, "Repro.Legacy.Wide", "value", "number", checkOnly: true);
 

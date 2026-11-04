@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -11,7 +11,7 @@ namespace Morris.Roslynk.Tests.Infrastructure.Resolution;
 /// declaration search — which pre-filters on a project's regular documents — comes up empty, and for bare
 /// names so a hand-written hit elsewhere cannot hide a generated candidate.
 /// </summary>
-public class GeneratedDeclarationResolutionTests
+public class GeneratedDeclarationResolutionTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenAGeneratedMemberIsNotMentionedByHandWrittenCode_ThenItResolves()
@@ -103,7 +103,7 @@ public class GeneratedDeclarationResolutionTests
 		// A metadata symbol of the same simple name is a real candidate (the declaration search's metadata
 		// leg is not pre-filtered), so the generated one joining it is Ambiguous at the tool layer rather
 		// than a silent pick of either.
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchGeneratorSolution());
 		string shapeGenerator = Path.Combine(Path.GetDirectoryName(solutionPath)!, "GeneratorLib", "ShapeGenerator.cs");
 		await File.WriteAllTextAsync(
 			shapeGenerator,

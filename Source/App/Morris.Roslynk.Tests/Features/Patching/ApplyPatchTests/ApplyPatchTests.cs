@@ -4,17 +4,15 @@ using Morris.Roslynk.Infrastructure.Lifecycle;
 
 namespace Morris.Roslynk.Tests.Features.Patching.ApplyPatchTests;
 
-public class ApplyPatchTests
+public class ApplyPatchTests : MutatingTestBase
 {
 	private const string GreeterRelativePath = "SimpleLibrary/Greeter.cs";
 
 	[Fact]
 	public async Task WhenApplyingAValidPatch_ThenTheFileAndSnapshotAreUpdated()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
 		string original = await File.ReadAllTextAsync(greeter);
@@ -30,10 +28,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenApplyingWithCheckOnly_ThenNothingIsWritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
 		string original = await File.ReadAllTextAsync(greeter);
@@ -48,10 +44,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenABaseVersionIsStale_ThenItIsRejectedAndNothingIsWritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
 		string original = await File.ReadAllTextAsync(greeter);
@@ -68,10 +62,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenThePatchTargetsAProjectFile_ThenItIsAppliedToDisk()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string projectFile = FindFile(solutionPath, "SimpleLibrary.csproj");
 		string original = await File.ReadAllTextAsync(projectFile);
@@ -86,10 +78,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenThePatchTargetsARazorFile_ThenItIsAppliedAndTheSnapshotIsUpdated()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchRazorSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string counter = FindFile(solutionPath, "Counter.razor");
 		string original = await File.ReadAllTextAsync(counter);
@@ -105,10 +95,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenThePatchTargetsATextFileOutsideTheModel_ThenItIsAppliedToDisk()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string readme = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "README.txt");
 		File.WriteAllText(readme, "hello\n");
@@ -124,10 +112,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenThePatchTargetsABinaryFile_ThenItIsNotSupported()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string binary = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "data.bin");
 		File.WriteAllBytes(binary, [0x00, 0x41, 0x42, 0x43]);
@@ -142,13 +128,11 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenAPatchedFileHasAUtf8Bom_ThenTheBomIsPreserved()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		string greeter = FindFile(solutionPath, "Greeter.cs");
 		string original = await File.ReadAllTextAsync(greeter);
 		await File.WriteAllTextAsync(greeter, original, new UTF8Encoding(encoderShouldEmitUTF8Identifier: true));
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var subject = new ApplyPatchTool(Registry);
 
 		string result = await subject.ApplyPatch(solutionPath, BuildFullReplacePatch(GreeterRelativePath, original, original + "// patched\n"));
 
@@ -162,10 +146,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenAPatchedFileIsUtf16WithABom_ThenItStaysUtf16()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string notes = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "notes.txt");
 		await File.WriteAllTextAsync(notes, "first\n", Encoding.Unicode);
@@ -181,10 +163,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenAFileWithoutABomIsNotValidUtf8_ThenItIsNotSupported()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string notes = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "notes.txt");
 		File.WriteAllBytes(notes, [0x41, 0xC3, 0x28, 0x0A]);
@@ -199,10 +179,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenThePatchTargetsAFileUnderObj_ThenItIsNotSupported()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string objFile = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "obj", "sample.txt");
 		Directory.CreateDirectory(Path.GetDirectoryName(objFile)!);
@@ -219,10 +197,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenThePatchTargetsAFileOutsideTheSolutionFolder_ThenItIsNotSupported()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string outside = Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(solutionPath))!, "outside.txt");
 		File.WriteAllText(outside, "hello\n");
@@ -238,10 +214,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenThePatchTargetsANonExistentFile_ThenItIsNotFound()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string result = await subject.ApplyPatch(
 			solutionPath,
@@ -255,10 +229,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenAPathIsRelativeToTheRepoRootAndTheProjectIsMultiTargeted_ThenThePatchResolves()
 	{
-		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchMultiTargetSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string result = await subject.ApplyPatch(
 			solutionPath,
@@ -272,10 +244,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenAPathIsRelativeToTheRepoRootAndTheProjectIsMultiTargeted_ThenTheFileIsPatchedOnce()
 	{
-		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchMultiTargetSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string result = await subject.ApplyPatch(
 			solutionPath,
@@ -289,7 +259,7 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenASuffixMatchesTwoDistinctFiles_ThenTheErrorIsAmbiguousWithCandidates()
 	{
-		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchMultiTargetSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "Multi");
 		foreach (string folder in new[] { "A", "B" })
 		{
@@ -297,9 +267,8 @@ public class ApplyPatchTests
 			File.WriteAllText(Path.Combine(projectDirectory, folder, "Shared.cs"), "namespace Repro." + folder + ";\n\npublic class Shared { }\n");
 		}
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new ApplyPatchTool(Registry);
 
 		string result = await subject.ApplyPatch(
 			solutionPath,
@@ -314,10 +283,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenRejectionsHaveDifferentReasons_ThenTheMostActionableCodeIsReportedWithEveryReason()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string result = await subject.ApplyPatch(
 			solutionPath,
@@ -333,10 +300,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenThePatchCreatesANewFile_ThenItIsNotSupported()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string result = await subject.ApplyPatch(
 			solutionPath,
@@ -350,10 +315,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenAHunkDoesNotMatch_ThenAConflictIsReportedAndNothingIsWritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
 		string original = await File.ReadAllTextAsync(greeter);
@@ -373,8 +336,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{
-		using var registry = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero));
-		var subject = new ApplyPatchTool(registry);
+		using var Registry = new InstanceRegistry(new LoadWaitTimeout(TimeSpan.Zero));
+		var subject = new ApplyPatchTool(Registry);
 
 		string result = await subject.ApplyPatch(
 			TestSolutions.Simple,
@@ -383,16 +346,14 @@ public class ApplyPatchTests
 		Assert.Contains("error=Indexing", result);
 		Assert.Contains("status=Building", result);
 
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		await Registry.GetOrAddAsync(TestSolutions.Simple);
 	}
 
 	[Fact]
 	public async Task WhenTheHunkHeaderHasNoLineNumbers_ThenTheFileIsStillUpdated()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
 		string original = await File.ReadAllTextAsync(greeter);
@@ -407,10 +368,8 @@ public class ApplyPatchTests
 	[Fact]
 	public async Task WhenAFilePatchHasNoHunks_ThenItIsRejected()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
 		string original = await File.ReadAllTextAsync(greeter);
@@ -427,10 +386,8 @@ public class ApplyPatchTests
 	{
 		// App's Page.razor still says Count="3". The patch's own write regenerates App's Razor, so Count becomes a
 		// plain attribute at once; no watcher event is needed (its fold would find the snapshot already current).
-		string solutionPath = TestSolutions.CreateScratchRazorMultiProjectSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchRazorMultiProjectSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string codeBehind = FindFile(solutionPath, "Widget.razor.cs");
 		string original = await File.ReadAllTextAsync(codeBehind);

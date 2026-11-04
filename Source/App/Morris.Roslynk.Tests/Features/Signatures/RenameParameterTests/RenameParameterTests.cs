@@ -6,7 +6,7 @@ using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Features.Signatures.RenameParameterTests;
 
-public class RenameParameterTests
+public class RenameParameterTests : MutatingTestBase
 {
 	private const string ExtraSource =
 		"""
@@ -241,14 +241,13 @@ public class RenameParameterTests
 		}
 	}
 
-	private static async Task<(string SolutionPath, RenameParameterTool Subject, InstanceRegistry Registry)> CreateAsync()
+	private async Task<(string SolutionPath, RenameParameterTool Subject, InstanceRegistry Registry)> CreateAsync()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(TestSolutions.CreateScratchSimpleSolution);
 		await File.WriteAllTextAsync(Path.Combine(Path.GetDirectoryName(FindFile(solutionPath, "Ledger.cs"))!, "Extra.cs"), ExtraSource);
-		var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameParameterTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
-		return (solutionPath, subject, registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameParameterTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		return (solutionPath, subject, Registry);
 	}
 
 	private static string FindFile(string solutionPath, string fileName) =>

@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Features.References.RenameSymbol;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -10,11 +10,11 @@ using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Watching;
 
-public class SolutionFileSyncTests
+public class SolutionFileSyncTests : MutatingTestBase
 {
 	/// <summary>
 	/// The read-only Simple fixture with its live watcher detached, so only the errors a test raises reach the
-	/// instance. Each test has its own registry, so marking it dirty does not leak.
+	/// instance. Each test has its own Registry, so marking it dirty does not leak.
 	/// </summary>
 	private static async Task<RoslynInstance> LoadDetachedAsync(InstanceRegistry registry)
 	{
@@ -181,9 +181,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenASourceFileChangesOnDisk_ThenTheLoadedSnapshotPicksItUp()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
@@ -199,9 +197,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenAnUnchangedSourceFileEventArrives_ThenTheSnapshotIsNotReplaced()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 		Solution before = instance.CurrentSolution;
 
@@ -213,9 +209,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenAProjectFileChangesOnDisk_ThenTheInstanceIsMarkedDirty()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string projectFile = FindFile(solutionPath, "*.csproj");
@@ -230,9 +224,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenADirtyInstanceIsRequestedAgain_ThenItIsReloadedFresh()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string projectFile = FindFile(solutionPath, "*.csproj");
@@ -240,7 +232,7 @@ public class SolutionFileSyncTests
 		await File.WriteAllTextAsync(projectFile, edited);
 		await subject.OnFileChangedAsync(projectFile);
 
-		RoslynInstance reloaded = await registry.GetOrAddAsync(solutionPath);
+		RoslynInstance reloaded = await Registry.GetOrAddAsync(solutionPath);
 
 		Assert.NotSame(instance, reloaded);
 		Assert.False(reloaded.IsDirty);
@@ -249,9 +241,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenAFileUnderObjOrBinChanges_ThenItIsIgnored()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 		Solution before = instance.CurrentSolution;
 
@@ -267,9 +257,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenTheServersOwnStagingFileEventsArrive_ThenTheyAreIgnored()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 		Solution before = instance.CurrentSolution;
 
@@ -289,9 +277,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenApplyPipelineWritesADocument_ThenTheResultingWatcherEventsDoNotMarkTheInstanceDirty()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
@@ -310,9 +296,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenAnExternalEditFollowsAnApplyPipelineWrite_ThenTheInstanceIsStillMarkedDirty()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
@@ -334,9 +318,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenAnExternalSourceEditFollowsAnApplyPipelineWrite_ThenItIsStillFoldedIn()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
@@ -356,9 +338,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenANewSourceFileIsAddedUnderADefaultGlobProject_ThenItIsFoldedInWithoutReload()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
@@ -374,9 +354,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenAKnownSourceFileIsDeleted_ThenItIsRemovedWithoutReload()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
@@ -392,9 +370,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenANewSourceFileIsAddedUnderAProjectWithExplicitCompileItems_ThenTheInstanceIsMarkedDirty()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string projectFile = FindFile(solutionPath, "*.csproj");
@@ -413,7 +389,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenACsAnalyzerAdditionalFileIsModified_ThenItIsFoldedInAsAnAdditionalFileOnly()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string additional = await AddAnalyzerAdditionalFileAsync(
 			solutionPath, "Extra.cs", "namespace SimpleLibrary; public class Extra { }", removeFromCompile: true);
 
@@ -433,7 +409,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenACsFileThatIsBothCompiledAndAnAnalyzerAdditionalFileIsModified_ThenBothAreFoldedIn()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string additional = await AddAnalyzerAdditionalFileAsync(
 			solutionPath, "Shared.cs", "namespace SimpleLibrary; public class Shared { }", removeFromCompile: false);
 
@@ -453,7 +429,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenACsAnalyzerAdditionalFileIsDeleted_ThenTheInstanceIsMarkedDirty()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string additional = await AddAnalyzerAdditionalFileAsync(
 			solutionPath, "Extra.cs", "namespace SimpleLibrary; public class Extra { }", removeFromCompile: true);
 
@@ -470,9 +446,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenARazorFileIsEdited_ThenItsGeneratedDocumentIsRegeneratedWithoutReload()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchRazorSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string counter = FindFile(solutionPath, "Counter.razor");
@@ -489,9 +463,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenARazorFileIsRewrittenWithIdenticalContent_ThenNothingChanges()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchRazorSolution());
 		var subject = new SolutionFileSync(instance);
 		Solution before = instance.CurrentSolution;
 
@@ -507,9 +479,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenANewRazorFileAppears_ThenTheInstanceIsMarkedDirty()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchRazorSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string added = Path.Combine(Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!, "Added.razor");
@@ -524,9 +494,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenACodeBehindParameterIsRenamed_ThenTheDependentPagesRazorIsRegeneratedWithoutReload()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorMultiProjectSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchRazorMultiProjectSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string codeBehind = FindFile(solutionPath, "Widget.razor.cs");
@@ -545,9 +513,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenACodeBehindEditOnlyChangesAMethodBody_ThenRazorIsNotRegenerated()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorMultiProjectSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchRazorMultiProjectSolution());
 		var subject = new SolutionFileSync(instance);
 		RazorGenerationState razor = instance.Workspace!.Razor;
 		Dictionary<ProjectId, GeneratorDriver?> driversBefore = instance.CurrentSolution.ProjectIds.ToDictionary(id => id, id => razor.Get(id)?.Driver);
@@ -565,9 +531,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenAFileInsideADotFolderOrNodeModulesChanges_ThenItIsIgnored()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 		Solution before = instance.CurrentSolution;
 
@@ -589,9 +553,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenABuildFileInsideADotFolderChanges_ThenTheInstanceIsStillMarkedDirty()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
@@ -607,7 +569,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenANonRazorAdditionalFileChanges_ThenOnlyARealChangeIsFoldedInWithoutReload()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string additional = await AddAnalyzerAdditionalFileAsync(solutionPath, "settings.json", "{ \"a\": 1 }", removeFromCompile: false);
 
 		using var registry = new InstanceRegistry();
@@ -630,9 +592,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenASourceGeneratorsAdditionalFileChanges_ThenItsGeneratedCodeIsRegeneratedWithoutReload()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchGeneratorSolution());
 		var subject = new SolutionFileSync(instance);
 		Assert.Contains("Hello from a csv", await GeneratedTextAsync(instance.CurrentSolution));
 
@@ -658,9 +618,7 @@ public class SolutionFileSyncTests
 	{
 		// Content, embedded resources and a tool's output written beside the sources (a weaver's .csv) are not
 		// compile items, additional files or analyzer config, so Roslyn never sees them.
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
@@ -682,7 +640,7 @@ public class SolutionFileSyncTests
 	public async Task WhenANewFileAGlobCouldAddAppears_ThenTheInstanceIsMarkedDirty(string name)
 	{
 		// .json is the extension of an additional file already loaded, so a glob may well add this one too.
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		_ = await AddAnalyzerAdditionalFileAsync(solutionPath, "settings.json", "{ }", removeFromCompile: false);
 		using var registry = new InstanceRegistry();
 		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
@@ -698,7 +656,7 @@ public class SolutionFileSyncTests
 	[Fact]
 	public async Task WhenAKnownAdditionalFileIsDeleted_ThenTheInstanceIsMarkedDirty()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string additional = await AddAnalyzerAdditionalFileAsync(solutionPath, "settings.json", "{ }", removeFromCompile: false);
 		using var registry = new InstanceRegistry();
 		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
@@ -714,7 +672,7 @@ public class SolutionFileSyncTests
 	public async Task WhenADirectoryHoldingLoadedDocumentsIsMovedAway_ThenTheInstanceIsMarkedDirty()
 	{
 		// Moving a directory out raises one event for its old path, none for the files it took along.
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
 		string folder = Path.Combine(projectDir, "Nested");
 		Directory.CreateDirectory(folder);
@@ -723,7 +681,9 @@ public class SolutionFileSyncTests
 		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
 		var subject = new SolutionFileSync(instance);
 
-		Directory.Move(folder, Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N")));
+		string moved = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"));
+		TrackScratch(moved);
+		Directory.Move(folder, moved);
 		await subject.OnFileChangedAsync(folder);
 
 		Assert.True(instance.IsDirty);
@@ -734,9 +694,7 @@ public class SolutionFileSyncTests
 	{
 		// The event is classified against the snapshot from before the write publishes; by the time its fold runs
 		// the write has published the very same text, so replacing it would only fork every compilation.
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string greeter = FindFile(solutionPath, "Greeter.cs");
@@ -780,9 +738,7 @@ public class SolutionFileSyncTests
 	public async Task WhenADirectoryHoldingLoadedDocumentsChanges_ThenItIsIgnored()
 	{
 		// A directory whose files are already loaded (folded as their own events arrived) brings nothing new.
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 		Solution before = instance.CurrentSolution;
 
@@ -797,9 +753,7 @@ public class SolutionFileSyncTests
 	public async Task WhenADotFolderOrAFolderOutsideTheProjectsChanges_ThenItIsIgnored()
 	{
 		// The solution folder is watched shallowly for build files, so git's own activity reports .git there.
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string solutionDir = Path.GetDirectoryName(solutionPath)!;
@@ -818,9 +772,7 @@ public class SolutionFileSyncTests
 	public async Task WhenANewDirectoryAppearsUnderAProject_ThenTheInstanceIsMarkedDirty()
 	{
 		// A directory moved or copied in raises one event for itself, none for the files inside it.
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string projectDir = Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!;
@@ -837,9 +789,7 @@ public class SolutionFileSyncTests
 	public async Task WhenSeveralFilesChangeInOneBatch_ThenTheyAreFoldedAsOneWrite()
 	{
 		// A save-all or a branch switch: one write, so the snapshot (and any Razor) is rebuilt once, not per file.
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		instance.DetachWatcher();
 		var subject = new SolutionFileSync(instance);
 
@@ -864,11 +814,9 @@ public class SolutionFileSyncTests
 	{
 		// The rename's own write regenerates the Razor output, so the events it raises find the snapshot current:
 		// no second regeneration, and no compilation forked for diagnostics to recompute.
-		string solutionPath = TestSolutions.CreateScratchRazorMultiProjectSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchRazorMultiProjectSolution());
 		var subject = new SolutionFileSync(instance);
-		var rename = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var rename = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await rename.RenameSymbol(solutionPath, "Lib.Widget.Count", "Total");
 		Solution afterRename = instance.CurrentSolution;
@@ -888,9 +836,7 @@ public class SolutionFileSyncTests
 	public async Task WhenARulesetOrSdkOrPackageSourceFileChanges_ThenTheInstanceIsMarkedDirty(string name)
 	{
 		// They change the compilation options, the SDK MSBuild loads, or the packages it restores.
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
 		var subject = new SolutionFileSync(instance);
 
 		string path = Path.Combine(Path.GetDirectoryName(FindFile(solutionPath, "*.csproj"))!, name);

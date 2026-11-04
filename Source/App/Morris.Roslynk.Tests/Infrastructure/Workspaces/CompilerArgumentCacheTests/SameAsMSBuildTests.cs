@@ -11,7 +11,7 @@ namespace Morris.Roslynk.Tests.Infrastructure.Workspaces.CompilerArgumentCacheTe
 /// files, references, analyzers and options, and the same compiler diagnostics, with generators run. Every fixture is
 /// a fresh copy, restored and not built, so nothing depends on compiled outputs.
 /// </summary>
-public class SameAsMSBuildTests(ITestOutputHelper output)
+public class SameAsMSBuildTests(ITestOutputHelper output) : MutatingTestBase
 {
 	public static TheoryData<string, string> Fixtures => new()
 	{
@@ -30,25 +30,25 @@ public class SameAsMSBuildTests(ITestOutputHelper output)
 	[Theory]
 	[MemberData(nameof(Fixtures))]
 	public async Task WhenAFixtureLoadsAgain_ThenTheCachedLoadMatchesMSBuilds(string fixture, string solutionFile) =>
-		await AssertCachedLoadMatchesAsync(TestSolutions.CreateScratchFixture(fixture, solutionFile));
+		await AssertCachedLoadMatchesAsync(Scratch(() => TestSolutions.CreateScratchFixture(fixture, solutionFile)));
 
 	[Fact]
 	public async Task WhenAProjectReferencesAMultiTargetedOne_ThenTheCachedLoadMatchesMSBuilds() =>
-		await AssertCachedLoadMatchesAsync(TestSolutions.CreateScratchLinkedSolution());
+		await AssertCachedLoadMatchesAsync(Scratch(() => TestSolutions.CreateScratchLinkedSolution()));
 
 	[Fact]
 	public async Task WhenAProjectCompilesNothing_ThenTheCachedLoadMatchesMSBuilds() =>
-		await AssertCachedLoadMatchesAsync(TestSolutions.CreateScratchLinkedSolution(withNoTargetsProject: true));
+		await AssertCachedLoadMatchesAsync(Scratch(() => TestSolutions.CreateScratchLinkedSolution(withNoTargetsProject: true)));
 
 	[Fact]
 	public async Task WhenTheGeneratorIsBuilt_ThenTheCachedLoadMatchesMSBuilds() =>
-		await AssertCachedLoadMatchesAsync(TestSolutions.CreateScratchGeneratorSolution());
+		await AssertCachedLoadMatchesAsync(Scratch(() => TestSolutions.CreateScratchGeneratorSolution()));
 
 	[Theory]
 	[MemberData(nameof(Fixtures))]
 	public async Task WhenTheLoadIsLogged_ThenMSBuildLoadsTheSameSolutionAndEveryProjectIsCaptured(string fixture, string solutionFile)
 	{
-		string solutionPath = TestSolutions.CreateScratchFixture(fixture, solutionFile);
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchFixture(fixture, solutionFile));
 		MsBuildRegistrar.EnsureRegistered();
 
 		using CompilerArgumentCapture capture = CompilerArgumentCapture.Begin(TestCaches.New().Root);

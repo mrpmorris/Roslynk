@@ -3,7 +3,7 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 namespace Morris.Roslynk.Tests.Infrastructure.Workspaces.CompilerArgumentCacheTests;
 
 /// <summary>Which environment variables a load is recorded as depending on, beyond those its own files name.</summary>
-public class BuildInputsTests
+public class BuildInputsTests : MutatingTestBase
 {
 	[Fact]
 	public void WhenOnlyTheSdksBuildFilesNameAVariable_ThenItIsRecorded()
@@ -44,7 +44,12 @@ public class BuildInputsTests
 		Assert.Contains(Path.Combine(root, "src", "App", "obj", "App.csproj.nuget.g.props"), inputs.Files);
 	}
 
-	private static string NewFolder() => Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"));
+	private string NewFolder()
+	{
+		string path = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"));
+		TrackScratch(path);
+		return path;
+	}
 
 	private static string Write(string path, string text)
 	{

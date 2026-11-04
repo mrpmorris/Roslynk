@@ -1,18 +1,16 @@
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.Diagnostics;
+﻿using Microsoft.CodeAnalysis;
 using Morris.Roslynk.Infrastructure.Lifecycle;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Workspaces.TrackedAnalyzersTests;
 
-public class TrackedAnalyzersTests
+public class TrackedAnalyzersTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenNoTrackedDllChanged_ThenARefreshPublishesNothing()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchGeneratorSolution());
 		Guid before = instance.CurrentModel.Id;
 
 		await instance.RefreshTrackedAnalyzersAsync();
@@ -23,9 +21,7 @@ public class TrackedAnalyzersTests
 	[Fact]
 	public async Task WhenATrackedDllIsRebuilt_ThenOnlyItsConsumersGetAFreshReferenceAndANewSemanticVersion()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolution();
-		using var registry = new InstanceRegistry();
-		RoslynInstance instance = await registry.GetOrAddAsync(solutionPath);
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchGeneratorSolution());
 		string dll = GeneratorDllPath(solutionPath);
 		AnalyzerFileReference before = GeneratorReference(instance, dll);
 		VersionStamp versionBefore = await Consumer(instance).GetDependentSemanticVersionAsync();
@@ -44,7 +40,7 @@ public class TrackedAnalyzersTests
 	[Fact]
 	public async Task WhenTheSwapFails_ThenTheNextRefreshRetriesIt()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchGeneratorSolutionWithoutBuiltGenerator());
 		using SolutionWorkspace workspace = await SolutionWorkspace.LoadAsync(solutionPath);
 		TestSolutions.BuildScratchGenerator(solutionPath);
 
@@ -66,6 +62,7 @@ public class TrackedAnalyzersTests
 	public async Task WhenTheFirstLoadThrows_ThenItIsReportedAndTheNextRefreshStillApplies()
 	{
 		string directory = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"));
+		TrackScratch(directory);
 		Directory.CreateDirectory(directory);
 		string dll = Path.Combine(directory, "Gen.dll");
 		await File.WriteAllTextAsync(dll, "stub");

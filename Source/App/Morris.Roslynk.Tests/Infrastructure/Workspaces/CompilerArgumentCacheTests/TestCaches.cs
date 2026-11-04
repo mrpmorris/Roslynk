@@ -11,10 +11,15 @@ internal static class TestCaches
 	/// </summary>
 	[ModuleInitializer]
 	internal static void UseATempFolderForTheRun() =>
-		CompilerArgumentCache.Default = new CompilerArgumentCache(
-			Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"), "compiler-arguments"));
+		CompilerArgumentCache.Default = new CompilerArgumentCache(NewCacheRoot());
 
 	/// <summary>An empty cache of a test's own.</summary>
-	public static CompilerArgumentCache New() =>
-		new(Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"), "compiler-arguments"));
+	public static CompilerArgumentCache New() => new(NewCacheRoot());
+
+	private static string NewCacheRoot()
+	{
+		string root = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"), "compiler-arguments");
+		ScratchDirectories.Track(root);
+		return root;
+	}
 }

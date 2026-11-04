@@ -1,9 +1,9 @@
-using Morris.Roslynk.Infrastructure.Lifecycle;
+﻿using Morris.Roslynk.Infrastructure.Lifecycle;
 using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Resolution;
 
-public class DocumentPathResolverTests
+public class DocumentPathResolverTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenAPathIsAnExactSolutionRelativeMatch_ThenItIsNotResolvedBySuffix()
@@ -49,7 +49,7 @@ public class DocumentPathResolverTests
 	[Fact]
 	public async Task WhenAPathSuffixMatchesExactlyOneFile_ThenItIsResolvedBySuffix()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		Directory.CreateDirectory(Path.Combine(projectDirectory, "Nested"));
 		await File.WriteAllTextAsync(
@@ -68,7 +68,7 @@ public class DocumentPathResolverTests
 	[Fact]
 	public async Task WhenABareFileNameMatchesSeveralFiles_ThenNothingResolvesAndEveryMatchIsReported()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		Directory.CreateDirectory(Path.Combine(projectDirectory, "Other"));
 		await File.WriteAllTextAsync(

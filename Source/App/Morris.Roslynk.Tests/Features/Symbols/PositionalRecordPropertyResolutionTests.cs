@@ -105,27 +105,10 @@ public class PositionalRecordPropertyResolutionTests : IClassFixture<PositionalR
 
 		public SearchSymbolsTool Searcher { get; private set; } = null!;
 
-		private const string Probe = """
-			namespace Acme.Web.Pages.Orders;
-
-			public partial class OrderPage
-			{
-				private sealed record Batch(List<string> Items, Dictionary<string, int> Targets);
-
-				private sealed class Holder
-				{
-					private int Targets { get; set; }
-				}
-			}
-			""";
-
 		public async Task InitializeAsync()
 		{
-			Registry = new InstanceRegistry();
-			SolutionPath = TestSolutions.CreateScratchSimpleSolution();
-			string library = Path.Combine(Path.GetDirectoryName(SolutionPath)!, "SimpleLibrary");
-			await File.WriteAllTextAsync(Path.Combine(library, "PositionalRecord.cs"), Probe);
-			await Registry.GetOrAddAsync(SolutionPath);
+			SolutionPath = TestSolutions.CreateScratchSimpleSolutionWithPositionalRecord();
+			Registry = await TestSolutions.SharedAsync(SolutionPath);
 
 			var resolver = new SymbolResolver();
 			var projections = new ProjectionService();
@@ -135,10 +118,6 @@ public class PositionalRecordPropertyResolutionTests : IClassFixture<PositionalR
 			Searcher = new SearchSymbolsTool(Registry, projections);
 		}
 
-		public Task DisposeAsync()
-		{
-			Registry.Dispose();
-			return Task.CompletedTask;
-		}
+		public Task DisposeAsync() => Task.CompletedTask;
 	}
 }

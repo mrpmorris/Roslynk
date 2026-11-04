@@ -217,6 +217,7 @@ public class GetCalleesCoverageTests : IClassFixture<GetCalleesCoverageTests.Scr
 		public Task DisposeAsync()
 		{
 			Registry.Dispose();
+			ScratchDirectories.Delete(SolutionPath);
 			return Task.CompletedTask;
 		}
 	}

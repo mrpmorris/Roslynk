@@ -14,7 +14,7 @@ namespace Morris.Roslynk.Tests.Features.References.RenameSymbolTests;
 /// that merely widens matching cannot pass: the record property must resolve, and the unrelated property
 /// with the same name must stay untouched.
 /// </summary>
-public class PositionalRecordPropertyRenameTests
+public class PositionalRecordPropertyRenameTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenAPositionalRecordPropertyIsNamedBySuffix_ThenItResolvesAndIsRenamedEverywhere()
@@ -22,9 +22,8 @@ public class PositionalRecordPropertyRenameTests
 		string solutionPath = CreateScratchWithPositionalRecord();
 		string recordPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "PositionalRecord.cs");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, "OrderPage.Batch.Targets", "UriByIdLookup");
 
@@ -45,9 +44,8 @@ public class PositionalRecordPropertyRenameTests
 		string solutionPath = CreateScratchWithPositionalRecord();
 		string recordPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "PositionalRecord.cs");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, "Acme.Web.Pages.Orders.OrderPage.Batch.Targets", "UriByIdLookup");
 
@@ -65,9 +63,8 @@ public class PositionalRecordPropertyRenameTests
 		string solutionPath = CreateScratchWithPositionalRecord();
 		string recordPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "PositionalRecord.cs");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, "OrderPage.Batch.Targets", "UriByIdLookup");
 
@@ -85,9 +82,8 @@ public class PositionalRecordPropertyRenameTests
 		string solutionPath = CreateScratchWithPositionalRecord();
 		string recordPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "PositionalRecord.cs");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, "OrderPage.Batch.Targets", "UriByIdLookup", checkOnly: true);
 
@@ -107,9 +103,8 @@ public class PositionalRecordPropertyRenameTests
 		// itself cannot resolve. Whatever the miss path reports, a candidate must round-trip.
 		string solutionPath = CreateScratchWithPositionalRecord();
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string miss = await subject.RenameSymbol(solutionPath, "Acme.Web.Pages.Orders.OrderPage.Batch.NoSuchMember", "Renamed", checkOnly: true);
 		Assert.Contains("error=NotFound", miss);
@@ -128,9 +123,9 @@ public class PositionalRecordPropertyRenameTests
 			.Select(line => line["candidate=".Length..])
 			.Where(candidate => candidate.Length > 0);
 
-	private static string CreateScratchWithPositionalRecord()
+	private string CreateScratchWithPositionalRecord()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(TestSolutions.CreateScratchSimpleSolution);
 		string library = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		File.WriteAllText(Path.Combine(library, "PositionalRecord.cs"), """
 			namespace Acme.Web.Pages.Orders;

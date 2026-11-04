@@ -10,8 +10,7 @@ public class FindDefinitionTests
 	[Fact]
 	public async Task WhenGivenAUsagePosition_ThenTheDeclarationIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new FindDefinitionTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string callerPath = Path.Combine(Path.GetDirectoryName(TestSolutions.Simple)!, "SimpleLibrary", "Caller.cs");
@@ -27,12 +26,10 @@ public class FindDefinitionTests
 		Assert.Contains("Greeter.cs", result);
 		Assert.Contains("loc=", result);
 	}
-
 	[Fact]
 	public async Task WhenGivenASolutionRelativeUsagePath_ThenTheDeclarationIsReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
 		var subject = new FindDefinitionTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string solutionDir = Path.GetDirectoryName(TestSolutions.Simple)!;
@@ -46,7 +43,6 @@ public class FindDefinitionTests
 		Assert.DoesNotContain("error=", result);
 		Assert.Contains("Greeter", result);
 	}
-
 	[Fact]
 	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{

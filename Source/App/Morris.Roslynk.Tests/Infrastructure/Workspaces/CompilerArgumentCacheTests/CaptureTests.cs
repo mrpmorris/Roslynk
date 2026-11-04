@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Morris.Roslynk.Features.References.FindReferences;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -8,12 +8,12 @@ using Morris.Roslynk.Infrastructure.Workspaces;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Workspaces.CompilerArgumentCacheTests;
 
-public class CaptureTests
+public class CaptureTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenTheSolutionSetsCustomAfterMicrosoftCommonTargets_ThenItsTargetsRunAndTheLoadIsCached()
 	{
-		string solutionPath = TestSolutions.CreateScratchLinkedSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchLinkedSolution());
 		string directory = Path.GetDirectoryName(solutionPath)!;
 		File.WriteAllText(
 			Path.Combine(directory, "Own.targets"),
@@ -35,7 +35,7 @@ public class CaptureTests
 	[Fact]
 	public async Task WhenTheSolutionsOwnBuildFilesReadAFile_ThenTheLoadIsNotCached()
 	{
-		string solutionPath = TestSolutions.CreateScratchLinkedSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchLinkedSolution());
 		string directory = Path.GetDirectoryName(solutionPath)!;
 		File.WriteAllText(Path.Combine(directory, "version.txt"), "1.2.3");
 		File.WriteAllText(
@@ -51,7 +51,7 @@ public class CaptureTests
 	[Fact]
 	public async Task WhenAnImportsPathDependsOnAProperty_ThenTheLoadIsNotCached()
 	{
-		string solutionPath = TestSolutions.CreateScratchLinkedSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchLinkedSolution());
 		string directory = Path.GetDirectoryName(solutionPath)!;
 		Directory.CreateDirectory(Path.Combine(directory, "build"));
 		File.WriteAllText(Path.Combine(directory, "build", "Shared.props"), "<Project />");
@@ -68,7 +68,7 @@ public class CaptureTests
 	[Fact]
 	public async Task WhenTheSolutionLoadsFromTheCache_ThenInactiveBranchesAreStillProjected()
 	{
-		string solutionPath = TestSolutions.CreateScratchConditionalSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchConditionalSolution());
 		using (var first = new InstanceRegistry())
 		{
 			RoslynInstance loaded = await first.GetOrAddAsync(solutionPath);

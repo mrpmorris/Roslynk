@@ -1,5 +1,7 @@
+﻿using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
+using Morris.Roslynk.Infrastructure.Lifecycle;
 
 namespace Morris.Roslynk.Tests;
 
@@ -23,13 +25,24 @@ internal static class TestSolutions
 	private static readonly Lazy<string> AccessSolutionPath = new(() => Prepare("AccessSolution", "AccessSolution.slnx"));
 	private static readonly Lazy<string> DisposeSolutionPath = new(() => Prepare("DisposeSolution", "DisposeSolution.slnx"));
 	private static readonly Lazy<string> RazorMultiProjectSolutionPath = new(() => Prepare("RazorMultiProjectSolution", "RazorMultiProjectSolution.slnx"));
+	/// <summary>
+	/// Builds the fixture's generator once per process. A copy that needs a built generator gets the
+	/// output copied into it rather than paying for a build of its own.
+	/// </summary>
+	private static readonly Lazy<bool> SourceGeneratorBuilt = new(() =>
+	{
+		Build(Path.Combine(FindTestFixturesRoot(), "GeneratorSolution", "GeneratorLib", "GeneratorLib.csproj"));
+		return true;
+	});
+
 	private static readonly Lazy<string> GeneratorSolutionPath = new(() =>
 	{
 		string path = Prepare("GeneratorSolution", "GeneratorSolution.slnx");
 
 		// The consumer references the generator project as an analyzer only; the workspace's design-time
-		// build never compiles it, so the generator DLL must be built before the solution loads.
-		Build(Path.Combine(Path.GetDirectoryName(path)!, "GeneratorLib", "GeneratorLib.csproj"));
+		// build never compiles it, so the generator DLL must be built before the solution loads. The
+		// build is shared with every scratch copy, so the project is built once rather than twice at once.
+		_ = SourceGeneratorBuilt.Value;
 		return path;
 	});
 	private static readonly Lazy<string> LargeTypeSolutionPath = new(() =>
@@ -43,6 +56,46 @@ internal static class TestSolutions
 		return path;
 	});
 
+	// Fixtures whose projects carry a PackageReference/FrameworkReference or a netstandard target:
+	// MSBuildWorkspace's design-time build resolves those from obj/project.assets.json, so the fixture
+	// must be restored. A package-free single-TFM fixture loads cleanly without any restore.
+	private static readonly HashSet<string> FixturesNeedingRestore = new(StringComparer.OrdinalIgnoreCase)
+	{
+		"RazorSolution",
+		"RazorInjectSolution",
+		"BindSolution",
+		"RazorMultiProjectSolution",
+		"CodeStyleSolution",
+		"GeneratorSolution",
+		"MultiTargetSolution",
+	};
+
+	private static readonly ConcurrentDictionary<string, Lazy<bool>> SourceRestores = new(StringComparer.OrdinalIgnoreCase);
+
+	// One registry for the whole test process. Committed fixtures are never written to, so every test
+	// that only reads one shares this registry's loaded snapshot (and Roslyn's compilation and
+	// SymbolFinder caches) instead of paying an MSBuild load, a first compilation and a declaration
+	// index of its own. Never dispose it: disposing would tear down instances other tests are using.
+	private static readonly InstanceRegistry SharedRegistry = new();
+
+	/// <summary>
+	/// The process-wide registry, with <paramref name="solutionPath"/> loaded and ready. Use this from
+	/// a test that only reads a committed fixture; do not dispose the returned registry.
+	/// </summary>
+	public static async Task<InstanceRegistry> SharedAsync(string solutionPath)
+	{
+		await SharedRegistry.GetOrAddAsync(solutionPath);
+		return SharedRegistry;
+	}
+
+	/// <summary>
+	/// The process-wide registry's instance for <paramref name="solutionPath"/>, loaded and ready. For a
+	/// test that reads the snapshot directly (<see cref="RoslynInstance.CurrentSolution"/>) rather than
+	/// through a tool; do not dispose the instance.
+	/// </summary>
+	public static async Task<RoslynInstance> SharedInstanceAsync(string solutionPath) =>
+		await SharedRegistry.GetOrAddAsync(solutionPath);
+
 	/// <summary>A clean single-project solution.</summary>
 	public static string Simple => SimpleSolution.Value;
 
@@ -51,15 +104,52 @@ internal static class TestSolutions
 	/// every semicolon-terminated type shape (positional records, a record struct, a bodiless class and
 	/// interface) that the committed fixture cannot, because the fixture is compiled with warnings as
 	/// errors and an unreferenced bodiless type is reported as unused.
+	/// <para>
+	/// Prepared once per process and shared: every caller only reads it. Do not write to the returned
+	/// directory — tests that need to change files must call <see cref="CreateScratchSimpleSolution"/>.
+	/// </para>
 	/// </summary>
-	public static string CreateScratchSimpleSolutionWithBodilessTypes()
+	public static string CreateScratchSimpleSolutionWithBodilessTypes() => BodilessTypesSolution.Value;
+
+	private static readonly Lazy<string> BodilessTypesSolution = new(() =>
 	{
 		string path = CreateScratchSimpleSolution();
 		string library = Path.Combine(Path.GetDirectoryName(path)!, "SimpleLibrary");
 		File.WriteAllText(Path.Combine(library, "BodilessTypes.cs"), BodilessTypesSource);
 		Restore(path);
 		return path;
-	}
+	});
+
+	/// <summary>
+	/// A positional record whose properties are declared by its parameter list, beside an ordinary
+	/// property of the same name. Read-only tests share one loaded instance of it instead of loading a
+	/// copy each; see <see cref="SharedInstanceAsync"/>. Prepared once per process; do not write to the
+	/// returned directory.
+	/// </summary>
+	public static string CreateScratchSimpleSolutionWithPositionalRecord() => PositionalRecordSolution.Value;
+
+	private static readonly Lazy<string> PositionalRecordSolution = new(() =>
+	{
+		string path = CreateScratchSimpleSolution();
+		string library = Path.Combine(Path.GetDirectoryName(path)!, "SimpleLibrary");
+		File.WriteAllText(Path.Combine(library, "PositionalRecord.cs"), PositionalRecordSource);
+		Restore(path);
+		return path;
+	});
+
+	public const string PositionalRecordSource = """
+		namespace Acme.Web.Pages.Orders;
+
+		public partial class OrderPage
+		{
+			private sealed record Batch(List<string> Items, Dictionary<string, int> Targets);
+
+			private sealed class Holder
+			{
+				private int Targets { get; set; }
+			}
+		}
+		""";
 
 	private const string BodilessTypesSource = """
 		namespace SimpleLibrary;
@@ -181,8 +271,11 @@ internal static class TestSolutions
 
 	private static string Prepare(params string[] relativeParts)
 	{
-		string path = Path.Combine([FindTestFixturesRoot(), .. relativeParts]);
-		Restore(path);
+		string root = FindTestFixturesRoot();
+		string path = Path.Combine([root, .. relativeParts]);
+		if (FixturesNeedingRestore.Contains(relativeParts[0]))
+			EnsureSourceRestored(relativeParts[0], Path.Combine(root, relativeParts[0]), Path.Combine(relativeParts[1..]));
+
 		return path;
 	}
 
@@ -203,6 +296,56 @@ internal static class TestSolutions
 	// One project at a time: a parallel restore of a solution whose projects reference each other can write the same
 	// project's restore files twice and fail with "already exists", which happens under load.
 	private static void Restore(string solutionPath) => RunDotnet("restore --disable-parallel", solutionPath);
+
+	/// <summary>
+	/// Restores a fixture once per process. Every scratch copy of it then clones that restore output
+	/// instead of spawning a restore of its own, which is what a copy paid for before.
+	/// </summary>
+	private static void EnsureSourceRestored(string fixtureName, string sourceDir, string solutionFile) =>
+		_ = SourceRestores.GetOrAdd(
+			fixtureName,
+			name => new Lazy<bool>(
+				() =>
+				{
+					Restore(Path.Combine(sourceDir, solutionFile));
+					return true;
+				},
+				LazyThreadSafetyMode.ExecutionAndPublication))
+			.Value;
+
+	/// <summary>
+	/// Copies the files a restore writes to the top of each <c>obj</c> folder into a scratch copy,
+	/// rewriting the fixture's absolute path to the copy's, so the copy has an assets file without
+	/// running a restore. A copy that is built by a test still re-restores: the copied
+	/// <c>project.nuget.cache</c> carries the old paths, so NuGet decides it is stale.
+	/// </summary>
+	private static void CloneRestoreOutputs(string sourceDir, string destDir)
+	{
+		foreach (string file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
+		{
+			string relative = Path.GetRelativePath(sourceDir, file);
+			string? parent = Path.GetDirectoryName(relative);
+			if (parent is null || !string.Equals(Path.GetFileName(parent), "obj", StringComparison.OrdinalIgnoreCase))
+				continue;
+
+			if (!IsRestoreOutput(Path.GetFileName(file)))
+				continue;
+
+			string text = File.ReadAllText(file);
+			if (text.Contains(sourceDir, StringComparison.OrdinalIgnoreCase))
+				text = text.Replace(sourceDir, destDir, StringComparison.OrdinalIgnoreCase);
+
+			string target = Path.Combine(destDir, relative);
+			Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+			File.WriteAllText(target, text, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+		}
+	}
+
+	private static bool IsRestoreOutput(string name) =>
+		name.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+		|| name.EndsWith(".props", StringComparison.OrdinalIgnoreCase)
+		|| name.EndsWith(".targets", StringComparison.OrdinalIgnoreCase)
+		|| name.EndsWith(".cache", StringComparison.OrdinalIgnoreCase);
 
 	private static void Build(string projectPath) => RunDotnet("build", projectPath);
 
@@ -242,7 +385,33 @@ internal static class TestSolutions
 	public static string CreateScratchBindSolution() => CreateScratch("BindSolution", "BindSolution.slnx");
 
 	/// <summary>
-	/// A writable scratch copy of the CshtmlSolution fixture: an MVC view (Views/Home/Index.cshtml) with a used
+	/// An MVC view (Views/Home/Index.cshtml) with a used and an unused @using, a CS0219 unused local in its
+	/// @functions block, and a _ViewImports.cshtml whose unused @using is shared and must be left alone.
+	/// </summary>
+	public static string Cshtml => CshtmlSolutionPath.Value;
+
+	/// <summary>
+	/// A scratch RazorSolution copy with an unused @using and an unused local added to Counter.razor,
+	/// prepared once and shared by the tests that only read it.
+	/// </summary>
+	public static string RazorWithUnusedCode => RazorWithUnusedCodePath.Value;
+
+	private static readonly Lazy<string> CshtmlSolutionPath = new(() => Prepare("CshtmlSolution", "CshtmlSolution.slnx"));
+
+	private static readonly Lazy<string> RazorWithUnusedCodePath = new(() =>
+	{
+		string solutionPath = CreateScratchRazorSolution();
+		string counterPath = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Counter.razor");
+		string counter = File.ReadAllText(counterPath);
+		string newline = counter.Contains("\r\n") ? "\r\n" : "\n";
+		counter = counter
+			.Replace("@using Microsoft.AspNetCore.Components.Web" + newline, "@using Microsoft.AspNetCore.Components.Web" + newline + "@using System.CodeDom" + newline)
+			.Replace("\t\tCurrentCount++;", "\t\tint unused = 1;" + newline + "\t\tCurrentCount++;");
+		File.WriteAllText(counterPath, counter);
+		return solutionPath;
+	});
+
+	/// <summary>A writable scratch copy of the CshtmlSolution fixture: an MVC view (Views/Home/Index.cshtml) with a used
 	/// and an unused @using, a CS0219 unused local in its @functions block, and a _ViewImports.cshtml whose
 	/// unused @using is shared and must be left alone.
 	/// </summary>
@@ -291,12 +460,33 @@ internal static class TestSolutions
 	/// </summary>
 	public static string CreateScratchGeneratorSolutionWithoutBuiltGenerator() => CreateScratch("GeneratorSolution", "GeneratorSolution.slnx");
 
+	/// <summary>
+	/// A scratch GeneratorSolution copy with its generator built, prepared once and shared by the tests
+	/// that only assert a write tool refuses a generated-only symbol.
+	/// </summary>
+	public static string GeneratorWithBuiltGenerator => GeneratorWithBuiltGeneratorPath.Value;
+
+	private static readonly Lazy<string> GeneratorWithBuiltGeneratorPath = new(CreateScratchGeneratorSolution);
+
 	/// <summary>A writable scratch copy of the GeneratorSolution fixture with its generator DLL built, for tests that edit generator inputs.</summary>
 	public static string CreateScratchGeneratorSolution()
 	{
 		string path = CreateScratch("GeneratorSolution", "GeneratorSolution.slnx");
-		BuildScratchGenerator(path);
+		_ = SourceGeneratorBuilt.Value;
+		CopyDirectory(
+			Path.Combine(FindTestFixturesRoot(), "GeneratorSolution", "GeneratorLib", "bin"),
+			Path.Combine(Path.GetDirectoryName(path)!, "GeneratorLib", "bin"));
 		return path;
+	}
+
+	private static void CopyDirectory(string sourceDir, string destDir)
+	{
+		foreach (string file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
+		{
+			string target = Path.Combine(destDir, Path.GetRelativePath(sourceDir, file));
+			Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+			File.Copy(file, target, overwrite: true);
+		}
 	}
 
 	/// <summary>Builds (Debug) the generator project of a GeneratorSolution scratch copy, as a user would after load.</summary>
@@ -316,6 +506,7 @@ internal static class TestSolutions
 	public static string CreateScratchLinkedSolution(bool withNoTargetsProject = false)
 	{
 		string root = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"), "LinkedSolution");
+		ScratchDirectories.Track(root);
 		void Write(string relative, string text)
 		{
 			string path = Path.Combine(root, relative);
@@ -369,10 +560,16 @@ internal static class TestSolutions
 	{
 		string sourceDir = Path.Combine(FindTestFixturesRoot(), fixtureName);
 		string destDir = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"), fixtureName);
+		ScratchDirectories.Track(destDir);
 		CopyExcludingBuildOutput(sourceDir, destDir);
 
 		string solutionPath = Path.Combine(destDir, solutionFile);
-		Restore(solutionPath);
+
+		// One restore per fixture, then a clone of its restore output for every copy, rather than a
+		// restore process per copy.
+		EnsureSourceRestored(fixtureName, sourceDir, solutionFile);
+		CloneRestoreOutputs(sourceDir, destDir);
+
 		return solutionPath;
 	}
 

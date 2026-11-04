@@ -1,4 +1,4 @@
-using Microsoft.CodeAnalysis;
+﻿using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Features.References.RenameSymbol;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -8,14 +8,14 @@ using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Features.References.RenameSymbolTests;
 
-public class RenameSymbolConcurrencyTests
+public class RenameSymbolConcurrencyTests : MutatingTestBase
 {
 	private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(60);
 
 	[Fact]
 	public async Task WhenAnUnrelatedFileIsEditedAfterTheRenameIsComputed_ThenTheRenameSucceedsAndTheEditSurvives()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string libraryDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		string ledgerPath = Path.Combine(libraryDir, "Ledger.cs");
 
@@ -35,7 +35,7 @@ public class RenameSymbolConcurrencyTests
 	[Fact]
 	public async Task WhenARenamedFileIsEditedAfterTheRenameIsComputed_ThenStaleIsReturnedAndNothingIsWritten()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string libraryDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		string callerPath = Path.Combine(libraryDir, "Caller.cs");
 		string greeterPath = Path.Combine(libraryDir, "Greeter.cs");
@@ -56,15 +56,14 @@ public class RenameSymbolConcurrencyTests
 	[Fact]
 	public async Task WhenARenamedFileChangedOnDiskSinceLoad_ThenStaleIsReturnedWithThePath()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string libraryDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		string callerPath = Path.Combine(libraryDir, "Caller.cs");
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		await Registry.GetOrAddAsync(solutionPath);
 		string edited = await File.ReadAllTextAsync(callerPath) + "// external edit\n";
 		await File.WriteAllTextAsync(callerPath, edited);
-		var subject = new RenameSymbolTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		var subject = new RenameSymbolTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameSymbol(solutionPath, "SimpleLibrary.Greeter", "Welcomer");
 

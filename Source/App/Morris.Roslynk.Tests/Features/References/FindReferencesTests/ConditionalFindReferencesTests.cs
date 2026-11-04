@@ -10,8 +10,7 @@ public class ConditionalFindReferencesTests
 	[Fact]
 	public async Task WhenASymbolIsUsedInBothIfAndElseBranches_ThenReferencesFromBothBranchesAreFound()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Conditional);
+		var registry = await TestSolutions.SharedAsync(TestSolutions.Conditional);
 		var subject = new FindReferencesTool(registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindReferences(TestSolutions.Conditional, "ConditionalLib.Target.Ping");

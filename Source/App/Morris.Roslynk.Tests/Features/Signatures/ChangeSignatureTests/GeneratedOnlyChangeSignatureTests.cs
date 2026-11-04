@@ -1,7 +1,7 @@
-using Morris.Roslynk.Features.Signatures.ChangeSignature;
-using Morris.Roslynk.Infrastructure.Lifecycle;
+﻿using Morris.Roslynk.Features.Signatures.ChangeSignature;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Writing;
+using Morris.Roslynk.Infrastructure.Lifecycle;
 
 namespace Morris.Roslynk.Tests.Features.Signatures.ChangeSignatureTests;
 
@@ -10,14 +10,13 @@ namespace Morris.Roslynk.Tests.Features.Signatures.ChangeSignatureTests;
 /// its generated document (or silently no-oping): the declaration is never persisted and the generator
 /// would re-emit the old signature.
 /// </summary>
-public class GeneratedOnlyChangeSignatureTests
+public class GeneratedOnlyChangeSignatureTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenChangingTheSignatureOfAGeneratedMethod_ThenNotSupported()
 	{
-		string solutionPath = TestSolutions.CreateScratchGeneratorSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
+		string solutionPath = TestSolutions.GeneratorWithBuiltGenerator;
+		InstanceRegistry registry = await TestSolutions.SharedAsync(solutionPath);
 		var subject = new ChangeSignatureTool(registry, new SymbolResolver(), new ApplyPipeline());
 
 		string result = await subject.ChangeSignature(

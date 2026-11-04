@@ -5,16 +5,16 @@ using Morris.Roslynk.Tests.Helpers;
 
 namespace Morris.Roslynk.Tests.Features.Usings.RemoveUnusedUsingsTests;
 
-public class RemoveUnusedUsingsTests
+public class RemoveUnusedUsingsTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenAUsingHasACommentAboveIt_ThenTheCommentSurvives()
 	{
 		// The reason this tool now goes through Roslyn's own fix: removing the node took the comment with it.
-		string solutionPath = UnnecessaryUsingScenario.Create(out string greeter);
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.RemoveUnusedUsings(registry);
+		string greeter = null!;
+		string solutionPath = Scratch(() => UnnecessaryUsingScenario.Create(out greeter));
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.RemoveUnusedUsings(Registry);
 
 		string result = await subject.RemoveUnusedUsings(solutionPath);
 
@@ -27,13 +27,12 @@ public class RemoveUnusedUsingsTests
 	[Fact]
 	public async Task WhenAFileHasAnUnnecessaryUsing_ThenItIsRemoved()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string greeter = FindFile(solutionPath, "Greeter.cs");
 		await File.WriteAllTextAsync(greeter, "using System.Text;\r\n" + await File.ReadAllTextAsync(greeter));
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.RemoveUnusedUsings(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.RemoveUnusedUsings(Registry);
 
 		string result = await subject.RemoveUnusedUsings(solutionPath);
 
@@ -45,14 +44,13 @@ public class RemoveUnusedUsingsTests
 	[Fact]
 	public async Task WhenCheckOnly_ThenTheUsingIsReportedButNotRemoved()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string greeter = FindFile(solutionPath, "Greeter.cs");
 		string withUnused = "using System.Text;\r\n" + await File.ReadAllTextAsync(greeter);
 		await File.WriteAllTextAsync(greeter, withUnused);
 
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = TestServices.RemoveUnusedUsings(registry);
+		await Registry.GetOrAddAsync(solutionPath);
+		var subject = TestServices.RemoveUnusedUsings(Registry);
 
 		string result = await subject.RemoveUnusedUsings(solutionPath, filePath: null, checkOnly: true);
 
@@ -64,16 +62,14 @@ public class RemoveUnusedUsingsTests
 	[Fact]
 	public async Task WhenThereAreNoUnnecessaryUsings_ThenNothingIsApplied()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = TestServices.RemoveUnusedUsings(registry);
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
+		var subject = TestServices.RemoveUnusedUsings(Registry);
 
 		string result = await subject.RemoveUnusedUsings(TestSolutions.Simple);
 
 		Assert.Contains("applied=N", result);
 		Assert.Contains("removedCount=0", result);
 	}
-
 	[Fact]
 	public async Task WhenTheLoadWaitTimeoutElapses_ThenIndexingIsReturned()
 	{

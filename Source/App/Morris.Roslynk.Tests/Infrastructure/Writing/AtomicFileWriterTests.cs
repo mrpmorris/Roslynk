@@ -2,13 +2,17 @@ using Morris.Roslynk.Infrastructure.Writing;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Writing;
 
-public class AtomicFileWriterTests
+public class AtomicFileWriterTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenWritingABatch_ThenEveryFileGetsItsNewContentAndTempsAreCleanedUp()
 	{
-		string directory = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"));
-		Directory.CreateDirectory(directory);
+		string directory = Scratch(() =>
+		{
+			string path = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"));
+			Directory.CreateDirectory(path);
+			return path;
+		});
 		string first = Path.Combine(directory, "first.txt");
 		string second = Path.Combine(directory, "second.txt");
 		await File.WriteAllTextAsync(first, "old-first");

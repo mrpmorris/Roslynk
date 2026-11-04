@@ -1,4 +1,4 @@
-using Morris.Roslynk.Features.CodeActions.GetCodeActions;
+﻿using Morris.Roslynk.Features.CodeActions.GetCodeActions;
 using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 using Morris.Roslynk.Features.Patching.ApplyPatch;
 using Morris.Roslynk.Features.Symbols.FindDefinition;
@@ -10,12 +10,12 @@ using Morris.Roslynk.Infrastructure.Resolution;
 
 namespace Morris.Roslynk.Tests.Features.PathResolution;
 
-public class PathResolutionTests
+public class PathResolutionTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenGetDiagnosticsIsFilteredByABareFileName_ThenItResolvesAndEchoesResolvedPath()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		Directory.CreateDirectory(Path.Combine(projectDirectory, "Sub"));
 		await File.WriteAllTextAsync(
@@ -38,7 +38,7 @@ public class PathResolutionTests
 	[Fact]
 	public async Task WhenGetDiagnosticsIsFilteredByABareFileNameMatchingSeveralFiles_ThenAmbiguousOffersCandidates()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		Directory.CreateDirectory(Path.Combine(projectDirectory, "Other"));
 		await File.WriteAllTextAsync(
@@ -60,9 +60,8 @@ public class PathResolutionTests
 	[Fact]
 	public async Task WhenGetDiagnosticsUsesAnExactPath_ThenNoResolvedPathHeaderIsEmitted()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Simple, includeErrors: true, includeAnalyzers: false, filePath: "SimpleLibrary/Calculator.cs");
@@ -71,14 +70,11 @@ public class PathResolutionTests
 		Assert.DoesNotContain("resolvedPath=", result);
 		Assert.Contains("filter=filePath:SimpleLibrary/Calculator.cs", result);
 	}
-
 	[Fact]
 	public async Task WhenApplyPatchUsesABareFileName_ThenItResolvesAndEchoesResolvedPath()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new ApplyPatchTool(registry);
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
 
 		string calculator = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary", "Calculator.cs");
 		string original = await File.ReadAllTextAsync(calculator);
@@ -111,9 +107,8 @@ public class PathResolutionTests
 	[Fact]
 	public async Task WhenFindDefinitionUsesABareFileName_ThenItResolvesAndEchoesResolvedPath()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new FindDefinitionTool(registry, new SymbolResolver(), new ProjectionService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
+		var subject = new FindDefinitionTool(Registry, new SymbolResolver(), new ProjectionService());
 
 		string result = await subject.FindDefinition(TestSolutions.Simple, "Calculator.cs", 7, 10);
 
@@ -121,13 +116,11 @@ public class PathResolutionTests
 		Assert.Contains("resolvedPath=SimpleLibrary/Calculator.cs", result);
 		Assert.Contains("fullName=a", result);
 	}
-
 	[Fact]
 	public async Task WhenGetExpressionInfoUsesABareFileName_ThenItResolvesAndEchoesResolvedPath()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Simple);
-		var subject = new GetExpressionInfoTool(registry, new ProjectionService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Simple);
+		var subject = new GetExpressionInfoTool(Registry, new ProjectionService());
 
 		string result = await subject.GetExpressionInfo(TestSolutions.Simple, "Calculator.cs", 7, 10);
 

@@ -88,40 +88,17 @@ public class PositionalRecordPropertyResolutionTests : IClassFixture<PositionalR
 
 	public sealed class Fixture : IAsyncLifetime
 	{
-		private InstanceRegistry Registry = null!;
-
 		public string SolutionPath { get; private set; } = null!;
 
 		public RoslynInstance Instance { get; private set; } = null!;
 
-		private const string Probe = """
-			namespace Acme.Web.Pages.Orders;
-
-			public partial class OrderPage
-			{
-				private sealed record Batch(List<string> Items, Dictionary<string, int> Targets);
-
-				private sealed class Holder
-				{
-					private int Targets { get; set; }
-				}
-			}
-			""";
-
 		public async Task InitializeAsync()
 		{
-			Registry = new InstanceRegistry();
-			SolutionPath = TestSolutions.CreateScratchSimpleSolution();
-			string library = Path.Combine(Path.GetDirectoryName(SolutionPath)!, "SimpleLibrary");
-			await File.WriteAllTextAsync(Path.Combine(library, "PositionalRecord.cs"), Probe);
-			Instance = await Registry.GetOrAddAsync(SolutionPath);
+			SolutionPath = TestSolutions.CreateScratchSimpleSolutionWithPositionalRecord();
+			Instance = await TestSolutions.SharedInstanceAsync(SolutionPath);
 		}
 
-		public Task DisposeAsync()
-		{
-			Registry.Dispose();
-			return Task.CompletedTask;
-		}
+		public Task DisposeAsync() => Task.CompletedTask;
 
 		public Task<IReadOnlyList<ISymbol>> ResolveAsync(string name) =>
 			new SymbolResolver().FindByFullyQualifiedNameAsync(Instance.CurrentSolution, name);

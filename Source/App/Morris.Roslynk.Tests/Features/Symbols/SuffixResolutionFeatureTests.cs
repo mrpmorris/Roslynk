@@ -149,6 +149,7 @@ public class SuffixResolutionFeatureTests : IClassFixture<SuffixResolutionFeatur
 		public Task DisposeAsync()
 		{
 			Registry.Dispose();
+			ScratchDirectories.Delete(SolutionPath);
 			return Task.CompletedTask;
 		}
 	}

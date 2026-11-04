@@ -1,17 +1,16 @@
-using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
+﻿using Morris.Roslynk.Features.Diagnostics.GetDiagnostics;
 using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Lifecycle;
 
 namespace Morris.Roslynk.Tests.Features.Diagnostics.GetDiagnosticsTests;
 
-public class GetDiagnosticsTests
+public class GetDiagnosticsTests : MutatingTestBase
 {
 	[Fact]
 	public async Task WhenASolutionHasACompileError_ThenItIsReturnedAsAnError()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeErrors: true);
 
@@ -21,13 +20,11 @@ public class GetDiagnosticsTests
 		Assert.Contains("\terrors\n", result);
 		Assert.Contains("CS0029,9:27,", result);
 	}
-
 	[Fact]
 	public async Task WhenSeveritiesAreNotWidened_ThenOnlyErrorsAreReturnedButTheCountsStillSeeWarnings()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeErrors: true);
 
@@ -35,13 +32,11 @@ public class GetDiagnosticsTests
 		Assert.Contains("warnings=0", result);
 		Assert.DoesNotContain("\twarnings", result);
 	}
-
 	[Fact]
 	public async Task WhenWarningsAreIncluded_ThenTheyAppearAlongsideErrors()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeWarnings: true);
@@ -50,11 +45,10 @@ public class GetDiagnosticsTests
 		Assert.Contains("warnings=0", result);
 		Assert.Contains("\terrors\n", result);
 	}
-
 	[Fact]
 	public async Task WhenARazorFileHasARazorSyntaxError_ThenTheRazorDiagnosticIsReportedAgainstThatFile()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string broken = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "Broken.razor");
 		await File.WriteAllTextAsync(broken, "<h1>Broken</h1>\n@code {\n    private string Value = \"\";\n");
 		using var registry = new InstanceRegistry();
@@ -129,9 +123,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenFilteredByIds_ThenOnlyThoseIdsAreReturned()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, ids: ["CS0029"]);
@@ -142,13 +135,11 @@ public class GetDiagnosticsTests
 		Assert.Contains("CS0029,9:27,", result);
 		Assert.DoesNotContain("CS0169,", result);
 	}
-
 	[Fact]
 	public async Task WhenIdsDifferInCase_ThenTheyStillMatch()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, ids: ["cs0029"]);
@@ -158,13 +149,11 @@ public class GetDiagnosticsTests
 		Assert.Contains("CS0029,9:27,", result);
 		Assert.DoesNotContain("CS0169,", result);
 	}
-
 	[Fact]
 	public async Task WhenMaxSizeIsExceeded_ThenTheFirstEntriesAreKeptAndCountsStayComplete()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeWarnings: true, includeAnalyzers: false, maxSize: 1);
@@ -177,7 +166,6 @@ public class GetDiagnosticsTests
 		Assert.Single(leaves);
 		Assert.StartsWith("CS0169,", leaves[0].TrimStart('\t'));
 	}
-
 	[Fact]
 	public async Task WhenSummaryOnly_ThenDiagnosticsAreGroupedById()
 	{
@@ -202,10 +190,8 @@ public class GetDiagnosticsTests
 	{
 		// The scratch copy keeps both target frameworks: under Source/, Directory.Build.props forces the
 		// committed fixture to a single net10.0 target framework.
-		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchMultiTargetSolution());
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			solutionPath, includeErrors: true, includeAnalyzers: false, projectName: "Multi");
@@ -223,10 +209,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenProjectNameCarriesTheExtensionOrCase_ThenItStillMatches()
 	{
-		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchMultiTargetSolution());
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string withExtension = await subject.GetDiagnostics(
 			solutionPath, includeErrors: true, includeAnalyzers: false, projectName: "Multi.csproj");
@@ -243,10 +227,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenProjectNameMatchesNothing_ThenNotFoundOffersCandidates()
 	{
-		string solutionPath = TestSolutions.CreateScratchMultiTargetSolution();
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(solutionPath);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchMultiTargetSolution());
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			solutionPath, includeErrors: true, includeAnalyzers: false, projectName: "Nope");
@@ -263,16 +245,14 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenFilePathMatchesNoDocument_ThenNotFoundOffersCandidates()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, filePath: "Nope/Missing.cs");
 
 		Assert.Contains("error=NotFound", result);
 	}
-
 	[Fact]
 	public async Task WhenACompiledFileHasNoMatchingDiagnostics_ThenTheCountsAreZeroAndNotAnError()
 	{
@@ -293,9 +273,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenMaxSizeIsNegative_ThenTheResultIsHeadersOnly()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, maxSize: -5);
@@ -306,7 +285,6 @@ public class GetDiagnosticsTests
 		Assert.Contains("truncated=Y", result);
 		Assert.DoesNotContain("CS0029", result);
 	}
-
 	[Fact]
 	public async Task WhenFiltersCombine_ThenEveryActiveFilterIsEchoedAndCountsAgree()
 	{
@@ -334,7 +312,7 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenFilteredByARazorFile_ThenRazorAndMappedDiagnosticsAreReturned()
 	{
-		string solutionPath = TestSolutions.CreateScratchRazorSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		string razorLib = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib");
 		await File.WriteAllTextAsync(
 			Path.Combine(razorLib, "Broken.razor"), "<h1>Broken</h1>\n@code {\n    private string Value = \"\";\n");
@@ -362,9 +340,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenNoFiltersAreSupplied_ThenTheOutputIsUnchanged()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeErrors: true, includeAnalyzers: false);
 
@@ -373,11 +350,10 @@ public class GetDiagnosticsTests
 		Assert.DoesNotContain("truncated=", result);
 		Assert.Contains("CS0029,9:27,", result);
 	}
-
 	[Fact]
 	public async Task WhenMaxSizeIsExceeded_ThenTheKeptLeavesAreTheFirstInBodyOrder()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		Directory.CreateDirectory(Path.Combine(projectDirectory, "Sub"));
 		await File.WriteAllTextAsync(
@@ -406,9 +382,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenSummaryOnlyIsRequestedWithoutSeverityFlags_ThenNonHiddenIdsAreListedAndCountsStayComplete()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(TestSolutions.Broken, includeAnalyzers: false, summaryOnly: true);
 
@@ -421,7 +396,6 @@ public class GetDiagnosticsTests
 		Assert.DoesNotContain("CS8019,", result);
 		Assert.DoesNotContain("count=", result);
 	}
-
 	[Fact]
 	public async Task WhenSummaryOnlyIsCapped_ThenCountCountsIdRows()
 	{
@@ -490,9 +464,8 @@ public class GetDiagnosticsTests
 	[Fact]
 	public async Task WhenFilteredByAPrivateFixTriggerId_ThenNothingMatches()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken,
@@ -506,13 +479,11 @@ public class GetDiagnosticsTests
 		Assert.Contains("filter=ids:RemoveUnnecessaryImportsFixable", result);
 		Assert.DoesNotContain("CS0029", result);
 	}
-
 	[Fact]
 	public async Task WhenCountOnlyIsRequested_ThenTheHeadersAndCountAreReturnedWithoutRows()
 	{
-		using var registry = new InstanceRegistry();
-		await registry.GetOrAddAsync(TestSolutions.Broken);
-		var subject = new GetDiagnosticsTool(registry, new DiagnosticsService());
+		var Registry = await TestSolutions.SharedAsync(TestSolutions.Broken);
+		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			TestSolutions.Broken, includeErrors: true, includeAnalyzers: false, countOnly: true);
@@ -526,7 +497,6 @@ public class GetDiagnosticsTests
 		Assert.Equal("2", HeaderOf(result, "count"));
 		Assert.DoesNotContain("\n\n", result);
 	}
-
 	[Fact]
 	public async Task WhenCountOnlyIsCapped_ThenTruncatedIsKeptAndCountAppearsOnce()
 	{
@@ -570,9 +540,9 @@ public class GetDiagnosticsTests
 	/// scratch copy lives outside Source/, so it does not inherit TreatWarningsAsErrors and CS0169 stays a
 	/// warning.
 	/// </summary>
-	private static async Task<string> CreateScratchWithEverySeverityAsync()
+	private async Task<string> CreateScratchWithEverySeverityAsync()
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 		await File.WriteAllTextAsync(
 			Path.Combine(projectDirectory, "Broken.cs"),
@@ -591,9 +561,9 @@ public class GetDiagnosticsTests
 	/// A scratch SimpleSolution whose project carries <paramref name="conversionErrors"/> CS0029s in
 	/// Broken.cs and one CS0103 in AlsoBroken.cs, so file/id/count tests have two files to filter between.
 	/// </summary>
-	private static async Task<string> CreateScratchWithBrokenFilesAsync(int conversionErrors)
+	private async Task<string> CreateScratchWithBrokenFilesAsync(int conversionErrors)
 	{
-		string solutionPath = TestSolutions.CreateScratchSimpleSolution();
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchSimpleSolution());
 		string projectDirectory = Path.Combine(Path.GetDirectoryName(solutionPath)!, "SimpleLibrary");
 
 		string methods = string.Join("\n", Enumerable.Range(0, conversionErrors)
