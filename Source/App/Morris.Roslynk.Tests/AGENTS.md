@@ -38,11 +38,15 @@ or that asserts instance state, gets its own registry and its own scratch copy.
    a `status=Building` header beside an otherwise complete (or empty) body. Assert on the content:
    - empty result → `OutlineAssert.HasNoSymbols(result)`, not `Assert.Equal("", result)`;
    - exact header set → `OutlineAssert.HeadersAre(expected, result)`, which drops the status line.
-5. **Restore only package-bearing fixtures.** `Simple`, `Broken`, `References`, `Access`, `Dispose`,
-   `Expression`, `LocalFunction`, `Conditional`, `LargeType` and `Cshtml` load cleanly without
-   `obj/`; `Razor`, `RazorInject`, `Bind`, `RazorMultiProject`, `CodeStyle`, `Generator` and
-   `MultiTarget` need NuGet assets. `TestSolutions` owns the `FixturesNeedingRestore` allowlist; do
-   not add a restore to a package-free fixture.
+5. **Restore once per fixture, then clone.** `CreateScratch` restores a fixture once per process and
+   copies its restore output into each scratch copy — the files restore writes to the top of an `obj`
+   folder, with the fixture's absolute path rewritten to the copy's — so a copy has an assets file
+   without spawning `dotnet restore`. A copy that a test builds re-restores, because the copied
+   `project.nuget.cache` carries the old paths and NuGet treats it as stale. `Prepare` still restores
+   only `Simple`, `Broken`, `References`, `Access`, `Dispose`, `Expression`, `LocalFunction`,
+   `Conditional`, `LargeType` and `Cshtml` load without `obj/`; `Razor`, `RazorInject`, `Bind`,
+   `RazorMultiProject`, `CodeStyle`, `Generator` and `MultiTarget` need NuGet assets. `TestSolutions`
+   owns the `FixturesNeedingRestore` allowlist; do not add a per-copy restore anywhere.
 6. **Do not change xUnit parallelism.** The default (one thread per core) is fastest; 8 and 32
    threads both measured ~20% slower, and higher counts make the analyzer budget flaky.
 7. **Do not merge fixtures into one solution.** A shared registry already loads each fixture once;
@@ -59,6 +63,13 @@ or that asserts instance state, gets its own registry and its own scratch copy.
    wrap it in a retry loop with a delay. `ScratchDirectories` retries in the background when a build
    host is slow to release a file, and the next run's `ScratchDirectorySweeper` clears anything a
    killed run left behind.
+
+9. **Share a prepared copy when the test only reads.** When a read-only test needs a scratch copy
+   that carries extra source — an unused local, an unused `@using`, a built generator — prepare it
+   once and load it through the shared registry (`TestSolutions.RazorWithUnusedCode`,
+   `TestSolutions.GeneratorWithBuiltGenerator`, the `CreateScratch...With...` helpers), rather than
+   copying and loading it per test. A test that writes still gets a fresh copy and a private
+   registry.
 
 ## Patterns
 

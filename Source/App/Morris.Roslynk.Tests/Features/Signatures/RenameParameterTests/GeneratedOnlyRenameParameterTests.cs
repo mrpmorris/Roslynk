@@ -2,6 +2,7 @@
 using Morris.Roslynk.Infrastructure.Projections;
 using Morris.Roslynk.Infrastructure.Resolution;
 using Morris.Roslynk.Infrastructure.Writing;
+using Morris.Roslynk.Infrastructure.Lifecycle;
 
 namespace Morris.Roslynk.Tests.Features.Signatures.RenameParameterTests;
 
@@ -15,8 +16,9 @@ public class GeneratedOnlyRenameParameterTests : MutatingTestBase
 	[Fact]
 	public async Task WhenRenamingAParameterOfAGeneratedMethod_ThenNotSupported()
 	{
-		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchGeneratorSolution());
-		var subject = new RenameParameterTool(Registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
+		string solutionPath = TestSolutions.GeneratorWithBuiltGenerator;
+		InstanceRegistry registry = await TestSolutions.SharedAsync(solutionPath);
+		var subject = new RenameParameterTool(registry, new SymbolResolver(), new ProjectionService(), new ApplyPipeline());
 
 		string result = await subject.RenameParameter(solutionPath, "ConsumerLib.Ctx.Cache.TryResolve", "key", "name", checkOnly: true);
 

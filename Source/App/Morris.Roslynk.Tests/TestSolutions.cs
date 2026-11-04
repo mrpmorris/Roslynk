@@ -449,6 +449,14 @@ internal static class TestSolutions
 	/// </summary>
 	public static string CreateScratchGeneratorSolutionWithoutBuiltGenerator() => CreateScratch("GeneratorSolution", "GeneratorSolution.slnx");
 
+	/// <summary>
+	/// A scratch GeneratorSolution copy with its generator built, prepared once and shared by the tests
+	/// that only assert a write tool refuses a generated-only symbol.
+	/// </summary>
+	public static string GeneratorWithBuiltGenerator => GeneratorWithBuiltGeneratorPath.Value;
+
+	private static readonly Lazy<string> GeneratorWithBuiltGeneratorPath = new(CreateScratchGeneratorSolution);
+
 	/// <summary>A writable scratch copy of the GeneratorSolution fixture with its generator DLL built, for tests that edit generator inputs.</summary>
 	public static string CreateScratchGeneratorSolution()
 	{
