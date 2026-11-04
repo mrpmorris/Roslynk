@@ -25,13 +25,24 @@ internal static class TestSolutions
 	private static readonly Lazy<string> AccessSolutionPath = new(() => Prepare("AccessSolution", "AccessSolution.slnx"));
 	private static readonly Lazy<string> DisposeSolutionPath = new(() => Prepare("DisposeSolution", "DisposeSolution.slnx"));
 	private static readonly Lazy<string> RazorMultiProjectSolutionPath = new(() => Prepare("RazorMultiProjectSolution", "RazorMultiProjectSolution.slnx"));
+	/// <summary>
+	/// Builds the fixture's generator once per process. A copy that needs a built generator gets the
+	/// output copied into it rather than paying for a build of its own.
+	/// </summary>
+	private static readonly Lazy<bool> SourceGeneratorBuilt = new(() =>
+	{
+		Build(Path.Combine(FindTestFixturesRoot(), "GeneratorSolution", "GeneratorLib", "GeneratorLib.csproj"));
+		return true;
+	});
+
 	private static readonly Lazy<string> GeneratorSolutionPath = new(() =>
 	{
 		string path = Prepare("GeneratorSolution", "GeneratorSolution.slnx");
 
 		// The consumer references the generator project as an analyzer only; the workspace's design-time
-		// build never compiles it, so the generator DLL must be built before the solution loads.
-		Build(Path.Combine(Path.GetDirectoryName(path)!, "GeneratorLib", "GeneratorLib.csproj"));
+		// build never compiles it, so the generator DLL must be built before the solution loads. The
+		// build is shared with every scratch copy, so the project is built once rather than twice at once.
+		_ = SourceGeneratorBuilt.Value;
 		return path;
 	});
 	private static readonly Lazy<string> LargeTypeSolutionPath = new(() =>
@@ -467,16 +478,6 @@ internal static class TestSolutions
 			Path.Combine(Path.GetDirectoryName(path)!, "GeneratorLib", "bin"));
 		return path;
 	}
-
-	/// <summary>
-	/// Builds the fixture's generator once per process. A copy that needs a built generator gets the
-	/// output copied into it rather than paying for a build of its own.
-	/// </summary>
-	private static readonly Lazy<bool> SourceGeneratorBuilt = new(() =>
-	{
-		Build(Path.Combine(FindTestFixturesRoot(), "GeneratorSolution", "GeneratorLib", "GeneratorLib.csproj"));
-		return true;
-	});
 
 	private static void CopyDirectory(string sourceDir, string destDir)
 	{
