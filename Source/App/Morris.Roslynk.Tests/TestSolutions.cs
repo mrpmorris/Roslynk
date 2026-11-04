@@ -427,8 +427,31 @@ internal static class TestSolutions
 	public static string CreateScratchGeneratorSolution()
 	{
 		string path = CreateScratch("GeneratorSolution", "GeneratorSolution.slnx");
-		BuildScratchGenerator(path);
+		_ = SourceGeneratorBuilt.Value;
+		CopyDirectory(
+			Path.Combine(FindTestFixturesRoot(), "GeneratorSolution", "GeneratorLib", "bin"),
+			Path.Combine(Path.GetDirectoryName(path)!, "GeneratorLib", "bin"));
 		return path;
+	}
+
+	/// <summary>
+	/// Builds the fixture's generator once per process. A copy that needs a built generator gets the
+	/// output copied into it rather than paying for a build of its own.
+	/// </summary>
+	private static readonly Lazy<bool> SourceGeneratorBuilt = new(() =>
+	{
+		Build(Path.Combine(FindTestFixturesRoot(), "GeneratorSolution", "GeneratorLib", "GeneratorLib.csproj"));
+		return true;
+	});
+
+	private static void CopyDirectory(string sourceDir, string destDir)
+	{
+		foreach (string file in Directory.EnumerateFiles(sourceDir, "*", SearchOption.AllDirectories))
+		{
+			string target = Path.Combine(destDir, Path.GetRelativePath(sourceDir, file));
+			Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+			File.Copy(file, target, overwrite: true);
+		}
 	}
 
 	/// <summary>Builds (Debug) the generator project of a GeneratorSolution scratch copy, as a user would after load.</summary>
