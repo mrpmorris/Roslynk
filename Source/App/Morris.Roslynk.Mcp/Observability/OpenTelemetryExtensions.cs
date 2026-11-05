@@ -58,8 +58,8 @@ public static class OpenTelemetryExtensions
 
 	/// <summary>
 	/// Registers the OTLP trace exporter behind the noise filter. The OTLP options are built by hand —
-	/// rather than via AddOtlpExporter — because wrapping the exporter in the filter is only possible
-	/// before the SDK owns it. Protocol defaults to gRPC, matching OtlpExporterOptions.
+	/// rather than via AddOtlpExporter — because filtering inside the exporter is only possible before
+	/// the SDK owns it. Protocol defaults to gRPC, matching OtlpExporterOptions.
 	/// </summary>
 	private static TracerProviderBuilder AddOtlpExporterWithNoiseFilter(
 		this TracerProviderBuilder builder, string endpoint, string? protocol, string? headers)
@@ -70,7 +70,6 @@ public static class OpenTelemetryExtensions
 		if (headers is not null)
 			options.Headers = headers;
 
-		return builder.AddProcessor(new BatchActivityExportProcessor(
-			new McpTransportNoiseFilterExporter(new OtlpTraceExporter(options))));
+		return builder.AddProcessor(new BatchActivityExportProcessor(new McpTransportNoiseFilterExporter(options)));
 	}
 }

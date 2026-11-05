@@ -1,4 +1,5 @@
 using OpenTelemetry;
+using OpenTelemetry.Exporter;
 using System.Diagnostics;
 
 namespace Morris.Roslynk.Mcp.Observability;
@@ -8,12 +9,16 @@ namespace Morris.Roslynk.Mcp.Observability;
 /// calls and their engine spans instead of a wall of protocol overhead: the MCP SDK's own spans for
 /// <c>initialize</c>, <c>notifications/initialized</c>, <c>tools/list</c> and <c>ping</c>, plus every
 /// ASP.NET Core request span whose request carried no tool call (those POSTs and GETs are exactly the
-/// protocol chatter). Wrapping the OTLP trace exporter is the only place a span can still be stopped —
-/// the SDK enqueues every ended activity into the batch processor before any AddProcessor callback
-/// runs, so processors cannot drop, and a sampler that dropped the request span would take the whole
-/// tool-call trace with it.
+/// protocol chatter). Filtering inside an <see cref="OtlpTraceExporter"/> subclass is the only place a
+/// span can still be stopped — the SDK enqueues every ended activity into the batch processor before
+/// any AddProcessor callback runs, so processors cannot drop, and a sampler that dropped the request
+/// span would take the whole tool-call trace with it. Deriving rather than wrapping also matters for
+/// correctness: the SDK points <see cref="BaseExporter{T}.ParentProvider"/> at the processor's exporter
+/// (this instance), and the OTLP exporter reads the trace's resource through that parent — a wrapped
+/// inner exporter would never see a parent and would export an empty resource, surfacing everywhere as
+/// <c>unknown_service</c>.
 /// </summary>
-public sealed class McpTransportNoiseFilterExporter : BaseExporter<Activity>
+public sealed class McpTransportNoiseFilterExporter : OtlpTraceExporter
 {
 	private static readonly HashSet<string> NoiseSpanNames = new(StringComparer.Ordinal)
 	{
@@ -21,14 +26,12 @@ public sealed class McpTransportNoiseFilterExporter : BaseExporter<Activity>
 		"notifications/initialized",
 		"tools/list",
 		"ping",
+		"server/discover",
 	};
 
-	private readonly BaseExporter<Activity> innerExporter;
-
-	public McpTransportNoiseFilterExporter(BaseExporter<Activity> innerExporter)
+	public McpTransportNoiseFilterExporter(OtlpExporterOptions options)
+		: base(options)
 	{
-		ArgumentNullException.ThrowIfNull(innerExporter);
-		this.innerExporter = innerExporter;
 	}
 
 	public override ExportResult Export(in Batch<Activity> batch)
@@ -44,7 +47,7 @@ public sealed class McpTransportNoiseFilterExporter : BaseExporter<Activity>
 			return ExportResult.Success;
 
 		Activity[] keptArray = [.. kept];
-		return innerExporter.Export(new Batch<Activity>(keptArray, keptArray.Length));
+		return base.Export(new Batch<Activity>(keptArray, keptArray.Length));
 	}
 
 	private static bool IsTransportNoise(Activity activity) =>
@@ -52,11 +55,4 @@ public sealed class McpTransportNoiseFilterExporter : BaseExporter<Activity>
 		(activity.Source.Name == McpToolTraceNaming.AspNetCoreActivitySourceName &&
 			activity.Kind == ActivityKind.Server &&
 			activity.GetTagItem(McpToolTraceNaming.ToolNameTag) is not string);
-
-	protected override void Dispose(bool disposing)
-	{
-		if (disposing)
-			innerExporter.Dispose();
-		base.Dispose(disposing);
-	}
 }
