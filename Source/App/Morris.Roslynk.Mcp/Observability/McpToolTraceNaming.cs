@@ -10,9 +10,10 @@ namespace Morris.Roslynk.Mcp.Observability;
 /// Names each trace after the tool that ran, records the call's arguments on it, and tags it with the MCP
 /// session so the dashboard can group a session's calls together. Every MCP tool call arrives over the
 /// same HTTP "POST /", so the trace list would otherwise show them all under one indistinguishable name.
-/// A CallTool filter records the tool name and arguments on the request's root span;
-/// <see cref="McpToolSpanNameProcessor"/> then promotes the tool name to the span's display name once the
-/// HTTP instrumentation has finished naming it.
+/// A CallTool filter tags every span of the call's ancestry with the tool name — the exporter's noise
+/// filter keeps a request span only when it carries that tag — and records the call's arguments on the
+/// outermost span; <see cref="McpToolSpanNameProcessor"/> then promotes the tool name to the span's
+/// display name once the HTTP instrumentation has finished naming it.
 /// </summary>
 public static class McpToolTraceNaming
 {
@@ -31,6 +32,9 @@ public static class McpToolTraceNaming
 	/// <summary>The MCP SDK's own ActivitySource, carrying a per-call "tools/call" timing span.</summary>
 	public const string McpActivitySourceName = "Experimental.ModelContextProtocol";
 
+	/// <summary>The ASP.NET Core ActivitySource every HTTP request span is emitted from.</summary>
+	public const string AspNetCoreActivitySourceName = "Microsoft.AspNetCore";
+
 	public static void NameTracesAfterTools(this McpServerOptions options)
 	{
 		ArgumentNullException.ThrowIfNull(options);
@@ -38,9 +42,18 @@ public static class McpToolTraceNaming
 		options.Filters.Request.CallToolFilters.Add(next => (request, cancellationToken) =>
 		{
 			CallToolRequestParams? parameters = request.Params;
-			Activity? root = RootOf(Activity.Current);
-			if (parameters is not null && root is not null)
-				Record(root, parameters);
+			if (parameters is not null)
+			{
+				Activity? outermost = null;
+				for (Activity? span = Activity.Current; span is not null; span = span.Parent)
+				{
+					span.SetTag(ToolNameTag, parameters.Name);
+					outermost = span;
+				}
+
+				if (outermost is not null)
+					Record(outermost, parameters);
+			}
 
 			return next(request, cancellationToken);
 		});
@@ -69,12 +82,4 @@ public static class McpToolTraceNaming
 		value.ValueKind == JsonValueKind.String
 			? value.GetString() ?? ""
 			: value.GetRawText();
-
-	private static Activity? RootOf(Activity? activity)
-	{
-		while (activity?.Parent is not null)
-			activity = activity.Parent;
-
-		return activity;
-	}
 }
