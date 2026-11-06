@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A failed batch-write rollback keeps the backups of files it could not restore and names them (Fixes #188)
 - Transport-noise traces are dropped from the OTLP export: the MCP SDK spans for `initialize`, `tools/list`, `ping`, `server/discover` and every `notifications/*` method, and the HTTP request spans that carried them, so the dashboard shows tool calls and their engine spans only (Fixes #182)
 - Every test that writes creates its scratch copy through `MutatingTestBase`, which disposes the registry and deletes the copy when the test finishes; the few copies a shared instance keeps open are deleted when the test process exits, so `%TEMP%/roslynk-tests` no longer grows across runs (Fixes #160)
 - Test scratch copies clone the fixture's restore output instead of each running `dotnet restore`, and the fixture's generator is built once, so the suite runs about 25% faster (Fixes #160)
