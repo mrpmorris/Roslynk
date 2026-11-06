@@ -139,7 +139,7 @@ public sealed class ChangeSignatureTool
 		Solution updated;
 		try
 		{
-			updated = await RazorGeneratedChangeFolder.FoldAsync(solution, editor.GetChangedSolution());
+			updated = await RazorGeneratedChangeFolder.FoldAsync(solution, editor.GetChangedSolution(), cancellationToken);
 		}
 		catch (RazorMappingException exception)
 		{
@@ -155,7 +155,7 @@ public sealed class ChangeSignatureTool
 		{
 			try
 			{
-				changed = await ApplyPipeline.ApplyAsync(instance, updated, basedOn: solution);
+				changed = await ApplyPipeline.ApplyAsync(instance, updated, basedOn: solution, cancellationToken);
 			}
 			catch (StaleWriteException exception)
 			{

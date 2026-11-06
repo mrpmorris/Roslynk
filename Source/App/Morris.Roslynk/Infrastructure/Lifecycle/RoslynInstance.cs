@@ -265,7 +265,7 @@ public sealed class RoslynInstance : IDisposable
 			if (!Work.Writer.TryWrite(item))
 				completion.TrySetException(new ObjectDisposedException(nameof(RoslynInstance)));
 
-			return completion.Task;
+			return completion.Task.WaitAsync(cancellationToken);
 		}
 	}
 
@@ -336,6 +336,12 @@ public sealed class RoslynInstance : IDisposable
 
 	private async Task RunDiagnosticsAsync(string cacheKey, Func<Solution, CancellationToken, Task<IReadOnlyList<Diagnostic>>> compute, TaskCompletionSource<DiagnosticsResult> completion, CancellationToken cancellationToken)
 	{
+		if (cancellationToken.IsCancellationRequested)
+		{
+			completion.TrySetCanceled(cancellationToken);
+			return;
+		}
+
 		SolutionModel model = CurrentModel;
 		if (model.Solution is null)
 		{
@@ -368,6 +374,14 @@ public sealed class RoslynInstance : IDisposable
 			DiagnosticsResult computed = new(diagnostics, solution);
 			result.TrySetResult(computed);
 			completion.TrySetResult(computed);
+		}
+		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+		{
+			// The requester gave up. Clear the entry so the next request for this snapshot computes afresh
+			// rather than awaiting a cancelled task; the per-project memo keeps every project that finished.
+			Interlocked.CompareExchange(ref DiagnosticsEntryField, null, entry);
+			result.TrySetCanceled(cancellationToken);
+			completion.TrySetCanceled(cancellationToken);
 		}
 		catch (Exception exception)
 		{

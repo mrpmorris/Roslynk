@@ -158,7 +158,8 @@ public sealed class GetDiagnosticsTool
 		string cacheKey = $"{includeAnalyzers}";
 		DiagnosticsResult diagnostics = await instance.RequestDiagnosticsAsync(
 			cacheKey,
-			(solution, token) => DiagnosticsService.GetAllDiagnosticsAsync(solution, includeAnalyzers, token));
+			(solution, token) => DiagnosticsService.GetAllDiagnosticsAsync(solution, includeAnalyzers, token),
+			cancellationToken);
 
 		Solution compiled = diagnostics.Solution;
 
