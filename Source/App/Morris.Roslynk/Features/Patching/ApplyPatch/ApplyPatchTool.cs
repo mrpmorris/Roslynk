@@ -18,6 +18,13 @@ public sealed class ApplyPatchTool
 {
 	public const string ApplyPatchName = "apply_patch";
 
+	// File paths are compared with the filesystem's convention: case-insensitive on Windows and
+	// macOS, case-sensitive elsewhere.
+	private static readonly StringComparer PathComparer =
+		OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+			? StringComparer.OrdinalIgnoreCase
+			: StringComparer.Ordinal;
+
 	private readonly InstanceRegistry InstanceRegistry;
 
 	public ApplyPatchTool(InstanceRegistry instanceRegistry)
@@ -32,7 +39,9 @@ public sealed class ApplyPatchTool
 		NotSupported; missing files: NotFound.
 
 		Header-only result: applied=<Y|N>. Hunk headers may omit line numbers (bare '@@'); each hunk
-		must match exactly once, so provide unique context. Unique-suffix paths also resolve, adding
+		must match exactly once, so provide unique context. Several sections for the same file apply
+		in order, each against the previous section's result (as in concatenated git format-patch
+		output); the file is written once. Unique-suffix paths also resolve, adding
 		resolvedPath=<solution-relative path>.
 		Ambiguous paths return candidate=<path>; rejections list rejected=<path>.
 		Unmatched/ambiguous hunks: Conflict with file/reason; no file sections: Invalid.
@@ -103,9 +112,10 @@ public sealed class ApplyPatchTool
 		{
 			var builder = new OutlineBuilder();
 			builder.Header("applied", applied);
+			var emitted = new HashSet<string>(PathComparer);
 			foreach (PatchTarget target in targets)
 			{
-				if (target.ResolvedPath is string resolved)
+				if (target.ResolvedPath is string resolved && emitted.Add(resolved))
 					builder.Header("resolvedPath", resolved);
 			}
 			builder.Status(instance.CurrentModel.Status);
@@ -169,27 +179,45 @@ public sealed class ApplyPatchTool
 	private static PatchComputation Compute(IReadOnlyList<PatchTarget> targets, IReadOnlyDictionary<string, string> expectedVersions)
 	{
 		var stale = new List<string>();
-		var pending = new List<PendingPatch>();
+		var staleSet = new HashSet<string>(PathComparer);
+		// Original disk text per path, the running text per path, and first-seen order for a deterministic write list.
+		var running = new Dictionary<string, (string Text, Encoding Encoding)>(PathComparer);
+		var order = new List<string>();
 
 		foreach (PatchTarget target in targets)
 		{
-			(string diskText, Encoding encoding) = ReadTextPreservingEncoding(target.FilePath);
-			string currentVersion = FileHash.Of(diskText);
-
-			if (TryGetExpected(expectedVersions, target, out string? expected) && !string.Equals(expected, currentVersion, StringComparison.Ordinal))
-			{
-				stale.Add(target.FilePath);
+			if (staleSet.Contains(target.FilePath))
 				continue;
+
+			if (!running.TryGetValue(target.FilePath, out (string Text, Encoding Encoding) state))
+			{
+				(string diskText, Encoding encoding) = ReadTextPreservingEncoding(target.FilePath);
+
+				// baseVersions describe the file as it was on disk before the patch, so they are checked
+				// against the original disk text, once per path.
+				string currentVersion = FileHash.Of(diskText);
+				if (TryGetExpected(expectedVersions, target, out string? expected) && !string.Equals(expected, currentVersion, StringComparison.Ordinal))
+				{
+					stale.Add(target.FilePath);
+					staleSet.Add(target.FilePath);
+					continue;
+				}
+
+				state = (diskText, encoding);
+				running[target.FilePath] = state;
+				order.Add(target.FilePath);
 			}
 
-			PatchApplyResult result = PatchApplier.Apply(diskText, target.FilePatch);
+			PatchApplyResult result = PatchApplier.Apply(state.Text, target.FilePatch);
 			if (!result.Success)
 				return PatchComputation.FromConflict($"{target.FilePath}: {result.FailureReason}");
 
-			pending.Add(new PendingPatch(target.FilePath, result.NewText!, encoding));
+			running[target.FilePath] = (result.NewText!, state.Encoding);
 		}
 
-		return stale.Count > 0 ? PatchComputation.FromStale(stale) : PatchComputation.FromPending(pending);
+		return stale.Count > 0
+			? PatchComputation.FromStale(stale)
+			: PatchComputation.FromPending([.. order.Select(path => new PendingPatch(path, running[path].Text, running[path].Encoding))]);
 	}
 
 	/// <summary>

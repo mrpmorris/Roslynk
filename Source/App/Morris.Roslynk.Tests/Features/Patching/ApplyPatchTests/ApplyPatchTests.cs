@@ -399,6 +399,99 @@ public class ApplyPatchTests : MutatingTestBase
 		Assert.DoesNotContain(compilation.GetDiagnostics(), diagnostic => diagnostic.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error);
 	}
 
+	[Fact]
+	public async Task WhenAPatchHasTwoSectionsForTheSameFile_ThenBothAreApplied()
+	{
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		string patch = BuildTwoSectionGreeterPatch();
+
+		string result = await subject.ApplyPatch(solutionPath, patch);
+
+		Assert.Contains("applied=Y", result);
+		Assert.DoesNotContain("error=", result);
+		string disk = await File.ReadAllTextAsync(greeter);
+		Assert.Contains("// first", disk);
+		Assert.Contains("Hi, {name}", disk);
+		Assert.Contains("// first", await ReadSnapshotTextAsync(instance, greeter));
+		Assert.Contains("Hi, {name}", await ReadSnapshotTextAsync(instance, greeter));
+		Assert.False(File.Exists(greeter + ".roslynk.tmp"));
+		Assert.False(File.Exists(greeter + ".roslynk.bak"));
+	}
+
+	[Fact]
+	public async Task WhenASecondSectionDependsOnTheFirst_ThenItAppliesToTheFirstSectionsResult()
+	{
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		string patch =
+			$"--- a/{GreeterRelativePath}\n" +
+			$"+++ b/{GreeterRelativePath}\n" +
+			"@@\n" +
+			" {\n" +
+			"+	// first\n" +
+			" 	/// <inheritdoc/>\n" +
+			$"--- a/{GreeterRelativePath}\n" +
+			$"+++ b/{GreeterRelativePath}\n" +
+			"@@\n" +
+			" 	// first\n" +
+			"+	// second\n";
+
+		string result = await subject.ApplyPatch(solutionPath, patch);
+
+		Assert.Contains("applied=Y", result);
+		Assert.DoesNotContain("error=", result);
+		string disk = (await File.ReadAllTextAsync(greeter)).Replace("\r\n", "\n");
+		Assert.Contains("// first\n	// second\n", disk);
+	}
+
+	[Fact]
+	public async Task WhenCheckingOnlyAPatchWithTwoSectionsForTheSameFile_ThenItSucceedsAndNothingIsWritten()
+	{
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		string original = await File.ReadAllTextAsync(greeter);
+
+		string result = await subject.ApplyPatch(solutionPath, BuildTwoSectionGreeterPatch(), baseVersions: null, checkOnly: true);
+
+		Assert.Contains("applied=N", result);
+		Assert.DoesNotContain("error=", result);
+		Assert.Equal(original, await File.ReadAllTextAsync(greeter));
+	}
+
+	[Fact]
+	public async Task WhenTheSecondSectionForAFileConflicts_ThenAConflictIsReportedAndNothingIsWritten()
+	{
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		byte[] original = await File.ReadAllBytesAsync(greeter);
+		string patch =
+			$"--- a/{GreeterRelativePath}\n" +
+			$"+++ b/{GreeterRelativePath}\n" +
+			"@@\n" +
+			" {\n" +
+			"+	// first\n" +
+			" 	/// <inheritdoc/>\n" +
+			$"--- a/{GreeterRelativePath}\n" +
+			$"+++ b/{GreeterRelativePath}\n" +
+			"@@\n" +
+			"-	this line does not exist in the file\n" +
+			"+	replacement\n";
+
+		string result = await subject.ApplyPatch(solutionPath, patch);
+
+		Assert.Contains("error=Conflict", result);
+		Assert.Equal(original, await File.ReadAllBytesAsync(greeter));
+	}
+
 	private static async Task<string> ReadSnapshotTextAsync(RoslynInstance instance, string path)
 	{
 		Microsoft.CodeAnalysis.Solution solution = instance.CurrentSolution;
@@ -413,6 +506,19 @@ public class ApplyPatchTests : MutatingTestBase
 			.First(documentId => solution.GetAdditionalDocument(documentId) is not null);
 		return (await solution.GetAdditionalDocument(id)!.GetTextAsync()).ToString();
 	}
+
+	private static string BuildTwoSectionGreeterPatch() =>
+		$"--- a/{GreeterRelativePath}\n" +
+		$"+++ b/{GreeterRelativePath}\n" +
+		"@@\n" +
+		" {\n" +
+		"+	// first\n" +
+		" 	/// <inheritdoc/>\n" +
+		$"--- a/{GreeterRelativePath}\n" +
+		$"+++ b/{GreeterRelativePath}\n" +
+		"@@\n" +
+		"-	public string Greet(string name) => $\"Hello, {name}!\";\n" +
+		"+	public string Greet(string name) => $\"Hi, {name}!\";\n";
 
 	private static string BuildFullReplacePatch(string relativePath, string originalText, string newText)
 	{
