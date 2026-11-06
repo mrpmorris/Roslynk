@@ -188,6 +188,107 @@ public class RoslynInstanceTests
 	}
 
 	[Fact]
+	public async Task WhenADiagnosticsRequestIsCancelledDuringCompute_ThenItIsCancelledAndTheNextRequestComputesAfresh()
+	{
+		using RoslynInstance subject = await LoadReadyAsync();
+
+		var started = new TaskCompletionSource();
+		int cancelledRequests = 0;
+		int freshRequests = 0;
+		using var cancellation = new CancellationTokenSource();
+
+		async Task<IReadOnlyList<Diagnostic>> Compute(Solution solution, CancellationToken token)
+		{
+			Interlocked.Increment(ref cancelledRequests);
+			started.SetResult();
+			await Task.Delay(-1, token);
+			return [];
+		}
+
+		Task request = subject.RequestDiagnosticsAsync("key", Compute, cancellation.Token);
+		await started.Task.WaitAsync(Timeout);
+		cancellation.Cancel();
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request.WaitAsync(Timeout));
+
+		Task fresh = subject.RequestDiagnosticsAsync("key", (solution, token) =>
+		{
+			Interlocked.Increment(ref freshRequests);
+			return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
+		});
+		await fresh.WaitAsync(Timeout);
+		Assert.Equal(1, freshRequests);
+	}
+
+	[Fact]
+	public async Task WhenADiagnosticsRequestIsCancelledWhileQueued_ThenItIsCancelledWithoutComputing()
+	{
+		using RoslynInstance subject = await LoadReadyAsync();
+
+		var gate = new TaskCompletionSource();
+		Task write = subject.EnqueueWriteAsync(async (current, token) =>
+		{
+			await gate.Task;
+			return new WriteResult(current, []);
+		});
+
+		int cancelledRequests = 0;
+		int freshRequests = 0;
+		using var cancellation = new CancellationTokenSource();
+		Task request = subject.RequestDiagnosticsAsync("key", (solution, token) =>
+		{
+			Interlocked.Increment(ref cancelledRequests);
+			return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
+		}, cancellation.Token);
+		cancellation.Cancel();
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request.WaitAsync(Timeout));
+		Assert.False(gate.Task.IsCompleted);
+
+		gate.SetResult();
+		await write.WaitAsync(Timeout);
+
+		await subject.RequestDiagnosticsAsync("key", (solution, token) =>
+		{
+			Interlocked.Increment(ref freshRequests);
+			return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
+		}).WaitAsync(Timeout);
+		Assert.Equal(0, cancelledRequests);
+		Assert.Equal(1, freshRequests);
+	}
+
+	[Fact]
+	public async Task WhenADiagnosticsRequestIsCancelled_ThenALaterWriteStillRuns()
+	{
+		using RoslynInstance subject = await LoadReadyAsync();
+
+		var started = new TaskCompletionSource();
+		using var cancellation = new CancellationTokenSource();
+
+		async Task<IReadOnlyList<Diagnostic>> Compute(Solution solution, CancellationToken token)
+		{
+			started.SetResult();
+			await Task.Delay(-1, token);
+			return [];
+		}
+
+		Task request = subject.RequestDiagnosticsAsync("key", Compute, cancellation.Token);
+		await started.Task.WaitAsync(Timeout);
+		cancellation.Cancel();
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request.WaitAsync(Timeout));
+
+		await subject.EnqueueWriteAsync((current, token) =>
+		{
+			DocumentId documentId = current.Projects.First().DocumentIds[0];
+			return Task.FromResult(new WriteResult(current.WithDocumentText(documentId, SourceText.From("// edited")), []));
+		}).WaitAsync(Timeout);
+
+		Document document = subject.CurrentSolution.Projects.First().Documents.First();
+		SourceText text = await document.GetTextAsync().WaitAsync(Timeout);
+		Assert.Equal("// edited", text.ToString());
+	}
+
+	[Fact]
 	public async Task WhenAWriteTransformThrows_ThenLaterWorkStillRuns()
 	{
 		using RoslynInstance subject = await LoadReadyAsync();
