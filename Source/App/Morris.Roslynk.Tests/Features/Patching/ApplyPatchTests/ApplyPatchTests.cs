@@ -399,6 +399,113 @@ public class ApplyPatchTests : MutatingTestBase
 		Assert.DoesNotContain(compilation.GetDiagnostics(), diagnostic => diagnostic.Severity == Microsoft.CodeAnalysis.DiagnosticSeverity.Error);
 	}
 
+	[Fact]
+	public async Task WhenAPatchHasTwoSectionsForTheSameFile_ThenBothAreApplied()
+	{
+		var (instance, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+
+		string result = await subject.ApplyPatch(solutionPath, BuildTwoSectionPatch());
+
+		string updated = await File.ReadAllTextAsync(greeter);
+		Assert.Contains("applied=Y", result);
+		Assert.DoesNotContain("error=", result);
+		Assert.Contains("// first", updated);
+		Assert.Contains("Hi, {name}", updated);
+		Assert.Contains("// first", await ReadSnapshotTextAsync(instance, greeter));
+		Assert.Contains("Hi, {name}", await ReadSnapshotTextAsync(instance, greeter));
+		Assert.False(File.Exists(greeter + ".roslynk.tmp"));
+		Assert.False(File.Exists(greeter + ".roslynk.bak"));
+	}
+
+	[Fact]
+	public async Task WhenASecondSectionDependsOnTheFirst_ThenItAppliesToTheFirstSectionsResult()
+	{
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+
+		string result = await subject.ApplyPatch(solutionPath, BuildDependentTwoSectionPatch());
+
+		Assert.Contains("applied=Y", result);
+		Assert.Contains("	// first\n	// second", (await File.ReadAllTextAsync(greeter)).Replace("\r\n", "\n"));
+	}
+
+	[Fact]
+	public async Task WhenCheckingOnlyAPatchWithTwoSectionsForTheSameFile_ThenItSucceedsAndNothingIsWritten()
+	{
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		byte[] original = await File.ReadAllBytesAsync(greeter);
+
+		string result = await subject.ApplyPatch(solutionPath, BuildTwoSectionPatch(), baseVersions: null, checkOnly: true);
+
+		Assert.Contains("applied=N", result);
+		Assert.DoesNotContain("error=", result);
+		Assert.Equal(original, await File.ReadAllBytesAsync(greeter));
+	}
+
+	[Fact]
+	public async Task WhenTheSecondSectionForAFileConflicts_ThenAConflictIsReportedAndNothingIsWritten()
+	{
+		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchSimpleSolution());
+		var subject = new ApplyPatchTool(Registry);
+
+		string greeter = FindFile(solutionPath, "Greeter.cs");
+		byte[] original = await File.ReadAllBytesAsync(greeter);
+		string patch =
+			$"--- a/{GreeterRelativePath}\n" +
+			$"+++ b/{GreeterRelativePath}\n" +
+			"@@\n" +
+			" public class Greeter : IGreeter\n" +
+			" {\n" +
+			"+	// first\n" +
+			" 	/// <inheritdoc/>\n" +
+			$"--- a/{GreeterRelativePath}\n" +
+			$"+++ b/{GreeterRelativePath}\n" +
+			"@@\n" +
+			"-this content is not present anywhere\n" +
+			"+replacement\n";
+
+		string result = await subject.ApplyPatch(solutionPath, patch);
+
+		Assert.Contains("error=Conflict", result);
+		Assert.Equal(original, await File.ReadAllBytesAsync(greeter));
+	}
+
+	private static string BuildTwoSectionPatch() =>
+		$"--- a/{GreeterRelativePath}\n" +
+		$"+++ b/{GreeterRelativePath}\n" +
+		"@@\n" +
+		" public class Greeter : IGreeter\n" +
+		" {\n" +
+		"+	// first\n" +
+		" 	/// <inheritdoc/>\n" +
+		$"--- a/{GreeterRelativePath}\n" +
+		$"+++ b/{GreeterRelativePath}\n" +
+		"@@\n" +
+		"-	public string Greet(string name) => $\"Hello, {name}!\";\n" +
+		"+	public string Greet(string name) => $\"Hi, {name}!\";\n";
+
+	private static string BuildDependentTwoSectionPatch() =>
+		$"--- a/{GreeterRelativePath}\n" +
+		$"+++ b/{GreeterRelativePath}\n" +
+		"@@\n" +
+		" public class Greeter : IGreeter\n" +
+		" {\n" +
+		"+	// first\n" +
+		" 	/// <inheritdoc/>\n" +
+		$"--- a/{GreeterRelativePath}\n" +
+		$"+++ b/{GreeterRelativePath}\n" +
+		"@@\n" +
+		" 	// first\n" +
+		"+	// second\n";
+
 	private static async Task<string> ReadSnapshotTextAsync(RoslynInstance instance, string path)
 	{
 		Microsoft.CodeAnalysis.Solution solution = instance.CurrentSolution;

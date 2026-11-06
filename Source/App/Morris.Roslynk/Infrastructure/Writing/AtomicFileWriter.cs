@@ -20,8 +20,24 @@ public static class AtomicFileWriter
 
 	private static readonly Encoding DefaultUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
+	// File paths compare case-insensitively on Windows/macOS, like SolutionKey's path handling.
+	private static readonly StringComparer PathComparer =
+		OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+			? StringComparer.OrdinalIgnoreCase
+			: StringComparer.Ordinal;
+
 	public static async Task WriteAllAsync(IReadOnlyList<PendingWrite> writes, CancellationToken cancellationToken = default)
 	{
+		// Every write stages to the same '<path>.roslynk.tmp' sibling, so a duplicated path would make
+		// the second File.Replace consume a temp file the first replace already moved. Reject the batch
+		// before anything is staged.
+		var seen = new HashSet<string>(PathComparer);
+		foreach (PendingWrite write in writes)
+		{
+			if (!seen.Add(write.FilePath))
+				throw new ArgumentException($"The batch writes '{write.FilePath}' more than once; each path must appear once.", nameof(writes));
+		}
+
 		var staged = new List<StagedFile>();
 		foreach (PendingWrite write in writes)
 		{

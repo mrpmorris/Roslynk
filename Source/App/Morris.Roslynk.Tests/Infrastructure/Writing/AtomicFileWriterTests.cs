@@ -29,4 +29,26 @@ public class AtomicFileWriterTests : MutatingTestBase
 		Assert.False(File.Exists(first + ".roslynk.tmp"));
 		Assert.False(File.Exists(first + ".roslynk.bak"));
 	}
+
+	[Fact]
+	public async Task WhenABatchWritesTheSamePathTwice_ThenItIsRejectedBeforeAnythingIsStaged()
+	{
+		string directory = Scratch(() =>
+		{
+			string path = Path.Combine(Path.GetTempPath(), "roslynk-tests", Guid.NewGuid().ToString("N"));
+			Directory.CreateDirectory(path);
+			return path;
+		});
+		string file = Path.Combine(directory, "same.txt");
+		await File.WriteAllTextAsync(file, "original");
+
+		await Assert.ThrowsAsync<ArgumentException>(() => AtomicFileWriter.WriteAllAsync(
+		[
+			new PendingWrite(file, "first"),
+			new PendingWrite(file, "second"),
+		]));
+
+		Assert.Equal("original", await File.ReadAllTextAsync(file));
+		Assert.False(File.Exists(file + ".roslynk.tmp"));
+	}
 }
