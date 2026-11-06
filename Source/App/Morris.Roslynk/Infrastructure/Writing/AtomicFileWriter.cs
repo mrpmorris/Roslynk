@@ -20,8 +20,24 @@ public static class AtomicFileWriter
 
 	private static readonly Encoding DefaultUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
+	// File paths are compared with the filesystem's convention: case-insensitive on Windows and
+	// macOS, case-sensitive elsewhere.
+	private static readonly StringComparer PathComparer =
+		OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()
+			? StringComparer.OrdinalIgnoreCase
+			: StringComparer.Ordinal;
+
 	public static async Task WriteAllAsync(IReadOnlyList<PendingWrite> writes, CancellationToken cancellationToken = default)
 	{
+		// Reject a duplicate path before staging anything: both writes would stage to the same temp
+		// sibling and the second File.Replace would fail after the first had already consumed it.
+		var seen = new HashSet<string>(PathComparer);
+		foreach (PendingWrite write in writes)
+		{
+			if (!seen.Add(write.FilePath))
+				throw new ArgumentException($"The batch writes '{write.FilePath}' more than once; each path must appear once.", nameof(writes));
+		}
+
 		var staged = new List<StagedFile>();
 		foreach (PendingWrite write in writes)
 		{
