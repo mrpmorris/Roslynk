@@ -78,6 +78,32 @@ public class DocumentDiagnosticsProviderTests
 			Assert.DoesNotContain(after, diagnostic => diagnostic.Id == "IDE0005");
 		});
 
+	[Fact]
+	public async Task WhenOnlyAMethodBodyIsEdited_ThenTheCacheIsNotReused() =>
+		await WithGreeterAsync(async (document, subject) =>
+		{
+			ImmutableArray<Diagnostic> before = await subject.GetForDocumentAsync(document);
+			Assert.Contains(before, diagnostic => diagnostic.Id == "IDE0005");
+
+			SourceText text = await document.GetTextAsync();
+			TextLine bodyLine = text.Lines.Single(line => line.ToString().Contains("public string Greet"));
+			SourceText newText = text.WithChanges(new TextChange(
+				bodyLine.Span,
+				"	public string Greet(string name) => new StringBuilder(\"Hello, \").Append(name).Append('!').ToString();"));
+			Document edited = document.WithText(newText);
+
+			// The edit changes only a method body, so the semantic version the old cache key used is unchanged.
+			Assert.Equal(
+				await document.Project.GetDependentSemanticVersionAsync(),
+				await edited.Project.GetDependentSemanticVersionAsync());
+
+			ImmutableArray<Diagnostic> after = await subject.GetForDocumentAsync(edited);
+
+			Assert.False(before == after, "The body-only edit should not have hit the cache.");
+			Assert.DoesNotContain(after, diagnostic => diagnostic.Id == "IDE0005");
+			Assert.DoesNotContain(after, diagnostic => diagnostic.Id == "CS8019");
+		});
+
 	private static async Task WithGreeterAsync(Func<Document, DocumentDiagnosticsProvider, Task> body)
 	{
 		using var registry = new InstanceRegistry();
