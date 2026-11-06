@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Morris.Roslynk.Infrastructure.CodeActions;
@@ -25,8 +26,27 @@ namespace Morris.Roslynk.Infrastructure.Diagnostics;
 /// </summary>
 public sealed class DocumentDiagnosticsProvider
 {
-	/// <summary>How long the analyzer pass may take before we fall back to compiler diagnostics alone.</summary>
-	private static readonly TimeSpan AnalyzerBudget = TimeSpan.FromSeconds(5);
+	/// <summary>The runtime configuration property (or environment variable) that overrides <see cref="AnalyzerBudget"/>, in seconds.</summary>
+	internal const string AnalyzerBudgetSetting = "ROSLYNK_ANALYZER_BUDGET_SECONDS";
+
+	private static readonly TimeSpan DefaultAnalyzerBudget = TimeSpan.FromSeconds(5);
+
+	/// <summary>
+	/// How long the analyzer pass may take before we fall back to compiler diagnostics alone. Five seconds
+	/// unless overridden: the test suite raises it through its runtimeconfig, because one test per core in
+	/// parallel can push an analyzer pass that takes a fraction of a second on an idle machine past five seconds.
+	/// </summary>
+	internal static readonly TimeSpan AnalyzerBudget = ParseAnalyzerBudget(
+		AppContext.GetData(AnalyzerBudgetSetting) ?? Environment.GetEnvironmentVariable(AnalyzerBudgetSetting));
+
+	/// <summary>A positive number of seconds (invariant culture) as a budget; anything else gives the default.</summary>
+	internal static TimeSpan ParseAnalyzerBudget(object? value) =>
+		value?.ToString() is string text
+			&& double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double seconds)
+			&& seconds > 0
+			&& !double.IsInfinity(seconds)
+				? TimeSpan.FromSeconds(seconds)
+				: DefaultAnalyzerBudget;
 
 	private const int MaxCachedDocuments = 4;
 

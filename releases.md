@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The code-action analyzer budget can be raised with `ROSLYNK_ANALYZER_BUDGET_SECONDS` (Fixes #190)
 - Cancelling `get_diagnostics` or `change_signature` now stops the work instead of letting it run on (Fixes #189)
 - A failed batch-write rollback keeps the backups of files it could not restore and names them (Fixes #188)
 - `apply_patch` applies several sections for the same file in order instead of failing (Fixes #186)
