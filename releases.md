@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Cancelling `get_diagnostics` or `change_signature` now stops the work instead of letting it run on (Fixes #189)
 - A failed batch-write rollback keeps the backups of files it could not restore and names them (Fixes #188)
 - `apply_patch` applies several sections for the same file in order instead of failing (Fixes #186)
 - Code actions no longer use diagnostics from before a method-body edit (Fixes #187)
