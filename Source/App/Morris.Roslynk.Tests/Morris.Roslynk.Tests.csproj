@@ -10,6 +10,15 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<!--
+		The suite runs one test per core in parallel, so an analyzer pass that takes a fraction of a second on an
+		idle machine can exceed the engine's 5-second analyzer budget under load, and a code-action test then sees
+		the compiler-only fallback (no IDE0005). Raise the budget for tests so a busy machine does not fail on timing.
+		-->
+		<RuntimeHostConfigurationOption Include="ROSLYNK_ANALYZER_BUDGET_SECONDS" Value="60" />
+	</ItemGroup>
+
+	<ItemGroup>
 		<PackageReference Include="Microsoft.NET.Test.Sdk" />
 		<PackageReference Include="xunit" />
 		<PackageReference Include="xunit.runner.visualstudio">

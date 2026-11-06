@@ -10,6 +10,24 @@ namespace Morris.Roslynk.Tests.Infrastructure.Diagnostics;
 public class DocumentDiagnosticsProviderTests
 {
 	[Fact]
+	public void WhenTheTestProjectConfiguresTheAnalyzerBudget_ThenItIsApplied() =>
+		// The test csproj sets ROSLYNK_ANALYZER_BUDGET_SECONDS as a RuntimeHostConfigurationOption, which
+		// lands in runtimeconfig.json's configProperties and reaches the engine through AppContext.GetData.
+		Assert.Equal(TimeSpan.FromSeconds(60), DocumentDiagnosticsProvider.AnalyzerBudget);
+
+	[Theory]
+	[InlineData(null, 5)]
+	[InlineData("", 5)]
+	[InlineData("abc", 5)]
+	[InlineData("0", 5)]
+	[InlineData("-3", 5)]
+	[InlineData("60", 60)]
+	[InlineData("2.5", 2.5)]
+	public void WhenTheBudgetSettingIs_ThenTheParsedBudgetIs(string? value, double expectedSeconds) =>
+		// The parse is culture-invariant, so "2.5" is two and a half seconds whatever the machine's culture is.
+		Assert.Equal(TimeSpan.FromSeconds(expectedSeconds), DocumentDiagnosticsProvider.ParseAnalyzerBudget(value));
+
+	[Fact]
 	public async Task WhenTheDocumentHasAnUnnecessaryUsing_ThenIde0005IsReturned() =>
 		await WithGreeterAsync(async (document, subject) =>
 		{
