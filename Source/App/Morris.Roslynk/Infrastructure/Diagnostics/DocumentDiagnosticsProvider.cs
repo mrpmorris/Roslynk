@@ -42,7 +42,10 @@ public sealed class DocumentDiagnosticsProvider
 	{
 		ArgumentNullException.ThrowIfNull(document);
 
-		VersionStamp version = await document.Project.GetDependentSemanticVersionAsync(cancellationToken);
+		// The dependent version changes on any edit to this project or a project it depends on, including
+		// method-body edits. The dependent *semantic* version only changes on declaration edits, so keying on
+		// it served diagnostics of the previous text after a body edit.
+		VersionStamp version = await document.Project.GetDependentVersionAsync(cancellationToken);
 		var key = new CacheKey(document.Id, version);
 
 		Task<ImmutableArray<Diagnostic>> pending;
@@ -153,7 +156,8 @@ public sealed class DocumentDiagnosticsProvider
 
 	/// <summary>
 	/// The driver for this project snapshot, reused across documents so the analyzer state built for one
-	/// file is not rebuilt for the next. Exactly one is held: it pins a <see cref="Compilation"/>.
+	/// file is not rebuilt for the next. A cached driver is reused only when it was built for the very
+	/// <see cref="Compilation"/> now being analysed. Exactly one is held: it pins a <see cref="Compilation"/>.
 	/// </summary>
 	private CompilationWithAnalyzers DriverFor(Project project, VersionStamp version, Compilation compilation, ImmutableArray<DiagnosticAnalyzer> analyzers)
 	{
@@ -163,7 +167,10 @@ public sealed class DocumentDiagnosticsProvider
 			if (existing is not null
 				&& existing.Project == project.Id
 				&& existing.Version == version
-				&& existing.Analyzers.SequenceEqual(analyzers))
+				&& existing.Analyzers.SequenceEqual(analyzers)
+				// The version check above is a cheap first comparison; reference equality on the compilation
+				// is the authoritative guard: a driver must never analyse a compilation other than its own.
+				&& ReferenceEquals(existing.Driver.Compilation, compilation))
 			{
 				return existing.Driver;
 			}
