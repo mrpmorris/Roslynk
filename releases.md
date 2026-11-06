@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A failed batch-write rollback keeps the backups of files it could not restore and names them (Fixes #188)
 - `apply_patch` applies several sections for the same file in order instead of failing (Fixes #186)
 - Code actions no longer use diagnostics from before a method-body edit (Fixes #187)
 - Transport-noise traces are dropped from the OTLP export: the MCP SDK spans for `initialize`, `tools/list`, `ping`, `server/discover` and every `notifications/*` method, and the HTTP request spans that carried them, so the dashboard shows tool calls and their engine spans only (Fixes #182)

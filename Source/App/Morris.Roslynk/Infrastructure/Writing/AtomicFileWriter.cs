@@ -5,8 +5,9 @@ using System.Text;
 /// <summary>
 /// Commits a batch of full-file rewrites atomically. Each file is written to a temp copy first, then
 /// swapped in with <see cref="File.Replace(string, string, string)"/> (atomic per file, no torn reads),
-/// keeping a backup. If any swap in the batch fails, the already-swapped files are restored from their
-/// backups, so the batch is all-or-nothing within the process.
+/// keeping a backup. If any swap in the batch fails, every already-swapped file is restored from its
+/// backup on a best-effort basis: a restore that fails keeps that file's backup and is named by the
+/// thrown <see cref="AtomicWriteRollbackException"/>.
 /// </summary>
 public static class AtomicFileWriter
 {
@@ -27,7 +28,13 @@ public static class AtomicFileWriter
 			? StringComparer.OrdinalIgnoreCase
 			: StringComparer.Ordinal;
 
-	public static async Task WriteAllAsync(IReadOnlyList<PendingWrite> writes, CancellationToken cancellationToken = default)
+	/// <summary>The file-replace operation, injectable so tests can make a chosen replace fail.</summary>
+	internal delegate void ReplaceFile(string sourcePath, string destinationPath, string? backupPath);
+
+	public static Task WriteAllAsync(IReadOnlyList<PendingWrite> writes, CancellationToken cancellationToken = default) =>
+		WriteAllAsync(writes, File.Replace, cancellationToken);
+
+	internal static async Task WriteAllAsync(IReadOnlyList<PendingWrite> writes, ReplaceFile replace, CancellationToken cancellationToken)
 	{
 		// Reject a duplicate path before staging anything: both writes would stage to the same temp
 		// sibling and the second File.Replace would fail after the first had already consumed it.
@@ -46,27 +53,72 @@ public static class AtomicFileWriter
 			staged.Add(new StagedFile(write.FilePath, tempPath, write.FilePath + BackupFileSuffix));
 		}
 
-		Commit(staged);
+		Commit(staged, replace);
 	}
 
-	private static void Commit(List<StagedFile> staged)
+	private static void Commit(List<StagedFile> staged, ReplaceFile replace)
 	{
 		var committed = new List<StagedFile>();
+		var keepBackups = new HashSet<string>(StringComparer.Ordinal);
+		int failingIndex = -1;
 		try
 		{
-			foreach (StagedFile file in staged)
+			for (int index = 0; index < staged.Count; index++)
 			{
-				File.Replace(file.TempPath, file.Path, file.BackupPath);
+				failingIndex = index;
+				StagedFile file = staged[index];
+				replace(file.TempPath, file.Path, file.BackupPath);
 				committed.Add(file);
 			}
+
+			failingIndex = -1;
 		}
-		catch
+		catch (Exception commitFailure)
 		{
-			foreach (StagedFile file in committed)
+			var unrestored = new List<string>();
+			var restoreFailures = new List<Exception>();
+
+			// The file whose own replace threw may have been moved to its backup without the new content
+			// taking its place (Win32 ERROR_UNABLE_TO_MOVE_REPLACEMENT_2). Put the original back.
+			if (failingIndex >= 0)
 			{
-				if (File.Exists(file.BackupPath))
-					File.Replace(file.BackupPath, file.Path, destinationBackupFileName: null);
+				StagedFile failing = staged[failingIndex];
+				if (!File.Exists(failing.Path) && File.Exists(failing.BackupPath))
+				{
+					try
+					{
+						File.Move(failing.BackupPath, failing.Path);
+					}
+					catch (Exception moveFailure)
+					{
+						keepBackups.Add(failing.BackupPath);
+						unrestored.Add(failing.Path);
+						restoreFailures.Add(moveFailure);
+					}
+				}
 			}
+
+			// Restore in reverse commit order; one failure must not stop the others.
+			for (int index = committed.Count - 1; index >= 0; index--)
+			{
+				StagedFile file = committed[index];
+				if (!File.Exists(file.BackupPath))
+					continue;
+
+				try
+				{
+					replace(file.BackupPath, file.Path, null);
+				}
+				catch (Exception restoreFailure)
+				{
+					keepBackups.Add(file.BackupPath);
+					unrestored.Add(file.Path);
+					restoreFailures.Add(restoreFailure);
+				}
+			}
+
+			if (unrestored.Count > 0)
+				throw new AtomicWriteRollbackException(unrestored, commitFailure, restoreFailures);
 
 			throw;
 		}
@@ -74,7 +126,9 @@ public static class AtomicFileWriter
 		{
 			foreach (StagedFile file in staged)
 			{
-				TryDelete(file.BackupPath);
+				if (!keepBackups.Contains(file.BackupPath))
+					TryDelete(file.BackupPath);
+
 				TryDelete(file.TempPath);
 			}
 		}
