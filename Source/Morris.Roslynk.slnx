@@ -7,4 +7,7 @@
 	<Project Path="App/Morris.Roslynk.AppHost/Morris.Roslynk.AppHost.csproj" />
 	<Project Path="App/Morris.Roslynk.Tests/Morris.Roslynk.Tests.csproj" />
 	<Project Path="App/Morris.Roslynk.McpTests/Morris.Roslynk.McpTests.csproj" />
+	<Project Path="Plugins/Morris.Roslynk.Plugins.V1/Morris.Roslynk.Plugins.V1.csproj" />
+	<Project Path="Plugins/Morris.Roslynk.Plugins.Analyzer/Morris.Roslynk.Plugins.Analyzer.csproj" />
+	<Project Path="Plugins/Morris.Roslynk.Plugins.Tests/Morris.Roslynk.Plugins.Tests.csproj" />
 </Solution>

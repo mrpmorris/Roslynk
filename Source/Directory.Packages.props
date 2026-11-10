@@ -8,6 +8,9 @@
     <PackageVersion Include="Microsoft.Build" Version="18.9.6" />
     <PackageVersion Include="Microsoft.Build.Framework" Version="18.9.6" />
     <PackageVersion Include="Microsoft.NET.StringTools" Version="18.9.6" />
+    <!-- The PluginAPI convention analyzer targets an older Roslyn than the engine, so it runs inside
+         any IDE/SDK that compiles a plugin. Deliberately NOT 5.9.0; do not align it with the engine. -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.11.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Features" Version="5.9.0" />
@@ -18,6 +21,10 @@
   <ItemGroup>
     <!-- Hosting -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+    <!-- The plugin probe's reflection-only load. Unlike System.Reflection.Metadata, this assembly is
+         NOT part of the .NET 10 shared framework, so the package reference is a runtime dependency. -->
+    <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.8" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
   </ItemGroup>
   <ItemGroup>

@@ -27,6 +27,14 @@
 		</PackageReference>
 		<PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
 		<PackageReference Include="ModelContextProtocol" />
+		<!-- The plugin probe's reflection-only load; not part of the shared framework (see Directory.Packages.props). -->
+		<PackageReference Include="System.Reflection.MetadataLoadContext" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- The contract package the host implements and loads plugins against; per-major contracts
+		     coexist in Roslynk's binaries folder, so every supported major gets a reference. -->
+		<ProjectReference Include="..\..\Plugins\Morris.Roslynk.Plugins.V1\Morris.Roslynk.Plugins.V1.csproj" />
 	</ItemGroup>
 
 </Project>

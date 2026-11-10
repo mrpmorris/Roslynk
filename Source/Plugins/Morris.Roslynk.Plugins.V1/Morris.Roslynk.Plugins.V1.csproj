@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<AssemblyName>Morris.Roslynk.Plugins.V1</AssemblyName>
+		<RootNamespace>Morris.Roslynk.Plugins.V1</RootNamespace>
+		<PackageId>Morris.Roslynk.Plugins.V1</PackageId>
+		<!-- The major is structural: bound to the assembly name and the stamped RoslynkApiVersionAttribute.
+		     Only minor/patch flow here; a new contract major is a new project, never a version bump. -->
+		<Version>1.0.0</Version>
+		<Description>The Roslynk plugin contract (major version 1): the interfaces, enums and attributes a Roslynk plugin is built against, plus the build targets that stamp API-version metadata and the convention analyzer.</Description>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="build\*" Pack="true" PackagePath="buildTransitive" />
+	</ItemGroup>
+
+</Project>
