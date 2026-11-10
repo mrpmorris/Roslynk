@@ -115,9 +115,12 @@ public sealed class DocumentDiagnosticsProvider
 			return [];
 
 		// Whole-compilation, not the semantic model's span: compilation-completion diagnostics such as
-		// CS8019 (unnecessary using) only appear from here. Taken from the project's memoized result, so
-		// neither get_diagnostics nor another document's code actions compile the project again.
-		ImmutableArray<Diagnostic> compilerDiagnostics = (await DiagnosticsService.GetCompilerDiagnosticsAsync(project, cancellationToken))
+		// CS8019 (unnecessary using) only appear from here. Compiler diagnostics come straight off the
+		// compilation this method already obtained (GetCompilationAsync memoizes per project instance, so
+		// no duplicate compile) — DiagnosticsService computes compiler+analyzer together and the
+		// fixable-analyzer pass below runs separately, so a compiler-only fetch here would be unused work.
+		ImmutableArray<Diagnostic> compilerDiagnostics = compilation
+			.GetDiagnostics(cancellationToken)
 			.Where(diagnostic => diagnostic.Location.SourceTree == tree)
 			.ToImmutableArray();
 

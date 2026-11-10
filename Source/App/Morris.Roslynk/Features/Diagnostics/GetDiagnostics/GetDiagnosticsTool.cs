@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Diagnostics;
 using ModelContextProtocol.Server;
 using Morris.Roslynk.Infrastructure.CodeActions;
 using Morris.Roslynk.Infrastructure.Diagnostics;
@@ -64,7 +65,7 @@ public sealed class GetDiagnosticsTool
 		[Description("List warnings.")] bool includeWarnings = false,
 		[Description("List info diagnostics.")] bool includeInfo = false,
 		[Description("List hidden diagnostics.")] bool includeHidden = false,
-		[Description("Run analyzers; false is faster, compiler-only.")] bool includeAnalyzers = true,
+		[Description("Include analyzer diagnostics in the response; the computation always runs them, so this filters the result only.")] bool includeAnalyzers = true,
 		[Description("Project filter: outline name with optional extension, case-insensitive; all loaded target frameworks.")] string? projectName = null,
 		[Description("File filter (case-insensitive), including diagnostics mapped to Razor source.")] string? filePath = null,
 		[Description("Diagnostic ids (case-insensitive), e.g. [\"CS0246\"]; a JSON-array string such as \"[\\\"CS0246\\\"]\" is also accepted; null/empty matches all.")] string[]? ids = null,
@@ -154,21 +155,25 @@ public sealed class GetDiagnosticsTool
 		if (fileResolution.Error is Error fileError)
 			return OutlineError.Format(fileError, model.Status);
 
-		// Fence writes, drain in-flight ones, then build (or reuse the cached result when nothing changed).
-		string cacheKey = $"{includeAnalyzers}";
-		DiagnosticsResult diagnostics = await instance.RequestDiagnosticsAsync(
-			cacheKey,
-			(solution, token) => DiagnosticsService.GetAllDiagnosticsAsync(solution, includeAnalyzers, token),
-			cancellationToken);
+		// Fence writes, drain in-flight ones, then resolve (or start) the snapshot's per-project
+		// computations. The caller's captured snapshot is passed through: unaltered projects carry their
+		// tasks across publications, and the Razor set rides in the result (captured at the snapshot's
+		// publication), not read from the live workspace here. The computation always includes analyzers;
+		// includeAnalyzers only filters the response.
+		DiagnosticsResult diagnostics = await instance.RequestDiagnosticsAsync(current, cancellationToken);
 
 		Solution compiled = diagnostics.Solution;
 
-		// The Razor compiler's own diagnostics come from Roslynk's in-process generator run, not the compilation.
-		IReadOnlyList<Diagnostic> razor = instance.Workspace?.Razor.Diagnostics(compiled) ?? [];
+		// The Razor compiler's own diagnostics come from the snapshot's publication-time capture, not the
+		// compilation and not the live generator state.
+		IReadOnlyList<Diagnostic> razor = diagnostics.Razor;
 
 		// Analyzers report private trigger ids alongside the public rule (IDE0005's, for one). They have no
 		// message and nothing to act on, so they are dropped before the counts as well as the body.
-		List<Diagnostic> all = diagnostics.Diagnostics
+		IEnumerable<Diagnostic> computed = includeAnalyzers
+			? diagnostics.Diagnostics
+			: diagnostics.Diagnostics.Where(IsCompilerDiagnostic);
+		List<Diagnostic> all = computed
 			.Concat(razor)
 			.Where(diagnostic => !CodeActionCatalog.IsPrivateFixTrigger(diagnostic.Id))
 			.ToList();
@@ -353,6 +358,10 @@ public sealed class GetDiagnosticsTool
 			DiagnosticSeverity.Info => "infos",
 			_ => "hidden",
 		};
+
+	/// <summary>The compiler/analyzer boundary: compiler diagnostics carry the Compiler custom tag.</summary>
+	private static bool IsCompilerDiagnostic(Diagnostic diagnostic) =>
+		diagnostic.Descriptor.CustomTags.Contains(WellKnownDiagnosticTags.Compiler);
 
 	private static string EntryText(Diagnostic diagnostic)
 	{
