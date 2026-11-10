@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+using System.Reflection;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using Morris.Roslynk.Infrastructure.Lifecycle;
@@ -27,7 +29,7 @@ public class RoslynInstanceTests
 		gate.SetResult();
 		await subject.WaitUntilReadyAsync();
 
-		Assert.Equal(SolutionStatus.Ready, subject.CurrentModel.Status);
+		Assert.True(subject.CurrentModel.Status == SolutionStatus.Ready, $"STATUS={subject.CurrentModel.Status} FAULT={subject.CurrentModel.FaultMessage}");
 		Assert.NotNull(subject.CurrentModel.Solution);
 	}
 
@@ -69,6 +71,10 @@ public class RoslynInstanceTests
 	}
 
 	private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(5);
+
+	/// <summary>Real per-project computes (compilation + full analyzer pass) under a loaded test
+	/// machine can exceed the ordering tests' 5s budget; these waits allow for machine contention.</summary>
+	private static readonly TimeSpan ComputeTimeout = TimeSpan.FromSeconds(60);
 
 	[Fact]
 	public async Task WhenWritesAreEnqueued_ThenTheyApplyInOrder()
@@ -118,110 +124,83 @@ public class RoslynInstanceTests
 	}
 
 	[Fact]
-	public async Task WhenADiagnosticsBuildIsQueuedAfterWrites_ThenTheWritesDrainFirst()
+	public async Task WhenDiagnosticsAreRequestedAfterAWrite_ThenTheyComputeForTheWriteSnapshot()
 	{
 		using RoslynInstance subject = await LoadReadyAsync();
+		Solution before = subject.CurrentSolution;
 
-		var events = new List<string>();
-		Task write = subject.EnqueueWriteAsync((current, token) =>
-		{
-			lock (events)
-				events.Add("write");
-			return Task.FromResult(new WriteResult(current, []));
-		});
-		Task build = subject.RequestDiagnosticsAsync("key", (solution, token) =>
-		{
-			lock (events)
-				events.Add("build");
-			return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
-		});
+		DocumentId documentId = before.Projects.First().DocumentIds[0];
+		await subject.EnqueueWriteAsync((current, token) =>
+			Task.FromResult(new WriteResult(current.WithDocumentText(documentId, SourceText.From("// after write")), [])))
+			.WaitAsync(Timeout);
 
-		await Task.WhenAll(write, build).WaitAsync(Timeout);
-		Assert.Equal(new[] { "write", "build" }, events);
+		DiagnosticsResult diagnostics = await subject.RequestDiagnosticsAsync(subject.CurrentSolution).WaitAsync(ComputeTimeout);
+		Assert.Same(subject.CurrentSolution, diagnostics.Solution);
+		Assert.False(subject.BuildNeeded);
 	}
 
 	[Fact]
-	public async Task WhenNothingChangedSinceTheLastBuild_ThenTheCachedDiagnosticsAreReused()
+	public async Task WhenNothingChangedSinceTheLastBuild_ThenThePerProjectTasksAreReused()
 	{
 		using RoslynInstance subject = await LoadReadyAsync();
 
-		int compiles = 0;
-		Task<IReadOnlyList<Diagnostic>> Compute(Solution solution, CancellationToken token)
-		{
-			Interlocked.Increment(ref compiles);
-			return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
-		}
+		await subject.RequestDiagnosticsAsync(subject.CurrentSolution).WaitAsync(ComputeTimeout);
+		Dictionary<Project, object> before = SolutionSnapshotProbe.Of(subject);
+		Assert.Single(before);
 
-		await subject.RequestDiagnosticsAsync("key", Compute).WaitAsync(Timeout);
-		await subject.RequestDiagnosticsAsync("key", Compute).WaitAsync(Timeout);
-		Assert.Equal(1, compiles);
+		Dictionary<Project, object> again = SolutionSnapshotProbe.Of(subject);
+		Assert.Single(again);
+		Assert.Same(before.Values.Single(), again.Values.Single());
+		Assert.False(subject.BuildNeeded);
 
+		// An edit forks only the edited project: the next request recomputes one project and carries the rest.
 		await subject.EnqueueWriteAsync((current, token) =>
 		{
 			DocumentId documentId = current.Projects.First().DocumentIds[0];
 			return Task.FromResult(new WriteResult(current.WithDocumentText(documentId, SourceText.From("// edited")), []));
 		}).WaitAsync(Timeout);
-		await subject.RequestDiagnosticsAsync("key", Compute).WaitAsync(Timeout);
-		Assert.Equal(2, compiles);
+
+		await subject.RequestDiagnosticsAsync(subject.CurrentSolution).WaitAsync(ComputeTimeout);
+		Dictionary<Project, object> afterEdit = SolutionSnapshotProbe.Of(subject);
+		Assert.Single(afterEdit);
+		Assert.NotSame(before.Values.Single(), afterEdit.Values.Single());
 	}
 
 	[Fact]
-	public async Task WhenAWriteChangesNothing_ThenTheCachedDiagnosticsAreStillReused()
+	public async Task WhenAWriteChangesNothing_ThenTheHolderSurvives()
 	{
 		using RoslynInstance subject = await LoadReadyAsync();
 
-		int compiles = 0;
-		Task<IReadOnlyList<Diagnostic>> Compute(Solution solution, CancellationToken token)
-		{
-			Interlocked.Increment(ref compiles);
-			return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
-		}
+		await subject.RequestDiagnosticsAsync(subject.CurrentSolution).WaitAsync(ComputeTimeout);
+		Dictionary<Project, object> before = SolutionSnapshotProbe.Of(subject);
 
-		await subject.RequestDiagnosticsAsync("key", Compute).WaitAsync(Timeout);
-
-		// A watcher event for content the snapshot already holds returns the snapshot unchanged.
+		// A watcher event for content the snapshot already holds republishes the same solution object.
 		await subject.EnqueueWriteAsync((current, token) => Task.FromResult(new WriteResult(current, []))).WaitAsync(Timeout);
-		await subject.RequestDiagnosticsAsync("key", Compute).WaitAsync(Timeout);
 
-		Assert.Equal(1, compiles);
+		await subject.RequestDiagnosticsAsync(subject.CurrentSolution).WaitAsync(ComputeTimeout);
+		Dictionary<Project, object> after = SolutionSnapshotProbe.Of(subject);
+		Assert.Same(before.Values.Single(), after.Values.Single());
 		Assert.False(subject.BuildNeeded);
 	}
 
 	[Fact]
-	public async Task WhenADiagnosticsRequestIsCancelledDuringCompute_ThenItIsCancelledAndTheNextRequestComputesAfresh()
+	public async Task WhenARequesterAbandonsACompute_ThenAJoinerStillGetsTheResult()
 	{
 		using RoslynInstance subject = await LoadReadyAsync();
 
-		int firstComputes = 0;
-		var started = new TaskCompletionSource();
-		async Task<IReadOnlyList<Diagnostic>> FirstCompute(Solution solution, CancellationToken token)
-		{
-			Interlocked.Increment(ref firstComputes);
-			started.SetResult();
-			await Task.Delay(-1, token);
-			return [];
-		}
-
+		// A pre-cancelled token abandons the wait without affecting the shared per-project tasks.
 		using var cancellation = new CancellationTokenSource();
-		Task request = subject.RequestDiagnosticsAsync("key", FirstCompute, cancellation.Token);
-		await started.Task.WaitAsync(Timeout);
 		cancellation.Cancel();
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(
+			() => subject.RequestDiagnosticsAsync(subject.CurrentSolution, cancellation.Token).WaitAsync(Timeout));
 
-		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request.WaitAsync(Timeout));
-
-		int secondComputes = 0;
-		Task<IReadOnlyList<Diagnostic>> SecondCompute(Solution solution, CancellationToken token)
-		{
-			Interlocked.Increment(ref secondComputes);
-			return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
-		}
-
-		await subject.RequestDiagnosticsAsync("key", SecondCompute).WaitAsync(Timeout);
-		Assert.Equal(1, secondComputes);
+		DiagnosticsResult result = await subject.RequestDiagnosticsAsync(subject.CurrentSolution).WaitAsync(ComputeTimeout);
+		Assert.Same(subject.CurrentSolution, result.Solution);
+		Assert.False(subject.BuildNeeded);
 	}
 
 	[Fact]
-	public async Task WhenADiagnosticsRequestIsCancelledWhileQueued_ThenItIsCancelledWithoutComputing()
+	public async Task WhenARequesterIsCancelledWhileQueued_ThenALaterRequestStillComputesAfterTheWriteDrains()
 	{
 		using RoslynInstance subject = await LoadReadyAsync();
 
@@ -232,53 +211,29 @@ public class RoslynInstanceTests
 			return new WriteResult(current, []);
 		});
 
-		int firstComputes = 0;
-		Task<IReadOnlyList<Diagnostic>> FirstCompute(Solution solution, CancellationToken token)
-		{
-			Interlocked.Increment(ref firstComputes);
-			return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
-		}
-
+		// The request is queued behind the gated write; its requester cancels while queued.
 		using var cancellation = new CancellationTokenSource();
-		Task request = subject.RequestDiagnosticsAsync("key", FirstCompute, cancellation.Token);
 		cancellation.Cancel();
-
-		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request.WaitAsync(Timeout));
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(
+			() => subject.RequestDiagnosticsAsync(subject.CurrentSolution, cancellation.Token).WaitAsync(Timeout));
 		Assert.False(gate.Task.IsCompleted);
 
+		// The write drains first; a later request then computes (the channel runs it after the write).
 		gate.SetResult();
-		await write.WaitAsync(Timeout);
-
-		int secondComputes = 0;
-		Task<IReadOnlyList<Diagnostic>> SecondCompute(Solution solution, CancellationToken token)
-		{
-			Interlocked.Increment(ref secondComputes);
-			return Task.FromResult<IReadOnlyList<Diagnostic>>([]);
-		}
-
-		await subject.RequestDiagnosticsAsync("key", SecondCompute).WaitAsync(Timeout);
-		Assert.Equal(0, firstComputes);
-		Assert.Equal(1, secondComputes);
+		DiagnosticsResult result = await subject.RequestDiagnosticsAsync(subject.CurrentSolution).WaitAsync(ComputeTimeout);
+		Assert.Same(subject.CurrentSolution, result.Solution);
 	}
 
 	[Fact]
-	public async Task WhenADiagnosticsRequestIsCancelled_ThenALaterWriteStillRuns()
+	public async Task WhenARequesterIsCancelled_ThenALaterWriteStillRuns()
 	{
 		using RoslynInstance subject = await LoadReadyAsync();
 
-		var started = new TaskCompletionSource();
-		async Task<IReadOnlyList<Diagnostic>> Compute(Solution solution, CancellationToken token)
-		{
-			started.SetResult();
-			await Task.Delay(-1, token);
-			return [];
-		}
-
+		// The abandoned compute occupies the channel; the write queues behind it and still runs.
 		using var cancellation = new CancellationTokenSource();
-		Task request = subject.RequestDiagnosticsAsync("key", Compute, cancellation.Token);
-		await started.Task.WaitAsync(Timeout);
 		cancellation.Cancel();
-		await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request.WaitAsync(Timeout));
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(
+			() => subject.RequestDiagnosticsAsync(subject.CurrentSolution, cancellation.Token).WaitAsync(Timeout));
 
 		await subject.EnqueueWriteAsync((current, token) =>
 		{
@@ -289,6 +244,76 @@ public class RoslynInstanceTests
 		Document document = subject.CurrentSolution.Projects.First().Documents.First();
 		SourceText text = await document.GetTextAsync().WaitAsync(Timeout);
 		Assert.Contains("// edited after cancellation", text.ToString());
+	}
+
+	[Fact]
+	public async Task WhenASnapshotIsSuperseded_ThenARequestForItReturnsItsOwnResults()
+	{
+		using RoslynInstance subject = await LoadReadyAsync();
+		Solution pinned = subject.CurrentSolution;
+
+		DocumentId documentId = pinned.Projects.First().DocumentIds[0];
+		await subject.EnqueueWriteAsync((current, token) =>
+			Task.FromResult(new WriteResult(current.WithDocumentText(documentId, SourceText.From("// superseding edit")), [])))
+			.WaitAsync(Timeout);
+
+		// The pinned snapshot's unaltered projects hit the current holder's tasks; the forked project
+		// computes uncached — but the result is for the pinned snapshot either way.
+		DiagnosticsResult pinnedResult = await subject.RequestDiagnosticsAsync(pinned).WaitAsync(Timeout);
+		Assert.Same(pinned, pinnedResult.Solution);
+		Document pinnedDocument = pinned.Projects.First().Documents.First();
+		Assert.DoesNotContain("// superseding edit", (await pinnedDocument.GetTextAsync().WaitAsync(Timeout)).ToString());
+	}
+
+	[Fact]
+	public async Task WhenASolutionSnapshotIsReplaced_ThenUnchangedProjectsCarryTheirTasks()
+	{
+		using RoslynInstance subject = await LoadReadyAsync();
+		await subject.RequestDiagnosticsAsync(subject.CurrentSolution).WaitAsync(ComputeTimeout);
+		Dictionary<Project, object> before = SolutionSnapshotProbe.Of(subject);
+
+		await subject.EnqueueWriteAsync((current, token) =>
+		{
+			DocumentId documentId = current.Projects.First().DocumentIds[0];
+			return Task.FromResult(new WriteResult(current.WithDocumentText(documentId, SourceText.From("// edited")), []));
+		}).WaitAsync(Timeout);
+
+		await subject.RequestDiagnosticsAsync(subject.CurrentSolution).WaitAsync(ComputeTimeout);
+		Dictionary<Project, object> after = SolutionSnapshotProbe.Of(subject);
+		// Simple has one project: the edit forked it, so the new holder registered a fresh task rather
+		// than carrying the old one.
+		Assert.Single(after);
+		Assert.NotSame(before.Values.Single(), after.Values.Single());
+	}
+
+	[Fact]
+	public async Task WhenARebuildPublishes_ThenNoTasksCarryOver()
+	{
+		using RoslynInstance subject = await LoadReadyAsync();
+		await subject.RequestDiagnosticsAsync(subject.CurrentSolution).WaitAsync(ComputeTimeout);
+
+		var gate = new TaskCompletionSource();
+		subject.BeginRebuild(
+			loader: async progress =>
+			{
+				await gate.Task;
+				return await SolutionWorkspace.LoadAsync(TestSolutions.Simple, progress);
+			},
+			onReady: _ => { });
+		gate.SetResult();
+		await WaitForReadyAsync(subject);
+
+		await subject.RequestDiagnosticsAsync(subject.CurrentSolution).WaitAsync(ComputeTimeout);
+		Dictionary<Project, object> probe = SolutionSnapshotProbe.Of(subject);
+		// A rebuild's projects are new instances: nothing carried, everything computed fresh.
+		Assert.Single(probe);
+	}
+
+	[Fact]
+	public void WhenTheModelHasNoSolution_ThenBuildNeededIsTrue()
+	{
+		var subject = new RoslynInstance(SolutionKey.For(TestSolutions.Simple));
+		Assert.True(subject.BuildNeeded);
 	}
 
 	[Fact]
@@ -451,6 +476,22 @@ public class RoslynInstanceTests
 
 		Assert.Equal(["late disposed"], events);
 		Assert.Empty(subject.WatchDiagnostics.Messages);
+	}
+
+	/// <summary>Reads the instance's private SolutionSnapshot for assertions: project instance → its task.</summary>
+	private static class SolutionSnapshotProbe
+	{
+		public static Dictionary<Project, object> Of(RoslynInstance instance)
+		{
+			FieldInfo field = typeof(RoslynInstance).GetField("SolutionSnapshotField", BindingFlags.NonPublic | BindingFlags.Instance)!;
+			object? holder = field.GetValue(instance);
+			if (holder is null)
+				return [];
+
+			System.Reflection.PropertyInfo tasksProperty = holder.GetType().GetProperty("Tasks", BindingFlags.Public | BindingFlags.Instance)!;
+			var tasks = (Dictionary<Project, Task<ImmutableArray<Diagnostic>>>)tasksProperty.GetValue(holder)!;
+			return tasks.ToDictionary(pair => pair.Key, pair => (object)pair.Value);
+		}
 	}
 
 	private sealed class RecordingWatcher(string name, List<string> events) : IInstanceWatcher

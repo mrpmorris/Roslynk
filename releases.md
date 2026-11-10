@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Diagnostics are computed for the exact snapshot a caller pins: each publication carries a `SolutionSnapshot` whose per-project computation tasks are keyed by project instance and carried forward while a project is unaltered, so a reader holding snapshot A keeps receiving A's diagnostics (including the Razor set captured when A was published) after snapshot B is published. `DiagnosticsService` no longer memoizes and always computes with analyzers; `get_diagnostics`' `includeAnalyzers` now filters the response instead of changing the computation, and a failed or cancelled computation can be retried (Fixes #202)
 - The code-action analyzer budget can be raised with `ROSLYNK_ANALYZER_BUDGET_SECONDS` (Fixes #190)
 - Cancelling `get_diagnostics` or `change_signature` now stops the work instead of letting it run on (Fixes #189)
 - A failed batch-write rollback keeps the backups of files it could not restore and names them (Fixes #188)

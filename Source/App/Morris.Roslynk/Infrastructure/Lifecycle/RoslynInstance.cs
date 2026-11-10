@@ -1,7 +1,10 @@
-﻿using System.Diagnostics;
+using System.Collections.Immutable;
+using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
+using Morris.Roslynk.Infrastructure.Diagnostics;
 using Morris.Roslynk.Infrastructure.Observability;
 using Morris.Roslynk.Infrastructure.Razor;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -25,7 +28,7 @@ public sealed class RoslynInstance : IDisposable
 	private SolutionWorkspace? WorkspaceField;
 	private ProjectLoadTracker LoadTrackerField = new();
 	private volatile bool DirtyField;
-	private DiagnosticsEntry? DiagnosticsEntryField;
+	private SolutionSnapshot? SolutionSnapshotField;
 	private long LastAccessedTicks;
 	private IInstanceWatcher? Watcher;
 	private bool WatcherClosed;
@@ -117,8 +120,24 @@ public sealed class RoslynInstance : IDisposable
 			return WatchErrorsReloadedFor.Count < MaxWatchErrorReloads && WatchErrorsReloadedFor.Add(error);
 	}
 
-	/// <summary>Whether the snapshot changed since the last diagnostics build, so the next build must recompile.</summary>
-	public bool BuildNeeded => DiagnosticsEntryField is null || !ReferenceEquals(DiagnosticsEntryField.Solution, CurrentModel.Solution);
+	/// <summary>
+	/// Whether no diagnostics task has yet been computed for the current model's solution, so a request
+	/// would have to compute. No production caller — kept for tests; <see cref="RequestDiagnosticsAsync"/>
+	/// resolves tasks per project directly.
+	/// </summary>
+	public bool BuildNeeded
+	{
+		get
+		{
+			Solution? current = CurrentModel.Solution;
+			if (current is null)
+				return true;
+			SolutionSnapshot? holder = Volatile.Read(ref SolutionSnapshotField);
+			return holder is null
+				|| !ReferenceEquals(holder.Solution, current)
+				|| holder.Tasks.Count == 0;
+		}
+	}
 
 	/// <summary>
 	/// Starts the watcher that keeps the instance fresh, then disposes any previous one (a rebuild re-attaches), so
@@ -247,25 +266,67 @@ public sealed class RoslynInstance : IDisposable
 	}
 
 	/// <summary>
-	/// Enqueues a diagnostics build. Ordered after pending writes (so they drain first); returns a cached
-	/// result when nothing changed since the last build with the same <paramref name="cacheKey"/>. The compile
-	/// runs without holding the read side, so other reads continue on the uncompiled snapshot meanwhile.
+	/// Requests diagnostics for the <paramref name="snapshot"/> the caller pinned: every project's
+	/// computation is resolved from the <see cref="SolutionSnapshot"/> keyed by project instance, so
+	/// concurrent and repeat requests share one task per project and unaltered projects carry their
+	/// results across publications. The result includes the Razor set captured when the snapshot was
+	/// published. Nothing is published by the computation: diagnostics never change the
+	/// <see cref="Solution"/>, so the snapshot generation is left alone. The computation always includes
+	/// analyzers; consumers decide what to include in their response.
 	/// </summary>
-	public Task<DiagnosticsResult> RequestDiagnosticsAsync(string cacheKey, Func<Solution, CancellationToken, Task<IReadOnlyList<Diagnostic>>> compute, CancellationToken cancellationToken = default)
+	/// <param name="snapshot">The exact solution snapshot the caller holds. A superseded snapshot (only
+	/// possible for a plugin that kept one) still computes against its own immutable projects: those the
+	/// current snapshot shares reuse its tasks, the rest compute uncached.</param>
+	public async Task<DiagnosticsResult> RequestDiagnosticsAsync(Solution snapshot, CancellationToken cancellationToken = default)
 	{
+		ArgumentNullException.ThrowIfNull(snapshot);
+
 		using (RoslynkActivitySource.Instance.StartActivity($"{nameof(RoslynInstance)}.{nameof(RoslynInstance.RequestDiagnosticsAsync)}"))
 		{
-			if (cacheKey is null)
-				throw new ArgumentNullException(nameof(cacheKey));
-			if (compute is null)
-				throw new ArgumentNullException(nameof(compute));
+			SolutionSnapshot? holder = Volatile.Read(ref SolutionSnapshotField);
+			bool current = holder is not null && ReferenceEquals(holder.Solution, snapshot);
+			Solution workspace = current ? holder!.Solution : snapshot;
 
-			var completion = new TaskCompletionSource<DiagnosticsResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-			var item = new WorkItem(() => RunDiagnosticsAsync(cacheKey, compute, completion, cancellationToken), exception => completion.TrySetException(exception));
-			if (!Work.Writer.TryWrite(item))
-				completion.TrySetException(new ObjectDisposedException(nameof(RoslynInstance)));
+			Project[] projects = [.. workspace.Projects];
+			var tasks = new Task<ImmutableArray<Diagnostic>>[projects.Length];
+			var pending = new List<(int Index, Project Project)>(projects.Length);
 
-			return completion.Task.WaitAsync(cancellationToken);
+			for (int index = 0; index < projects.Length; index++)
+			{
+				// The current snapshot's projects resolve through the holder (shared or newly registered
+				// tasks); a superseded snapshot's projects hit only when the project instance carried over.
+				if (current)
+				{
+					tasks[index] = holder!.GetOrAddAsync(projects[index], this);
+					continue;
+				}
+
+				if (holder is not null
+					&& holder.Tasks.TryGetValue(projects[index], out Task<ImmutableArray<Diagnostic>>? carried)
+					&& SolutionSnapshot.IsReusable(carried))
+				{
+					tasks[index] = carried;
+					continue;
+				}
+
+				pending.Add((index, projects[index]));
+			}
+
+			// Superseded-snapshot projects with no carried task compute uncached: the result is still for
+			// the exact snapshot, it just is not stored. Only the current snapshot's holder registers work.
+			foreach ((int index, Project project) in pending)
+				tasks[index] = DiagnosticsService.GetProjectDiagnosticsAsync(project, CancellationToken.None);
+
+			await Task.WhenAll(tasks).WaitAsync(cancellationToken);
+
+			var collected = ImmutableArray.CreateBuilder<Diagnostic>();
+			foreach (Task<ImmutableArray<Diagnostic>> task in tasks)
+				collected.AddRange(task.Result);
+
+			ImmutableArray<Diagnostic> razor = current
+				? holder!.RazorDiagnostics
+				: Volatile.Read(ref SolutionSnapshotField)?.RazorDiagnostics ?? ImmutableArray<Diagnostic>.Empty;
+			return new DiagnosticsResult(collected.ToImmutable(), snapshot, razor);
 		}
 	}
 
@@ -334,63 +395,76 @@ public sealed class RoslynInstance : IDisposable
 		}
 	}
 
-	private async Task RunDiagnosticsAsync(string cacheKey, Func<Solution, CancellationToken, Task<IReadOnlyList<Diagnostic>>> compute, TaskCompletionSource<DiagnosticsResult> completion, CancellationToken cancellationToken)
+	/// <summary>
+	/// The snapshot-bound computation for one analyzer mode: the first request creates the task and starts
+	/// the work, later requests join the same task in flight or receive the completed result. The compute
+	/// runs with <see cref="CancellationToken.None"/> — one caller giving up must not cancel a shared
+	/// computation — and a faulted or cancelled slot is cleared so the next request starts afresh. The
+	/// entry holds the <see cref="Solution"/> it is keyed to; as a <see cref="ConditionalWeakTable"/>
+	/// value it dies with the snapshot, matching the decided retention policy.
+	/// </summary>
+	/// <summary>
+	/// One publication's diagnostics state: the solution it was built from, a reusable computation task
+	/// per project, and the Razor diagnostics captured when it was published. Replaced at every
+	/// publication; tasks keyed by project instance carry forward wherever the project object is
+	/// identical, because Roslyn forks a project whenever any compilation-relevant input changes — a
+	/// carried instance proves its diagnostics unchanged, so no fingerprints are needed. The holder's
+	/// lifetime is explicit: it dies with the publication that supersedes it.
+	/// </summary>
+	private sealed class SolutionSnapshot
 	{
-		if (cancellationToken.IsCancellationRequested)
+		public SolutionSnapshot(Solution solution, SolutionSnapshot? previous, ImmutableArray<Diagnostic> razorDiagnostics)
 		{
-			completion.TrySetCanceled(cancellationToken);
-			return;
+			Solution = solution;
+			RazorDiagnostics = razorDiagnostics;
+			foreach (Project project in solution.Projects)
+			{
+				if (previous is not null && previous.Tasks.TryGetValue(project, out Task<ImmutableArray<Diagnostic>>? carried) && IsReusable(carried))
+					Tasks.Add(project, carried);
+			}
 		}
 
-		SolutionModel model = CurrentModel;
-		if (model.Solution is null)
+		public Solution Solution { get; }
+		public ImmutableArray<Diagnostic> RazorDiagnostics { get; }
+		public Dictionary<Project, Task<ImmutableArray<Diagnostic>>> Tasks { get; } = new(ReferenceEqualityComparer.Instance);
+
+		/// <summary>
+		/// Returns the project's shared computation: the task registered by the first request, joined by
+		/// every later one. A faulted or cancelled computation is replaced so a later request computes
+		/// afresh. The compute is enqueued on the channel, ordered after pending writes; the shared task
+		/// runs on <see cref="CancellationToken.None"/> so a requester giving up cannot cancel a
+		/// computation others have joined — requester cancellation is applied at the await instead.
+		/// </summary>
+		public Task<ImmutableArray<Diagnostic>> GetOrAddAsync(Project project, RoslynInstance instance)
 		{
-			completion.TrySetException(new InvalidOperationException("The solution is still loading."));
-			return;
+			lock (Gate)
+			{
+				if (Tasks.TryGetValue(project, out Task<ImmutableArray<Diagnostic>>? existing) && IsReusable(existing))
+					return existing;
+
+				TaskCompletionSource<ImmutableArray<Diagnostic>> start = new(TaskCreationOptions.RunContinuationsAsynchronously);
+				Tasks[project] = start.Task;
+				instance.EnqueueDiagnosticsWork(() => ComputeAndCompleteAsync(project, start));
+				return start.Task;
+			}
 		}
 
-		Solution solution = model.Solution;
-		DiagnosticsEntry? current = Volatile.Read(ref DiagnosticsEntryField);
+		internal static bool IsReusable(Task<ImmutableArray<Diagnostic>> task) =>
+			task.IsCompletedSuccessfully || !task.IsCompleted;
 
-		// Matching is by Solution reference. A fork keeps every ProjectId but may change a document's text, so
-		// identity alone cannot stand in for content here; the per-project memo in DiagnosticsService decides
-		// which projects of a new snapshot actually need recomputing, and that is the fallback this miss takes.
-		if (current is not null && current.Matches(solution, cacheKey))
+		private static async Task ComputeAndCompleteAsync(Project project, TaskCompletionSource<ImmutableArray<Diagnostic>> start)
 		{
-			completion.TrySetResult(await current.Result);
-			return;
+			try
+			{
+				start.TrySetResult(await DiagnosticsService.GetProjectDiagnosticsAsync(project, CancellationToken.None));
+			}
+			catch (Exception exception)
+			{
+				start.TrySetException(exception);
+			}
 		}
 
-		// Stored before the compute is awaited, so a concurrent request for the same snapshot and mode joins
-		// this computation instead of starting a second one. Nothing is published: diagnostics never change
-		// the Solution, so the snapshot generation is left alone.
-		var result = new TaskCompletionSource<DiagnosticsResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-		var entry = new DiagnosticsEntry(solution, cacheKey, result.Task);
-		Volatile.Write(ref DiagnosticsEntryField, entry);
-
-		try
-		{
-			IReadOnlyList<Diagnostic> diagnostics = await compute(solution, cancellationToken);
-			DiagnosticsResult computed = new(diagnostics, solution);
-			result.TrySetResult(computed);
-			completion.TrySetResult(computed);
-		}
-		catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-		{
-			// The requester gave up. Clear the entry so the next request for this snapshot computes afresh
-			// rather than awaiting a cancelled task; the per-project memo keeps every project that finished.
-			Interlocked.CompareExchange(ref DiagnosticsEntryField, null, entry);
-			result.TrySetCanceled(cancellationToken);
-			completion.TrySetCanceled(cancellationToken);
-		}
-		catch (Exception exception)
-		{
-			// A faulted task must not stay in place: every later request for this snapshot would await it
-			// forever. Clear only if this entry is still the current one, so a newer entry is not clobbered.
-			Interlocked.CompareExchange(ref DiagnosticsEntryField, null, entry);
-			result.TrySetException(exception);
-			completion.TrySetException(exception);
-		}
+		private readonly Lock Gate = new();
 	}
 
 	/// <summary>
@@ -421,7 +495,10 @@ public sealed class RoslynInstance : IDisposable
 
 					SolutionWorkspace workspace = await loader(tracker);
 					Volatile.Write(ref WorkspaceField, workspace);
-					Swap(SolutionModel.Ready(workspace.Solution));
+					// Capture before the Swap: no reader can observe the new snapshot yet, because
+					// ReadySignal.TrySetResult() fires only in the finally below. The load task, not the
+					// channel, is this publication's serialization boundary.
+					SwapWithSnapshot(SolutionModel.Ready(workspace.Solution), workspace);
 					activity?.SetTag(ActivityTags.ProjectCountTag, workspace.Solution.Projects.Count());
 				}
 
@@ -531,7 +608,7 @@ public sealed class RoslynInstance : IDisposable
 				{
 					SolutionWorkspace? previous = Volatile.Read(ref WorkspaceField);
 					Volatile.Write(ref WorkspaceField, workspace);
-					Swap(SolutionModel.Ready(workspace.Solution));
+					SwapWithSnapshot(SolutionModel.Ready(workspace.Solution), workspace);
 					onReady(this);
 					previous?.Dispose();
 				}
@@ -577,10 +654,45 @@ public sealed class RoslynInstance : IDisposable
 		if (solution is null)
 			throw new ArgumentNullException(nameof(solution));
 
-		Swap(SolutionModel.Ready(solution));
+		SwapWithSnapshot(SolutionModel.Ready(solution));
+	}
+
+	/// <summary>Queues work on the single-consumer channel, ordered after pending writes. The WorkItem
+	/// fault backstop is a no-op for diagnostics: the compute handler completes its own task.</summary>
+	private void EnqueueDiagnosticsWork(Func<Task> run)
+	{
+		var item = new WorkItem(run, _ => { });
+		if (!Work.Writer.TryWrite(item))
+			throw new ObjectDisposedException(nameof(RoslynInstance));
+	}
+
+	/// <summary>
+	/// Publishes the solution of the model being swapped as the new <see cref="SolutionSnapshot"/>:
+	/// per-project tasks keyed by project instance, carried forward from the previous holder wherever the
+	/// project object is identical — Roslyn forks a project whenever any compilation-relevant input
+	/// changes, so a carried instance proves its diagnostics unchanged. The Razor capture is taken here,
+	/// before the swap, so no request can observe the new snapshot without its Razor set. A model without
+	/// a solution (Faulted) leaves the previous holder untouched, and a solution that is reference-equal
+	/// to the current holder's (a status-only republish) keeps it, tasks in flight included.
+	/// </summary>
+	private void SwapWithSnapshot(SolutionModel model, SolutionWorkspace? workspaceForCapture = null)
+	{
+		SolutionSnapshot? previous = Volatile.Read(ref SolutionSnapshotField);
+		if (model.Solution is null || previous is not null && ReferenceEquals(previous.Solution, model.Solution))
+		{
+			Swap(model);
+			return;
+		}
+
+		ImmutableArray<Diagnostic> razor = (workspaceForCapture ?? Workspace)?.Razor is RazorGenerationState razorState
+			? [.. razorState.Diagnostics(model.Solution)]
+			: ImmutableArray<Diagnostic>.Empty;
+		Swap(model);
+		Volatile.Write(ref SolutionSnapshotField, new SolutionSnapshot(model.Solution, previous, razor));
 	}
 
 	private void Swap(SolutionModel model) => Volatile.Write(ref CurrentModelField, model);
+
 
 	public void Dispose()
 	{
@@ -602,17 +714,5 @@ public sealed class RoslynInstance : IDisposable
 			Run = run;
 			Fault = fault;
 		}
-	}
-
-	/// <summary>
-	/// The diagnostics computation for one snapshot and mode. Presence of the entry means the work has been
-	/// started; awaiting <see cref="Result"/> waits for it or returns the finished value, so concurrent callers
-	/// share one computation. Matching is by <see cref="Solution"/> reference: every content change produces a
-	/// new instance, while a status-only publication carries the same one.
-	/// </summary>
-	private sealed record DiagnosticsEntry(Solution Solution, string Key, Task<DiagnosticsResult> Result)
-	{
-		public bool Matches(Solution solution, string key) =>
-			ReferenceEquals(Solution, solution) && string.Equals(Key, key, StringComparison.Ordinal);
 	}
 }

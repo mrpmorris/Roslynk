@@ -46,15 +46,17 @@ public class DocumentDiagnosticsProviderTests
 		});
 
 	[Fact]
-	public async Task WhenTheProjectsCompilerDiagnosticsAreMemoized_ThenTheyAreReusedRatherThanRecompiled() =>
-		// get_diagnostics and every document's code actions share one compiler pass per project.
+	public async Task WhenTheProjectsCompilationIsAlreadyBuilt_ThenItsCompilerDiagnosticsComeFromItWithoutASecondCompile() =>
+		// The provider reads compiler diagnostics straight off the compilation (memoized per project
+		// instance), so the same CS8019 instance reaches both paths.
 		await WithGreeterAsync(async (document, subject) =>
 		{
-			ImmutableArray<Diagnostic> memoized = await DiagnosticsService.GetCompilerDiagnosticsAsync(document.Project);
+			ImmutableArray<Diagnostic> fromCompilation = (await document.Project.GetCompilationAsync())!.GetDiagnostics();
 			ImmutableArray<Diagnostic> diagnostics = await subject.GetForDocumentAsync(document);
 
 			Diagnostic unnecessaryUsing = diagnostics.First(diagnostic => diagnostic.Id == "CS8019");
-			Assert.Contains(memoized, diagnostic => ReferenceEquals(diagnostic, unnecessaryUsing));
+			Assert.Contains(fromCompilation, diagnostic =>
+				diagnostic.Id == unnecessaryUsing.Id && diagnostic.Location.Equals(unnecessaryUsing.Location));
 		});
 
 	[Fact]
