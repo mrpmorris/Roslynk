@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<!-- Analyzers must run inside any IDE/SDK that compiles a plugin, so they target the oldest
+		     Roslyn we support rather than the engine's 5.9.0. The floor version lives in
+		     Directory.Packages.props (Microsoft.CodeAnalysis.CSharp, deliberately distinct from the
+		     Microsoft.CodeAnalysis.CSharp.Workspaces 5.9.0 the engine references). -->
+		<TargetFramework>netstandard2.0</TargetFramework>
+		<AssemblyName>Morris.Roslynk.Plugins.V1.Analyzer</AssemblyName>
+		<RootNamespace>Morris.Roslynk.Plugins.V1.Analyzer</RootNamespace>
+		<IsPackable>false</IsPackable>
+		<!-- The Roslyn meta-analyzers police analyzer projects; the extended rules are their documented contract. -->
+		<EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+		<!-- RS2008 wants per-descriptor release tracking (added/removed-in-version custom tags). Every rule
+		     here is new in this release and there is no prior release to track against; revisit when V2 ships. -->
+		<NoWarn>$(NoWarn);RS2008</NoWarn>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+	</ItemGroup>
+
+</Project>
