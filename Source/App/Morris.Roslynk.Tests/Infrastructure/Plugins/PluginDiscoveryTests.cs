@@ -114,7 +114,8 @@ public class PluginDiscoveryTests : IDisposable
 
 		Assert.Empty(result.Candidates);
 		PluginDiscoveryRecord record = AssertSingleRecord(result, PluginDiscoveryStage.UnsupportedVersion);
-		Assert.Equal("2", record.ContractVersion);
+		Assert.Contains("too high", record.Reason);
+		Assert.Contains("entry assembly 0.0.0.0", record.Reason);
 	}
 
 	[Fact]

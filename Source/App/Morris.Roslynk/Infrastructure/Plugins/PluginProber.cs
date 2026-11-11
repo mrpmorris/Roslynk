@@ -37,14 +37,15 @@ public sealed class PluginProber
 		{
 			using var loadContext = CreateLoadContext(entryAssemblyPath);
 			Assembly entry = loadContext.LoadFromAssemblyPath(entryAssemblyPath);
+			Version? entryVersion = entry.GetName().Version;
 			references = entry
 				.GetReferencedAssemblies()
 				.Select(name => new PluginAssemblyReference(name.Name ?? "", name.Version?.ToString() ?? ""))
 				.ToArray();
 			ApiVersion? version = ReadApiVersionTyped(entry) ?? ReadApiVersionFromBlob(entryAssemblyPath);
 			if (version is null)
-				return PluginProbeResult.Failed(PluginDiscoveryStage.MissingApiVersionAttribute, "The entry assembly carries no RoslynkApiVersion attribute", references);
-			return PluginProbeResult.Succeeded(version.Value, references);
+				return PluginProbeResult.Failed(PluginDiscoveryStage.MissingApiVersionAttribute, "The entry assembly carries no RoslynkApiVersion attribute", references, entryVersion);
+			return PluginProbeResult.Succeeded(version.Value, references, entryVersion);
 		}
 		catch (Exception exception) when (exception is BadImageFormatException or FileNotFoundException or IOException or UnauthorizedAccessException)
 		{
