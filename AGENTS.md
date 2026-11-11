@@ -2,6 +2,12 @@
 
 This is a source-based implementation guide for future changes. Paths below are relative to the repository root unless a section says otherwise. Re-check the affected implementation before changing it; this guide describes the architecture and its current limits, not a substitute for the source.
 
+## EGM artifact locations
+
+- EGM artifact directory: .dev/docs
+
+Briefs, drafts, review reports and other EGM working files go to `.dev/docs` (git-ignored). Finalized feature documents live in `docs/features/<feature>.md`, one file per feature, lowercase hyphenated names (e.g. `docs/features/plugins.md`). When `/egm-draft` finalizes a design, save it there instead of `docs/designs/`. The `199` worktree (`C:\Data\ZZZScratch\Source\Roslynk\199`) has the same AGENTS.md and inherits these locations.
+
 ## Start here
 
 - The solution is `Source/Morris.Roslynk.slnx` (not under `Source/App`).
