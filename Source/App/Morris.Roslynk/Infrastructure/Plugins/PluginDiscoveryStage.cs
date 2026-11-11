@@ -29,7 +29,7 @@ public static class PluginDiscoveryStageExtensions
 			PluginDiscoveryStage.NameMismatch => "name-mismatch",
 			PluginDiscoveryStage.DuplicateName => "duplicate-name",
 			PluginDiscoveryStage.UnsupportedVersion => "unsupported-version",
-			PluginDiscoveryStage.MissingApiVersionAttribute => "missing-api-version-attribute",
+			PluginDiscoveryStage.MissingApiVersionAttribute => "missing-attribute",
 			PluginDiscoveryStage.Malformed => "malformed",
 			PluginDiscoveryStage.UnreadableOrLocked => "unreadable-or-locked",
 			PluginDiscoveryStage.DependencyUnresolved => "dependency-unresolved",

@@ -104,6 +104,9 @@ public sealed class PluginLoader
 				: PluginFactoryResult.Failed(loadResult.PluginName, PluginDiscoveryStage.FactoryFailure, $"{loadResult.PluginName} declares no [RoslynkPluginFactory] method");
 		}
 
+		if (!IsPubliclyAccessible(factoryMethod.DeclaringType))
+			return PluginFactoryResult.Failed(loadResult.PluginName, PluginDiscoveryStage.FactoryFailure, $"The [RoslynkPluginFactory] method '{factoryMethod.Name}' must be declared in a public class, with public containing types");
+
 		if (factoryReturnType != typeof(IRoslynkPlugin))
 			return PluginFactoryResult.Failed(loadResult.PluginName, PluginDiscoveryStage.FactoryFailure, $"The [RoslynkPluginFactory] method '{factoryMethod.Name}' must return nullable {nameof(IRoslynkPlugin)}");
 
@@ -111,6 +114,18 @@ public sealed class PluginLoader
 			return PluginFactoryResult.Failed(loadResult.PluginName, PluginDiscoveryStage.FactoryFailure, $"The [RoslynkPluginFactory] method '{factoryMethod.Name}' must accept exactly one {nameof(IPluginContext)} parameter");
 
 		return PluginFactoryResult.Succeeded(loadResult.PluginName, factoryMethod);
+	}
+
+	/// <summary>True when the type and every type declaring it are public — the analyzer's RK0003 rule, re-checked at load time because a manually deployed assembly never ran the analyzer.</summary>
+	private static bool IsPubliclyAccessible(Type? type)
+	{
+		for (Type? current = type; current is not null; current = current.DeclaringType)
+		{
+			if (!current.IsPublic && !current.IsNestedPublic)
+				return false;
+		}
+
+		return true;
 	}
 
 	/// <summary>

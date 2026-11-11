@@ -207,6 +207,7 @@ Analyzer errors cover:
 
 - Missing factory.
 - Multiple decorated factory methods.
+- Missing `RoslynkApiVersion` assembly attribute (stamped automatically by the package's build targets; its absence means the consumer bypassed them).
 - Factory declared outside a publicly accessible public class.
 - Non-public or non-static factory method.
 - Generic factory method or generic declaring type.
@@ -464,7 +465,7 @@ public interface IUseSolutionResult<T>
     /// <summary>Why the call ended. The payload properties always agree with it.</summary>
     UseSolutionResultState State { get; }
 
-    /// <summary>The load failure reason. Set only when the state is Faulted.</summary>
+    /// <summary>The load failure reason, or the reason a callback could not run to a terminal outcome (for example repeated supersession). Set only when the state is Faulted.</summary>
     string? FaultMessage { get; }
 
     /// <summary>True when the callback ran against a ready, current snapshot.</summary>

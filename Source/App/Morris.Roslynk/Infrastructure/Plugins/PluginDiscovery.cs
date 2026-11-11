@@ -94,7 +94,7 @@ public sealed class PluginDiscovery
 				records.Add(new(
 					PluginDiscoveryStage.DuplicateName,
 					PluginDiscoverySeverity.Error,
-					Clean($"'{folderName}' normalizes to '{normalized}', already reserved by '{firstFolder}'"),
+					Clean($"'{Path.Combine(PluginsRoot, folderName)}' normalizes to '{normalized}', already reserved by '{Path.Combine(PluginsRoot, firstFolder)}'; ordinal examination order selected the earlier folder as the winner"),
 					PluginName: folderName,
 					PluginFolder: folderName));
 				continue;
@@ -146,13 +146,16 @@ public sealed class PluginDiscovery
 		ApiVersion apiVersion = probe.ApiVersion!.Value;
 		if (apiVersion < MinSupportedVersion || apiVersion > MaxSupportedVersion)
 		{
+			string range = $"{(int)MinSupportedVersion}-{(int)MaxSupportedVersion}";
+			string direction = apiVersion < MinSupportedVersion ? "too low" : "too high";
+			string assemblyVersion = probe.EntryVersion is { } version ? version.ToString() : "unknown";
 			records.Add(new(
 				PluginDiscoveryStage.UnsupportedVersion,
 				PluginDiscoverySeverity.Error,
-				Clean($"{folderName} requires API version {(int)apiVersion}; this Roslynk supports {(int)MinSupportedVersion}-{(int)MaxSupportedVersion}"),
+				Clean($"{folderName} requires API version {(int)apiVersion} (entry assembly {assemblyVersion}); this Roslynk supports {range} — the plugin is too {direction}"),
 				PluginName: folderName,
 				PluginFolder: folderName,
-				ContractVersion: ((int)apiVersion).ToString()));
+				ContractVersion: probe.EntryVersion?.ToString() ?? ((int)apiVersion).ToString()));
 			return;
 		}
 
