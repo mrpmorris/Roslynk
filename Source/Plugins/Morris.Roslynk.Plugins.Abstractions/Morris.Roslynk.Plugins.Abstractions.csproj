@@ -4,7 +4,9 @@
 		<AssemblyName>Morris.Roslynk.Plugins.Abstractions</AssemblyName>
 		<RootNamespace>Morris.Roslynk.Plugins.Abstractions</RootNamespace>
 		<PackageId>Morris.Roslynk.Plugins.Abstractions</PackageId>
-		<Version>1.0.0</Version>
+		<!-- The release version: bump the minor (this whole number is major.minor) to publish a new
+		     package - the publish workflow pushes only when this version is not yet on nuget.org. -->
+		<Version>0.1</Version>
 		<TargetFramework>net10.0</TargetFramework>
 		<IsPackable>true</IsPackable>
 		<Description>The Roslynk plugin contract: the interfaces, enums and the factory attribute a Roslynk plugin is built against, plus the convention analyzer that validates plugin conventions at build time.</Description>
