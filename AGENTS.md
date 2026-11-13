@@ -6,7 +6,7 @@ This is a source-based implementation guide for future changes. Paths below are 
 
 - EGM artifact directory: .dev/docs
 
-Briefs, drafts, review reports and other EGM working files go to `.dev/docs` (git-ignored). Finalized feature documents live in `docs/features/<feature>.md`, one file per feature, lowercase hyphenated names (e.g. `docs/features/plugins.md`). When `/egm-draft` finalizes a design, save it there instead of `docs/designs/`. The `199` worktree (`C:\Data\ZZZScratch\Source\Roslynk\199`) has the same AGENTS.md and inherits these locations.
+Briefs, drafts, review reports and other EGM working files go to `.dev/docs` (git-ignored). Finalized design documents live in `docs/designs/<feature>.md`, one file per feature, lowercase hyphenated names (e.g. `docs/designs/plugins.md`). When `/egm-draft` finalizes a design, save it there. The `199` worktree (`C:\Data\ZZZScratch\Source\Roslynk\199`) has the same AGENTS.md and inherits these locations.
 
 ## Start here
 
