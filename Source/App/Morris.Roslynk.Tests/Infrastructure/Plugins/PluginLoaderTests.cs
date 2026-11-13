@@ -168,6 +168,23 @@ public class PluginLoaderTests : PluginLoaderHarness
 	}
 
 	[Fact]
+	public async Task WhenTheFactoryNeedsAMissingDependencyOnlyAtInvocation_ThenItIsReportedAsDependencyUnresolved()
+	{
+		// The claim and the factory's shape are clean — the dependency is first touched when the
+		// factory's body runs. The spec maps any unsatisfiable reference to dependency-unresolved,
+		// naming the missing assembly, wherever the bind fails.
+		PluginCandidate candidate = Stage("CallGraph", TestPluginCompiler.MissingDependencyAtCallSource, extraAssemblies:
+			[("SomeLibrary", TestPluginCompiler.MissingDependencyLibrarySource)]);
+
+		LoadedPlugin? loaded = await LoadAsync(candidate);
+
+		Assert.Null(loaded);
+		(string? Stage, string Message, Exception? Exception) error = SingleError();
+		Assert.Equal("dependency-unresolved", error.Stage);
+		Assert.Contains("SomeLibrary", error.Message);
+	}
+
+	[Fact]
 	public async Task WhenTheStartupBudgetIsExhausted_ThenThePluginIsRecordedAsStartupTimeoutAndNothingRegisters()
 	{
 		// The budget is a stopwatch, not a kill switch: the sleeping factory runs to completion

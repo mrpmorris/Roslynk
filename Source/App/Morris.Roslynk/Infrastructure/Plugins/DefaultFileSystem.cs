@@ -48,4 +48,7 @@ public sealed class DefaultFileSystem : IFileSystem
 		if (File.Exists(path))
 			File.Delete(path);
 	}
+
+	public void RenameDirectory(string sourceDirectory, string targetDirectory) =>
+		Directory.Move(sourceDirectory, targetDirectory);
 }

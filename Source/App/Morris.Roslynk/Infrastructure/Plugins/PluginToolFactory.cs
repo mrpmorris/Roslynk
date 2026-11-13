@@ -12,11 +12,12 @@ namespace Morris.Roslynk.Infrastructure.Plugins;
 
 /// <summary>
 /// Discovers a plugin instance's tools and creates them bound to that same initialized instance.
-/// Discovery covers public methods, including public methods inherited from base types; non-public
-/// methods are never discovered. Every exposed name is the plugin's normalized name, two
-/// underscores, and the declared tool name; there are no rules on declared names. When two methods
-/// produce the same exposed name — ordinary C# overloads share a method name — the first in
-/// discovery order wins, the second is recorded as an error naming both methods and is ignored.
+/// Discovery covers public instance methods, including public methods inherited from base types;
+/// non-public methods and static methods are never discovered. Every exposed name is the plugin's
+/// normalized name, two underscores, and the declared tool name; there are no rules on declared
+/// names. When two methods produce the same exposed name — ordinary C# overloads share a method name
+/// — the first in discovery order wins, the second is recorded as an error naming both methods and
+/// is ignored.
 /// </summary>
 internal sealed class PluginToolFactory
 {
@@ -40,7 +41,7 @@ internal sealed class PluginToolFactory
 		string normalizedPluginName = PluginNameRules.Normalize(pluginName);
 		Type concreteType = plugin.GetType();
 		IEnumerable<MethodInfo> candidates = concreteType
-			.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.Static)
+			.GetMethods(BindingFlags.Public | BindingFlags.Instance)
 			.Where(method => method.DeclaringType != typeof(object) && HasToolAttribute(method));
 
 		var created = new List<McpServerTool>();
@@ -66,7 +67,7 @@ internal sealed class PluginToolFactory
 
 			McpServerTool tool = McpServerTool.Create(
 				method,
-				method.IsStatic ? null : plugin,
+				plugin,
 				new McpServerToolCreateOptions { Name = exposedName, Services = null });
 
 			created.Add(new RoslynkTool(new PluginTool(tool, Tracker, LoggerFactory), Budget));

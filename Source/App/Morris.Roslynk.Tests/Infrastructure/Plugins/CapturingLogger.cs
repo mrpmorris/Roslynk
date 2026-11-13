@@ -118,4 +118,37 @@ public sealed class MemoryFileSystem : IFileSystem
 
 	public void DeleteFile(string path) =>
 		Files.Remove(Normalize(path));
+
+	public void RenameDirectory(string sourceDirectory, string targetDirectory)
+	{
+		string source = Normalize(sourceDirectory);
+		string target = Normalize(targetDirectory);
+		if (!Directories.Contains(source))
+			throw new DirectoryNotFoundException(source);
+
+		if (Directories.Contains(target) || Files.Any(file => file.StartsWith(target + Path.DirectorySeparatorChar, StringComparison.Ordinal)))
+			throw new IOException($"'{target}' already exists.");
+
+		string sourcePrefix = source + Path.DirectorySeparatorChar;
+		var movedDirectories = Directories
+			.Where(directory => directory == source || directory.StartsWith(sourcePrefix, StringComparison.Ordinal))
+			.Select(directory => (from: directory, to: target + directory[source.Length..]))
+			.ToList();
+		var movedFiles = Files
+			.Where(file => file.StartsWith(sourcePrefix, StringComparison.Ordinal))
+			.Select(file => (from: file, to: target + file[source.Length..]))
+			.ToList();
+
+		foreach ((string from, string to) in movedDirectories)
+		{
+			Directories.Remove(from);
+			Directories.Add(to);
+		}
+
+		foreach ((string from, string to) in movedFiles)
+		{
+			Files.Remove(from);
+			Files.Add(to);
+		}
+	}
 }

@@ -140,7 +140,7 @@ public sealed class RoslynInstance : IDisposable
 			SolutionSnapshot? holder = Volatile.Read(ref SolutionSnapshotField);
 			return holder is null
 				|| !ReferenceEquals(holder.Solution, current)
-				|| holder.Tasks.Count == 0;
+				|| holder.Tasks.Values.All(task => !SolutionSnapshot.IsReusable(task));
 		}
 	}
 
@@ -400,14 +400,6 @@ public sealed class RoslynInstance : IDisposable
 		}
 	}
 
-	/// <summary>
-	/// The snapshot-bound computation for one analyzer mode: the first request creates the task and starts
-	/// the work, later requests join the same task in flight or receive the completed result. The compute
-	/// runs with <see cref="CancellationToken.None"/> — one caller giving up must not cancel a shared
-	/// computation — and a faulted or cancelled slot is cleared so the next request starts afresh. The
-	/// entry holds the <see cref="Solution"/> it is keyed to; as a <see cref="ConditionalWeakTable"/>
-	/// value it dies with the snapshot, matching the decided retention policy.
-	/// </summary>
 	/// <summary>
 	/// One publication's diagnostics state: the solution it was built from, a reusable computation task
 	/// per project, and the Razor diagnostics captured when it was published. Replaced at every

@@ -26,6 +26,10 @@ public interface IFileSystem
 	/// <summary>Copies a directory and everything beneath it into <paramref name="targetDirectory"/>, which must not exist.</summary>
 	void CopyDirectory(string sourceDirectory, string targetDirectory);
 
+	/// <summary>Renames (moves) a directory to <paramref name="targetDirectory"/>, which must not exist. Both paths
+	/// are siblings on the same volume in every caller, so the rename is atomic.</summary>
+	void RenameDirectory(string sourceDirectory, string targetDirectory);
+
 	/// <summary>Deletes a file; a missing file is not an error.</summary>
 	void DeleteFile(string path);
 }

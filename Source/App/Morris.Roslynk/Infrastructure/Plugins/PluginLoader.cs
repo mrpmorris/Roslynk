@@ -176,6 +176,16 @@ public sealed class PluginLoader
 		{
 			instance = (IPlugin?)InvokeFactory(factoryType, Context);
 		}
+		catch (TargetInvocationException exception) when (UnsatisfiableDependency(exception.InnerException) is string missing)
+		{
+			// The factory's first use of a type from a private dependency the deployment does not carry
+			// surfaces here as the JIT's bind failure; the spec maps any unsatisfiable reference to
+			// dependency-unresolved, with the missing assembly named.
+			RecordFailure(pluginName, candidate.PluginFolderPath, PluginFailureStage.DependencyUnresolved,
+				$"The plugin's factory could not run: the deployment does not carry '{missing}'",
+				candidate.EntryAssemblyPath, factoryType, referencedAssemblies, exception.InnerException);
+			return null;
+		}
 		catch (TargetInvocationException exception)
 		{
 			// The plugin's underlying exception, not the reflection invocation wrapper.
@@ -330,6 +340,30 @@ public sealed class PluginLoader
 			readFailureStage = PluginFailureStage.FactoryTypeInvalid;
 			return null;
 		}
+	}
+
+	/// <summary>
+	/// The missing assembly a failed factory invocation names, when its cause is a reference the
+	/// deployment does not satisfy. Walks the exception chain: a JIT bind failure surfaces as a
+	/// <see cref="FileNotFoundException"/> (or <see cref="FileLoadException"/>) whose <c>FileName</c>
+	/// is the unsatisfiable assembly, possibly wrapped by initialization exceptions.
+	/// </summary>
+	private static string? UnsatisfiableDependency(Exception? cause)
+	{
+		for (Exception? current = cause; current is not null; current = current.InnerException)
+		{
+			string? fileName = current switch
+			{
+				FileNotFoundException missing => missing.FileName,
+				FileLoadException unloadable => unloadable.FileName,
+				_ => null,
+			};
+
+			if (fileName is { Length: > 0 })
+				return fileName;
+		}
+
+		return null;
 	}
 
 	private static string[] ReadReferencedAssemblies(Assembly entry)
