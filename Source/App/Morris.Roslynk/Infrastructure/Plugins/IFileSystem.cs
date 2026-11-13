@@ -16,4 +16,16 @@ public interface IFileSystem
 
 	/// <summary>The names (not full paths) of the immediate child files, in ordinal order.</summary>
 	IReadOnlyList<string> GetFileNames(string path);
+
+	/// <summary>Creates a directory (and its parents). Returns the created path.</summary>
+	string CreateDirectory(string path);
+
+	/// <summary>Deletes a directory and everything beneath it; a missing directory is not an error.</summary>
+	void DeleteDirectory(string path);
+
+	/// <summary>Copies a directory and everything beneath it into <paramref name="targetDirectory"/>, which must not exist.</summary>
+	void CopyDirectory(string sourceDirectory, string targetDirectory);
+
+	/// <summary>Deletes a file; a missing file is not an error.</summary>
+	void DeleteFile(string path);
 }

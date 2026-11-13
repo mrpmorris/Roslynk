@@ -17,10 +17,12 @@ public sealed class InstanceRegistry : IDisposable
 {
 	private readonly ConcurrentDictionary<SolutionKey, Lazy<RoslynInstance>> Instances = new();
 	private readonly LoadWaitTimeout LoadWaitTimeout;
+	private readonly ISolutionPublicationListener? SolutionEvents;
 
-	public InstanceRegistry(LoadWaitTimeout? loadWaitTimeout = null)
+	public InstanceRegistry(LoadWaitTimeout? loadWaitTimeout = null, ISolutionPublicationListener? solutionEvents = null)
 	{
 		LoadWaitTimeout = loadWaitTimeout ?? LoadWaitTimeout.Default;
+		SolutionEvents = solutionEvents;
 	}
 
 	/// <summary>The file paths of the solutions currently open, whether they are loading, ready, or faulted.</summary>
@@ -123,7 +125,12 @@ public sealed class InstanceRegistry : IDisposable
 			foreach (RoslynInstance instance in LoadedInstances())
 			{
 				if (nowUtc - instance.LastAccessedUtc >= idleFor && TryClose(instance.Key.FilePath))
+				{
+					// Idle eviction is the one unload that publishes Evicted; shutdown unloading
+					// publishes nothing (see the plugin spec's Shutdown section).
+					SolutionEvents?.OnEvicted(instance.Key);
 					evicted++;
+				}
 			}
 
 			return evicted;
@@ -138,9 +145,11 @@ public sealed class InstanceRegistry : IDisposable
 		return lazy.Value;
 	}
 
-	private static RoslynInstance CreateAndBeginLoad(SolutionKey key)
+	private RoslynInstance CreateAndBeginLoad(SolutionKey key)
 	{
 		var instance = new RoslynInstance(key);
+		if (SolutionEvents is { } solutionEvents)
+			instance.SetPublicationListener(solutionEvents);
 		instance.BeginInitialLoad(
 			loader: progress => SolutionWorkspace.LoadAsync(key.FilePath, progress),
 			onReady: AttachWatcher);

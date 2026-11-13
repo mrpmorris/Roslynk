@@ -1,16 +1,29 @@
 using Morris.Roslynk;
 using Morris.Roslynk.Infrastructure.Observability;
 using Morris.Roslynk.Infrastructure.Outlines;
+using Morris.Roslynk.Infrastructure.Plugins;
 using Morris.Roslynk.Mcp;
 using Morris.Roslynk.Mcp.Hosting;
 using Morris.Roslynk.Mcp.Observability;
+
+// `roslynk --help` lists all verbs; the plugin noun-verb subcommands deploy, remove and report.
+if (args is ["--help"] or ["-h"] or ["help"] or ["plugin", ..])
+{
+	if (args is ["--help"] or ["-h"] or ["help"])
+	{
+		Console.WriteLine(PluginCommands.Usage());
+		return 0;
+	}
+
+	return await PluginCommands.RunAsync(args);
+}
 
 // `stdio` runs the client-launched bridge instead of the daemon: it starts the daemon if needed
 // and pipes one MCP session to it over HTTP.
 if (args is ["stdio", ..])
 {
 	await StdioBridge.RunAsync();
-	return;
+	return 0;
 }
 
 // Root content at the install directory, not the working directory. The host watches its content root
@@ -36,7 +49,8 @@ builder.AddRoslynkObservability();
 
 builder.Services.AddRoslynk(
 	new ResponseBudget(settings.EffectiveMaxChars),
-	settings.EffectiveLoadWaitTimeout);
+	settings.EffectiveLoadWaitTimeout,
+	settings.EffectivePluginStartupTimeout);
 builder.Services.AddSingleton(settings);
 builder.Services.AddHostedService<IdleEvictionService>();
 
@@ -56,3 +70,4 @@ app.MapMcp();
 app.MapDaemonEndpoints();
 
 app.Run();
+return 0;

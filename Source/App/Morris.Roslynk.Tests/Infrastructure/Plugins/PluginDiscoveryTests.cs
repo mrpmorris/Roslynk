@@ -1,5 +1,5 @@
+using Microsoft.Extensions.Logging;
 using Morris.Roslynk.Infrastructure.Plugins;
-using Morris.Roslynk.Plugins.V1;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Plugins;
 
@@ -10,189 +10,171 @@ public class PluginDiscoveryTests : IDisposable
 	public PluginDiscoveryTests()
 	{
 		Root = Path.Combine(Path.GetTempPath(), "roslynk-discovery-tests-" + Guid.NewGuid().ToString("N"));
-		_ = System.IO.Directory.CreateDirectory(Root);
+		_ = Directory.CreateDirectory(Root);
 	}
 
 	public void Dispose()
 	{
 		try
 		{
-			System.IO.Directory.Delete(Root, recursive: true);
+			Directory.Delete(Root, recursive: true);
 		}
 		catch (IOException)
 		{
 		}
 	}
 
+	private PluginDiscoveryResult Discover()
+	{
+		var logger = new CapturingLogger<PluginDiscovery>();
+		PluginDiscoveryResult result = new PluginDiscovery(new DefaultFileSystem(), Root, logger).Discover();
+		Assert.Equal(result.Records.Count, logger.Records.Count(record => record.Level == LogLevel.Error));
+		return result;
+	}
+
+	private void Stage(string folderName, string? entryDllName = null)
+	{
+		string folder = Path.Combine(Root, folderName);
+		Directory.CreateDirectory(folder);
+		if (entryDllName is not null)
+			File.WriteAllText(Path.Combine(folder, entryDllName), "not a real assembly - discovery reads names only");
+	}
+
 	[Fact]
 	public void WhenThePluginsRootDoesNotExist_ThenThereAreNoCandidatesAndNoRecords()
 	{
-		PluginDiscoveryResult result = Discover("missing-root");
+		PluginDiscoveryResult result = new PluginDiscovery(new DefaultFileSystem(), Path.Combine(Root, "missing"), new CapturingLogger<PluginDiscovery>()).Discover();
 
 		Assert.Empty(result.Candidates);
 		Assert.Empty(result.Records);
 	}
 
 	[Fact]
-	public void WhenAFolderNameIsInvalid_ThenItIsReportedAndSkipped()
+	public void WhenAFolderNameIsInvalid_ThenItIsReportedAsFolderNameInvalidAndSkipped()
 	{
-		System.IO.Directory.CreateDirectory(Path.Combine(Root, "a"));
+		Stage("a");
 
 		PluginDiscoveryResult result = Discover();
 
 		Assert.Empty(result.Candidates);
-		AssertSingleRecord(result, PluginDiscoveryStage.FolderNameInvalid);
+		PluginFailureStage? stage = Assert.Single(result.Records).Stage;
+		Assert.Equal(PluginFailureStage.FolderNameInvalid, stage);
 	}
 
 	[Fact]
-	public void WhenTheEntryDllIsMissing_ThenItIsReportedAndSkipped()
+	public void WhenTheEntryDllIsMissing_ThenItIsReportedAsEntryDllMissingAndSkipped()
 	{
-		System.IO.Directory.CreateDirectory(Path.Combine(Root, "CallGraph"));
+		Stage("CallGraph");
 
 		PluginDiscoveryResult result = Discover();
 
 		Assert.Empty(result.Candidates);
-		AssertSingleRecord(result, PluginDiscoveryStage.EntryDllMissing);
+		var record = Assert.Single(result.Records);
+		Assert.Equal(PluginFailureStage.EntryDllMissing, record.Stage);
+		Assert.Contains("CallGraph", record.Reason);
 	}
 
 	[Fact]
-	public void WhenTheEntryBaseNameDoesNotMatchTheFolder_ThenItIsReportedAndSkipped()
+	public void WhenTheEntryBaseNameDoesNotMatchTheFolder_ThenItIsReportedAsNameMismatchNamingTheDll()
 	{
-		string folder = System.IO.Directory.CreateDirectory(Path.Combine(Root, "CallGraph")).FullName;
-		TestPluginCompiler.Emit(Path.Combine(folder, "Wrong.Roslynk.Plugin.dll"));
+		Stage("CallGraph", "WrongName.Roslynk.Plugin.dll");
 
 		PluginDiscoveryResult result = Discover();
 
 		Assert.Empty(result.Candidates);
-		AssertSingleRecord(result, PluginDiscoveryStage.NameMismatch);
+		var record = Assert.Single(result.Records);
+		Assert.Equal(PluginFailureStage.NameMismatch, record.Stage);
+		Assert.Contains("WrongName.Roslynk.Plugin.dll", record.Reason);
+		Assert.Contains("rename the DLL", record.Reason);
 	}
 
 	[Fact]
-	public void WhenALooseEntryAssemblySitsInTheRoot_ThenTheRecordNamesTheCorrectiveAction()
+	public void WhenAnEntryDllSitsLooseInTheRoot_ThenItIsRecordedStageLessWithItsOwnCorrectiveAction()
 	{
-		TestPluginCompiler.Emit(Path.Combine(Root, "CallGraph.Roslynk.Plugin.dll"));
+		File.WriteAllText(Path.Combine(Root, "CallGraph.Roslynk.Plugin.dll"), "not a real assembly");
 
 		PluginDiscoveryResult result = Discover();
 
 		Assert.Empty(result.Candidates);
-		PluginDiscoveryRecord record = AssertSingleRecord(result, PluginDiscoveryStage.NameMismatch);
+		var record = Assert.Single(result.Records);
+		Assert.Null(record.Stage);
 		Assert.Contains("move it into a folder named 'CallGraph'", record.Reason);
 	}
 
 	[Fact]
-	public void WhenADuplicateNormalizedNameAppears_ThenTheSecondFolderIsReported()
+	public void WhenTwoFoldersShareANormalizedName_ThenTheLaterOneIsReportedAsDuplicateNameAndTheEarlierWins()
 	{
-		string first = System.IO.Directory.CreateDirectory(Path.Combine(Root, "CallGraph")).FullName;
-		TestPluginCompiler.Emit(Path.Combine(first, "CallGraph.Roslynk.Plugin.dll"));
+		// NTFS cannot stage two case-variant siblings (the second CreateDirectory returns the
+		// first), so the collision is staged through the filesystem seam.
+		var fileSystem = new MemoryFileSystem();
+		fileSystem.StageFolder(Root, "CallGraph", "CallGraph.Roslynk.Plugin.dll");
+		fileSystem.StageFolder(Root, "callgraph", "callgraph.Roslynk.Plugin.dll");
 
-		// Windows cannot hold 'CallGraph' and 'callgraph' side by side, so the staged filesystem
-		// provides the case-sensitive layout the identity rule exists for.
-		PluginDiscoveryResult result = new PluginDiscovery(
-			new StagedDirectoryNames(Root, ["CallGraph", "callgraph"]),
-			Root,
-			ApiVersion.V1,
-			ApiVersion.V1)
-			.Discover();
+		var logger = new CapturingLogger<PluginDiscovery>();
+		PluginDiscoveryResult result = new PluginDiscovery(fileSystem, Root, logger).Discover();
+		Assert.Equal(result.Records.Count, logger.Records.Count(record => record.Level == LogLevel.Error));
 
-		PluginCandidate candidate = Assert.Single(result.Candidates);
-		Assert.Equal("CallGraph", candidate.PluginName);
-		PluginDiscoveryRecord record = Assert.Single(result.Records, candidate => candidate.Stage == PluginDiscoveryStage.DuplicateName);
-		Assert.Equal("callgraph", record.PluginName);
+		Assert.Single(result.Candidates);
+		Assert.Equal("CallGraph", result.Candidates[0].PluginName);
+		var record = Assert.Single(result.Records);
+		Assert.Equal(PluginFailureStage.DuplicateName, record.Stage);
+		Assert.Contains(Path.Combine(Root, "CallGraph"), record.Reason);
+		Assert.Contains(Path.Combine(Root, "callgraph"), record.Reason);
+		Assert.Contains("ordinal examination order", record.Reason);
 	}
 
 	[Fact]
-	public void WhenTheApiVersionIsOutsideTheSupportedRange_ThenItIsReportedAndSkipped()
+	public void WhenAStagingFolderForAValidNameExists_ThenItIsDeletedSilently()
 	{
-		string folder = System.IO.Directory.CreateDirectory(Path.Combine(Root, "CallGraph")).FullName;
-		TestPluginCompiler.Emit(
-			Path.Combine(folder, "CallGraph.Roslynk.Plugin.dll"),
-			"""
-			[assembly: Morris.Roslynk.Plugins.V1.RoslynkApiVersion((Morris.Roslynk.Plugins.V1.ApiVersion)2)]
-			""");
+		string staging = Path.Combine(Root, ".staging-CallGraph");
+		Directory.CreateDirectory(staging);
+		File.WriteAllText(Path.Combine(staging, "leftover.dll"), "staged debris");
 
 		PluginDiscoveryResult result = Discover();
 
 		Assert.Empty(result.Candidates);
-		PluginDiscoveryRecord record = AssertSingleRecord(result, PluginDiscoveryStage.UnsupportedVersion);
-		Assert.Contains("too high", record.Reason);
-		Assert.Contains("entry assembly 0.0.0.0", record.Reason);
+		Assert.Empty(result.Records);
+		Assert.False(Directory.Exists(staging));
 	}
 
 	[Fact]
-	public void WhenTheCandidateIsValid_ThenItIsListed()
+	public void WhenAStagingFolderHasAnInvalidName_ThenItIsReportedAsFolderNameInvalidAndKept()
 	{
-		string folder = System.IO.Directory.CreateDirectory(Path.Combine(Root, "CallGraph")).FullName;
-		TestPluginCompiler.Emit(Path.Combine(folder, "CallGraph.Roslynk.Plugin.dll"));
+		string staging = Path.Combine(Root, ".staging-x");
+		Directory.CreateDirectory(staging);
 
 		PluginDiscoveryResult result = Discover();
 
-		PluginCandidate candidate = Assert.Single(result.Candidates);
-		Assert.Equal("CallGraph", candidate.PluginName);
-		Assert.Equal(folder, candidate.PluginFolderPath);
-		Assert.Equal(Path.Combine(folder, "CallGraph.Roslynk.Plugin.dll"), candidate.EntryAssemblyPath);
-		Assert.Equal(ApiVersion.V1, candidate.ApiVersion);
-		Assert.DoesNotContain(result.Records, record => record.Severity == PluginDiscoverySeverity.Warning);
+		Assert.Empty(result.Candidates);
+		var record = Assert.Single(result.Records);
+		Assert.Equal(PluginFailureStage.FolderNameInvalid, record.Stage);
+		Assert.True(Directory.Exists(staging));
 	}
 
 	[Fact]
-	public void WhenAPluginReferencesANewerRoslynThanTheHost_ThenASkewWarningIsRecorded()
+	public void WhenFoldersAreExamined_ThenTheyAreExaminedInOrdinalOrderAndCandidatesKeepIt()
 	{
-		string folder = System.IO.Directory.CreateDirectory(Path.Combine(Root, "CallGraph")).FullName;
-		TestPluginCompiler.Emit(
-			Path.Combine(folder, "CallGraph.Roslynk.Plugin.dll"),
-			"""
-			[assembly: Morris.Roslynk.Plugins.V1.RoslynkApiVersion(Morris.Roslynk.Plugins.V1.ApiVersion.V1)]
+		Stage("Beta", "Beta.Roslynk.Plugin.dll");
+		Stage("alpha", "alpha.Roslynk.Plugin.dll");
 
-			internal static class UsesRoslyn
-			{
-				// Using a Roslyn type is what puts the Microsoft.CodeAnalysis reference row in the PE;
-				// an attribute-only source emits none and there would be nothing for the check to see.
-				internal static readonly Microsoft.CodeAnalysis.Location? Where;
-			}
-			""",
-			roslynReference: true);
+		PluginDiscoveryResult result = Discover();
 
-		// A host version of 1.0.0 makes every Microsoft.CodeAnalysis reference in the emitted plugin
-		// a forward skew, since the host's real Roslyn is much newer than 1.0.0.
-		PluginDiscoveryResult result = Discover(hostRoslynVersion: new Version(1, 0, 0));
-
-		Assert.Single(result.Candidates);
-		PluginDiscoveryRecord record = AssertSingleRecord(result, PluginDiscoveryStage.RoslynVersionSkew);
-		Assert.Equal(PluginDiscoverySeverity.Warning, record.Severity);
-		Assert.Equal("CallGraph", record.PluginName);
+		Assert.Empty(result.Records);
+		Assert.Equal(2, result.Candidates.Count);
+		Assert.Equal("Beta", result.Candidates[0].PluginName);
+		Assert.Equal("alpha", result.Candidates[1].PluginName);
 	}
 
-	private PluginDiscoveryResult Discover(
-		string? rootName = null,
-		Version? hostRoslynVersion = null) =>
-		new PluginDiscovery(
-			DefaultFileSystem.Instance,
-			rootName is null ? Root : Path.Combine(Root, rootName),
-			ApiVersion.V1,
-			ApiVersion.V1,
-			hostRoslynVersion: hostRoslynVersion)
-			.Discover();
-
-	private PluginDiscoveryRecord AssertSingleRecord(PluginDiscoveryResult result, PluginDiscoveryStage stage)
+	[Fact]
+	public void WhenTheEntryDllExists_ThenTheCandidateCarriesTheFolderPathAndEntryPath()
 	{
-		PluginDiscoveryRecord? record = Assert.Single(result.Records, candidate => candidate.Stage == stage);
-		return record;
+		Stage("CallGraph", "CallGraph.Roslynk.Plugin.dll");
+
+		PluginDiscoveryResult result = Discover();
+
+		var candidate = Assert.Single(result.Candidates);
+		Assert.Equal("CallGraph", candidate.PluginName);
+		Assert.Equal(Path.Combine(Root, "CallGraph"), candidate.PluginFolderPath);
+		Assert.Equal(Path.Combine(Root, "CallGraph", "CallGraph.Roslynk.Plugin.dll"), candidate.EntryAssemblyPath);
 	}
-}
-
-/// <summary>Stages directory names the real filesystem cannot provide (case-variant duplicates).</summary>
-internal sealed class StagedDirectoryNames(string root, string[] names) : IFileSystem
-{
-	private readonly IFileSystem Inner = DefaultFileSystem.Instance;
-
-	public bool DirectoryExists(string path) => Inner.DirectoryExists(path);
-
-	public IReadOnlyList<string> GetDirectoryNames(string path) =>
-		string.Equals(path, root, StringComparison.Ordinal)
-			? names.OrderBy(name => name, StringComparer.Ordinal).ToArray()
-			: Inner.GetDirectoryNames(path);
-
-	public bool FileExists(string path) => Inner.FileExists(path);
-
-	public IReadOnlyList<string> GetFileNames(string path) => Inner.GetFileNames(path);
 }

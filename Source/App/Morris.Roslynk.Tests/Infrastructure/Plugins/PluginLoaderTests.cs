@@ -1,253 +1,188 @@
-using System.Reflection;
+using Microsoft.Extensions.Logging;
 using Morris.Roslynk.Infrastructure.Plugins;
-using Morris.Roslynk.Plugins.V1;
+using Morris.Roslynk.Plugins.Abstractions;
 
 namespace Morris.Roslynk.Tests.Infrastructure.Plugins;
 
-public class PluginLoaderTests : IDisposable
+public class PluginLoaderTests : PluginLoaderHarness
 {
-	private readonly string Directory;
-
-	public PluginLoaderTests()
+	[Fact]
+	public async Task WhenTheCandidateIsValid_ThenThePluginLoadsAndRegistersItsTools()
 	{
-		Directory = Path.Combine(Path.GetTempPath(), "roslynk-loader-tests-" + Guid.NewGuid().ToString("N"));
-		_ = System.IO.Directory.CreateDirectory(Directory);
-	}
+		PluginCandidate candidate = Stage("CallGraph", TestPluginCompiler.ValidPluginSource);
 
-	public void Dispose()
-	{
-		try
-		{
-			System.IO.Directory.Delete(Directory, recursive: true);
-		}
-		catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-		{
-			// The non-collectible load context keeps the entry DLL mapped until the process exits,
-			// so a folder with a loaded plugin cannot be deleted from within the test run.
-		}
+		LoadedPlugin? loaded = await LoadAsync(candidate);
+
+		Assert.NotNull(loaded);
+		Assert.Equal("callgraph", loaded!.NormalizedName);
+		Assert.Equal("CallGraph", loaded.Name);
+		Assert.Equal("CallGraph.Roslynk.Plugin", loaded.FactoryType.Assembly.GetName().Name);
+		Assert.Empty(Sink.Added);
+		Assert.Single(Logger.Records, record => record.Level == LogLevel.Information);
 	}
 
 	[Fact]
-	public void WhenTheEntryAssemblyLoads_ThenTheResultCarriesItAndAContextThatIsNeverCollected()
-	{
-		string pluginDirectory = StagePlugin(TestPluginCompiler.ApiVersionV1Source, contractReference: true);
-
-		PluginLoadResult result = new PluginLoader().Load(Candidate(pluginDirectory));
-
-		Assert.True(result.IsSuccess, result.Reason);
-		Assert.NotNull(result.Assembly);
-		Assert.False(result.LoadContext!.IsCollectible);
-	}
-
-	[Fact]
-	public void WhenThePluginShipsItsOwnContractCopy_ThenTheHostsCopyWins()
+	public async Task WhenThePluginShipsItsOwnContractCopy_ThenTheHostsCopyWins()
 	{
 		// A stale contract DLL deployed beside the plugin must never be loaded: the host's own copy
-		// is what gives IPluginContext and IRoslynkPlugin their identity.
-		string pluginDirectory = StagePlugin(
-			"""
-			[assembly: Morris.Roslynk.Plugins.V1.RoslynkApiVersion(Morris.Roslynk.Plugins.V1.ApiVersion.V1)]
+		// is what gives IPluginContext and IPlugin their identity. Success proves the identity held —
+		// a second contract copy would make the factory's IPluginContext parameter binding fail.
+		PluginCandidate candidate = Stage("CallGraph", TestPluginCompiler.ValidPluginSource);
+		File.Copy(
+			typeof(IPluginContext).Assembly.Location,
+			Path.Combine(candidate.PluginFolderPath, "Morris.Roslynk.Plugins.Abstractions.dll"));
 
-			internal static class Probe
-			{
-				internal static readonly Morris.Roslynk.Plugins.V1.ApiVersion? Version;
-			}
-			""",
-			contractReference: true);
-		TestPluginCompiler.Emit(
-			Path.Combine(pluginDirectory, "Morris.Roslynk.Plugins.V1.dll"),
-			"""
-			namespace Morris.Roslynk.Plugins.V1
-			{
-				public class OnlyInFakeContract { }
-			}
-			""",
-			contractReference: false,
-			assemblyName: "Morris.Roslynk.Plugins.V1");
+		LoadedPlugin? loaded = await LoadAsync(candidate);
 
-		PluginLoadResult result = new PluginLoader().Load(Candidate(pluginDirectory));
-
-		Assert.True(result.IsSuccess, result.Reason);
-		FieldInfo field = result.Assembly!.GetType("Probe")!.GetField("Version", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!;
-		Type fieldType = Nullable.GetUnderlyingType(field.FieldType) ?? field.FieldType;
-		Assert.Same(typeof(ApiVersion).Assembly, fieldType.Assembly);
+		Assert.NotNull(loaded);
 	}
 
 	[Fact]
-	public void WhenADependencyIsNotInTheHost_ThenItIsLoadedFromThePluginFolder()
+	public async Task WhenThePluginReferencesCodeAnalysis_ThenItBindsTheHostsCopyRegardlessOfVersion()
 	{
-		string pluginDirectory = Path.Combine(Directory, "CallGraph");
-		_ = System.IO.Directory.CreateDirectory(pluginDirectory);
-		string someLibPath = Path.Combine(pluginDirectory, "SomeLib.dll");
-		TestPluginCompiler.Emit(
-			someLibPath,
-			"""
-			namespace SomeLib
-			{
-				public class Helper { }
-			}
-			""",
-			contractReference: false,
-			assemblyName: "SomeLib");
-		TestPluginCompiler.Emit(
-			Path.Combine(pluginDirectory, "CallGraph.Roslynk.Plugin.dll"),
-			"""
-			[assembly: Morris.Roslynk.Plugins.V1.RoslynkApiVersion(Morris.Roslynk.Plugins.V1.ApiVersion.V1)]
+		PluginCandidate candidate = Stage("CodeProbe", TestPluginCompiler.CodeAnalysisProbeSource, roslynReference: true);
 
-			internal static class Probe
-			{
-				internal static readonly SomeLib.Helper? Helper;
-			}
-			""",
-			contractReference: true,
-			extraReferencePaths: [someLibPath]);
+		await LoadAsync(candidate);
 
-		PluginLoadResult result = new PluginLoader().Load(Candidate(pluginDirectory));
-
-		Assert.True(result.IsSuccess, result.Reason);
-		FieldInfo field = result.Assembly!.GetType("Probe")!.GetField("Helper", BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)!;
-		Type fieldType = Nullable.GetUnderlyingType(field.FieldType) ?? field.FieldType;
-		Assert.True(
-			fieldType.Assembly.Location.StartsWith(pluginDirectory, StringComparison.OrdinalIgnoreCase),
-			$"SomeLib resolved to {fieldType.Assembly.Location}");
+		(string? Stage, string Message, Exception? Exception) error = SingleError();
+		// The factory failed on purpose, carrying the identity of the assembly its Solution type
+		// came from; that must be the host's own copy, not a second one loaded from the plugin folder.
+		Assert.Equal("factory-failure", error.Stage);
+		Assert.Contains(typeof(Microsoft.CodeAnalysis.Solution).Assembly.FullName!, error.Message);
 	}
 
 	[Fact]
-	public void WhenTheFactoryIsValid_ThenItIsFound()
+	public async Task WhenTheFactoryAttributeIsMissing_ThenItIsReportedAsFactoryTypeInvalid()
 	{
-		string pluginDirectory = StagePlugin(
-			TestPluginCompiler.ApiVersionV1Source + """
+		PluginCandidate candidate = Stage("CallGraph", TestPluginCompiler.MissingAttributeSource);
 
-			public static class Factories
-			{
-				[Morris.Roslynk.Plugins.V1.RoslynkPluginFactory]
-				public static Morris.Roslynk.Plugins.V1.IRoslynkPlugin? Create(Morris.Roslynk.Plugins.V1.IPluginContext context) => null;
-			}
-			""",
-			contractReference: true);
-		PluginLoader loader = new();
+		LoadedPlugin? loaded = await LoadAsync(candidate);
 
-		PluginLoadResult loadResult = loader.Load(Candidate(pluginDirectory));
-		PluginFactoryResult factoryResult = loader.FindFactory(loadResult);
-
-		Assert.True(factoryResult.IsSuccess, factoryResult.Reason);
-		Assert.Equal("Create", factoryResult.FactoryMethod!.Name);
+		Assert.Null(loaded);
+		(string? Stage, string Message, Exception? Exception) error = SingleError();
+		Assert.Equal("factory-type-invalid", error.Stage);
+		Assert.Contains("carries no [assembly: PluginFactory<...>]", error.Message);
+		Assert.Contains("entryAssembly=", error.Message);
+		Assert.Contains("(attribute not read)", error.Message);
 	}
 
 	[Fact]
-	public void WhenNoFactoryIsDeclared_ThenItIsReportedAsAFailure()
+	public async Task WhenTwoFactoryAttributesAreApplied_ThenItIsReportedAsFactoryTypeInvalid()
 	{
-		string pluginDirectory = StagePlugin(TestPluginCompiler.ApiVersionV1Source, contractReference: true);
-		PluginLoader loader = new();
+		// The real compiler refuses two applications outright (duplicate attribute); the loader's
+		// branch is the cushion for an assembly that never ran that check, staged with the stub
+		// contract whose attribute allows two applications.
+		PluginCandidate candidate = Stage("CallGraph", TestPluginCompiler.TwoAttributesSource, extraAssemblies:
+			[("Morris.Roslynk.Plugins.Abstractions", TestPluginCompiler.StubContractAllowingTwoClaimsSource)]);
 
-		PluginLoadResult loadResult = loader.Load(Candidate(pluginDirectory));
-		PluginFactoryResult factoryResult = loader.FindFactory(loadResult);
+		LoadedPlugin? loaded = await LoadAsync(candidate);
 
-		Assert.False(factoryResult.IsSuccess);
-		Assert.Equal(PluginDiscoveryStage.FactoryFailure, factoryResult.Stage);
+		Assert.Null(loaded);
+		(string? Stage, string Message, Exception? Exception) error = SingleError();
+		Assert.Equal("factory-type-invalid", error.Stage);
+		Assert.Contains("2 [assembly: PluginFactory<...>] applications", error.Message);
 	}
 
 	[Fact]
-	public void WhenTheTypeDeclaringTheFactoryCannotLoad_ThenTheMissingDependencyIsReported()
+	public async Task WhenTheFactoryTypeDoesNotImplementIPluginFactory_ThenTheGuardReportsFactoryTypeInvalid()
 	{
-		string pluginDirectory = Path.Combine(Directory, "CallGraph");
-		_ = System.IO.Directory.CreateDirectory(pluginDirectory);
-		string missingLibPath = EmitMissingLib(pluginDirectory);
-		TestPluginCompiler.Emit(
-			Path.Combine(pluginDirectory, "CallGraph.Roslynk.Plugin.dll"),
-			TestPluginCompiler.ApiVersionV1Source + """
+		// The stub attribute carries no generic constraint, so a claim the compiler would reject still
+		// builds. At load time the claim binds to the host's real contract, whose constraint the factory
+		// type violates: reading the attribute itself fails with a TypeLoadException naming the violated
+		// constraint, and the loader reports it as factory-type-invalid — the same stage the assignability
+		// guard would produce for an assembly whose claim could be read.
+		PluginCandidate candidate = Stage("CallGraph", TestPluginCompiler.ForeignFactoryClaimSource, extraAssemblies:
+			[("Morris.Roslynk.Plugins.Abstractions", TestPluginCompiler.StubContractSource)]);
 
-			public static class Factories
-			{
-				[Morris.Roslynk.Plugins.V1.RoslynkPluginFactory]
-				// The extra parameter's type lives in an assembly that is deployed nowhere, so this
-				// type cannot load and the factory it declares is unreachable.
-				public static Morris.Roslynk.Plugins.V1.IRoslynkPlugin? Create(Morris.Roslynk.Plugins.V1.IPluginContext context, MissingLib.Missing missing) => null;
-			}
-			""",
-			contractReference: true,
-			extraReferencePaths: [missingLibPath]);
-		File.Delete(missingLibPath);
-		PluginLoader loader = new();
+		LoadedPlugin? loaded = await LoadAsync(candidate);
 
-		PluginLoadResult loadResult = loader.Load(Candidate(pluginDirectory));
-		PluginFactoryResult factoryResult = loader.FindFactory(loadResult);
-
-		Assert.False(factoryResult.IsSuccess);
-		Assert.Equal(PluginDiscoveryStage.DependencyUnresolved, factoryResult.Stage);
+		Assert.Null(loaded);
+		(string? Stage, string Message, Exception? Exception) error = SingleError();
+		Assert.Equal("factory-type-invalid", error.Stage);
+		Assert.Contains("violates the constraint", error.Message, StringComparison.Ordinal);
 	}
 
 	[Fact]
-	public void WhenATypeOtherThanTheFactoryCannotLoad_ThenTheFactoryIsStillFound()
+	public async Task WhenTheFactoryIsAnExplicitInterfaceImplementation_ThenTheShimDispatchesIt()
 	{
-		string pluginDirectory = Path.Combine(Directory, "CallGraph");
-		_ = System.IO.Directory.CreateDirectory(pluginDirectory);
-		string missingLibPath = EmitMissingLib(pluginDirectory);
-		TestPluginCompiler.Emit(
-			Path.Combine(pluginDirectory, "CallGraph.Roslynk.Plugin.dll"),
-			TestPluginCompiler.ApiVersionV1Source + """
+		// Explicit interface implementations are metadata-named IPluginFactory.Create, invisible to a
+		// name-based GetMethod; the generic shim binds them anyway.
+		PluginCandidate candidate = Stage("CallGraph", TestPluginCompiler.ExplicitImplementationSource);
 
-			public static class Factories
-			{
-				[Morris.Roslynk.Plugins.V1.RoslynkPluginFactory]
-				public static Morris.Roslynk.Plugins.V1.IRoslynkPlugin? Create(Morris.Roslynk.Plugins.V1.IPluginContext context) => null;
-			}
+		LoadedPlugin? loaded = await LoadAsync(candidate);
 
-			internal static class Broken
-			{
-				internal static readonly MissingLib.Missing? Missing;
-			}
-			""",
-			contractReference: true,
-			extraReferencePaths: [missingLibPath]);
-		File.Delete(missingLibPath);
-		PluginLoader loader = new();
-
-		PluginLoadResult loadResult = loader.Load(Candidate(pluginDirectory));
-		PluginFactoryResult factoryResult = loader.FindFactory(loadResult);
-
-		Assert.True(factoryResult.IsSuccess, factoryResult.Reason);
+		Assert.NotNull(loaded);
 	}
 
 	[Fact]
-	public void WhenTheEntryIsNotAnAssembly_ThenTheLoadReportsItAsMalformed()
+	public async Task WhenTheFactoryClassIsInternal_ThenTheShimDispatchesIt()
 	{
-		string pluginDirectory = Path.Combine(Directory, "Broken");
-		_ = System.IO.Directory.CreateDirectory(pluginDirectory);
-		File.WriteAllText(Path.Combine(pluginDirectory, "Broken.Roslynk.Plugin.dll"), "this is not a portable executable");
+		PluginCandidate candidate = Stage("CallGraph", TestPluginCompiler.InternalFactorySource);
 
-		PluginLoadResult result = new PluginLoader().Load(Candidate(pluginDirectory));
+		LoadedPlugin? loaded = await LoadAsync(candidate);
 
-		Assert.False(result.IsSuccess);
-		Assert.Equal(PluginDiscoveryStage.Malformed, result.Stage);
+		Assert.NotNull(loaded);
 	}
 
-	private PluginCandidate Candidate(string pluginDirectory)
+	[Fact]
+	public async Task WhenTheFactoryReturnsNull_ThenItIsThePluginSOwnInitializationFailureWithNoStage()
 	{
-		string folderName = System.IO.Path.GetFileName(pluginDirectory);
-		return new PluginCandidate(folderName, pluginDirectory, Path.Combine(pluginDirectory, $"{folderName}.Roslynk.Plugin.dll"), ApiVersion.V1);
+		PluginCandidate candidate = Stage("CallGraph", TestPluginCompiler.NullReturnSource);
+
+		LoadedPlugin? loaded = await LoadAsync(candidate);
+
+		Assert.Null(loaded);
+		(string? Stage, string Message, Exception? Exception) error = SingleError();
+		Assert.Null(error.Stage);
+		Assert.Contains("returned null", error.Message);
+		Assert.Contains("next daemon start invokes the factory again", error.Message);
 	}
 
-	private string EmitMissingLib(string pluginDirectory)
+	[Fact]
+	public async Task WhenTheFactoryThrows_ThenTheUnderlyingExceptionIsReportedNotTheReflectionWrapper()
 	{
-		string path = Path.Combine(pluginDirectory, "MissingLib.dll");
-		TestPluginCompiler.Emit(
-			path,
-			"""
-			namespace MissingLib
-			{
-				public class Missing { }
-			}
-			""",
-			contractReference: false,
-			assemblyName: "MissingLib");
-		return path;
+		PluginCandidate candidate = Stage("CallGraph", TestPluginCompiler.ThrowingFactorySource);
+
+		LoadedPlugin? loaded = await LoadAsync(candidate);
+
+		Assert.Null(loaded);
+		(string? Stage, string Message, Exception? Exception) error = SingleError();
+		Assert.Equal("factory-failure", error.Stage);
+		var inner = Assert.IsType<InvalidOperationException>(error.Exception);
+		Assert.Equal("the plugin's own initialization failed", inner.Message);
 	}
 
-	private string StagePlugin(string source, bool contractReference)
+	[Fact]
+	public async Task WhenAPrivateDependencyIsMissing_ThenTheLoadFailsAsDependencyUnresolvedNamingIt()
 	{
-		string pluginDirectory = Path.Combine(Directory, "CallGraph");
-		TestPluginCompiler.Emit(Path.Combine(pluginDirectory, "CallGraph.Roslynk.Plugin.dll"), source, contractReference: contractReference);
-		return pluginDirectory;
+		// SomeLibrary is referenced at build time but never deployed beside the plugin.
+		PluginCandidate candidate = Stage("CallGraph", TestPluginCompiler.MissingDependencySource, extraAssemblies:
+			[("SomeLibrary", TestPluginCompiler.MissingDependencyLibrarySource)]);
+
+		LoadedPlugin? loaded = await LoadAsync(candidate);
+
+		Assert.Null(loaded);
+		(string? Stage, string Message, Exception? Exception) error = SingleError();
+		Assert.Equal("dependency-unresolved", error.Stage);
+		Assert.Contains("SomeLibrary", error.Message);
+	}
+
+	[Fact]
+	public async Task WhenTheStartupBudgetIsExhausted_ThenThePluginIsRecordedAsStartupTimeoutAndNothingRegisters()
+	{
+		// The budget is a stopwatch, not a kill switch: the sleeping factory runs to completion
+		// (about 400ms against a 200ms budget), then the next checkpoint skips every remaining stage
+		// and rolls back whatever was registered.
+		StartupBudget = TimeSpan.FromMilliseconds(200);
+		PluginCandidate candidate = Stage("Slow", TestPluginCompiler.SlowFactorySource);
+
+		LoadedPlugin? loaded = await LoadAsync(candidate);
+
+		Assert.Null(loaded);
+		(string? Stage, string Message, Exception? Exception) error = SingleError();
+		Assert.Equal("startup-timeout", error.Stage);
+		Assert.Contains("factory invocation", error.Message);
+		Assert.Contains("retried on the next daemon start", error.Message);
+		Assert.Empty(Sink.Added);
 	}
 }

@@ -33,6 +33,9 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Morris.Roslynk\Morris.Roslynk.csproj" />
+		<!-- The analyzer under test; a plain library reference, not an analyzer one, so the test
+		     compiles with it explicitly instead of it applying to every test compilation. -->
+		<ProjectReference Include="..\..\Plugins\Morris.Roslynk.Plugins.Abstractions.Analyzer\Morris.Roslynk.Plugins.Abstractions.Analyzer.csproj" />
 	</ItemGroup>
 
 </Project>

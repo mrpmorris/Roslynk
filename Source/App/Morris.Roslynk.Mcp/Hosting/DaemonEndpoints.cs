@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+
 namespace Morris.Roslynk.Mcp.Hosting;
 
 /// <summary>
@@ -14,6 +16,7 @@ public static class DaemonEndpoints
 	public const string VersionPath = "/version";
 	public const string ShutdownPath = "/shutdown";
 	public const string RestartPath = "/restart";
+	public const string PluginsPath = "/plugins";
 
 	/// <summary>
 	/// The query parameter naming the version of the bridge requesting shutdown. The daemon refuses the
@@ -40,6 +43,15 @@ public static class DaemonEndpoints
 	internal static WebApplication MapDaemonEndpoints(this WebApplication app, string version)
 	{
 		app.MapGet(VersionPath, () => Results.Text(version, "text/plain"));
+
+		// The loaded plugins and their exposed tool names, for `roslynk plugin list`. Failures are
+		// not retained server-side — their OpenTelemetry records are the triage surface — so there
+		// is no Failed section, and no contract-version column: no version metadata exists.
+		// The registry is resolved once: a host that composes no plugin support (some test hosts)
+		// reports no plugins rather than failing the endpoint.
+		Morris.Roslynk.Infrastructure.Plugins.LoadedPluginRegistry? loadedPlugins = app.Services.GetService<Morris.Roslynk.Infrastructure.Plugins.LoadedPluginRegistry>();
+		app.MapGet(PluginsPath, () => Results.Json(
+			(loadedPlugins?.All() ?? []).Select(plugin => new PluginReport(plugin.Name, plugin.ToolNames))));
 
 		app.MapPost(ShutdownPath, (HttpRequest request, IHostApplicationLifetime lifetime, ILoggerFactory loggerFactory) =>
 		{
@@ -90,4 +102,6 @@ public static class DaemonEndpoints
 
 		return app;
 	}
+
+	private sealed record PluginReport(string Name, IReadOnlyList<string> Tools);
 }

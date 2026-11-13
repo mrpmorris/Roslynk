@@ -22,9 +22,6 @@
     <!-- Hosting -->
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
-    <!-- The plugin probe's reflection-only load. Unlike System.Reflection.Metadata, this assembly is
-         NOT part of the .NET 10 shared framework, so the package reference is a runtime dependency. -->
-    <PackageVersion Include="System.Reflection.MetadataLoadContext" Version="10.0.8" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.12" />
   </ItemGroup>
   <ItemGroup>

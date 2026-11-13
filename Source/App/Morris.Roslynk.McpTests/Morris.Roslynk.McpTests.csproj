@@ -24,6 +24,17 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Morris.Roslynk.Mcp\Morris.Roslynk.Mcp.csproj" />
+		<!-- The sample plugin's built output deploys into a staged plugins root for the plugin tests. -->
+		<ProjectReference Include="..\..\TestFixtures\SamplePlugin\SamplePlugin.Roslynk.Plugin.csproj" />
 	</ItemGroup>
+
+	<!-- A referenced project's .deps.json is not copied into the referencing output, but the plugin
+	     tests deploy the sample plugin's built folder exactly like `plugin add` would, and that folder
+	     must carry the deps.json AssemblyDependencyResolver reads. -->
+	<Target Name="CopySamplePluginDepsJson" AfterTargets="Build">
+		<Copy SourceFiles="..\..\TestFixtures\SamplePlugin\bin\$(Configuration)\net10.0\SamplePlugin.Roslynk.Plugin.deps.json"
+			DestinationFolder="$(OutDir)"
+			SkipUnchangedFiles="true" />
+	</Target>
 
 </Project>

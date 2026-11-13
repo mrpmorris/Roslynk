@@ -1,176 +1,443 @@
+using System.Diagnostics;
 using System.Reflection;
-using Morris.Roslynk.Plugins.V1;
+using ModelContextProtocol.Server;
+using Morris.Roslynk.Infrastructure.Observability;
+using Morris.Roslynk.Plugins.Abstractions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Morris.Roslynk.Infrastructure.Lifecycle;
 
 namespace Morris.Roslynk.Infrastructure.Plugins;
 
 /// <summary>
-/// Loads a discovered plugin candidate for execution and finds its factory method.
+/// Loads a discovered plugin candidate for execution: load, factory-attribute scan, the two guards
+/// for assemblies that never ran a compiler check, the generic-shim dispatch, the instance check,
+/// tool registration and event subscription. A failure is recorded as an error-severity OpenTelemetry
+/// record and reported, never thrown; the folder stays in place and the next start re-examines it.
+/// No failed-plugin state is retained anywhere — the on-disk folder is the only persistent state.
 ///
-/// The supported API-version range is defined here, at the top of the loader class; discovery
-/// receives it from <see cref="MinSupportedApiVersion"/> / <see cref="MaxSupportedApiVersion"/> so
-/// there is one place to widen when a new major ships.
+/// The per-plugin startup budget (<c>Roslynk:PluginStartupTimeout</c>, default 30 seconds) begins at
+/// the ALC load and is a stopwatch, not a kill switch: it is checked between stages, so an in-flight
+/// assembly load or factory call can overshoot it. When it expires between stages the remaining
+/// stages are skipped, the plugin is recorded as <c>startup-timeout</c>, and any tools registered
+/// before expiry are rolled back.
 /// </summary>
 public sealed class PluginLoader
 {
-	public const ApiVersion MinSupportedApiVersion = ApiVersion.V1;
-	public const ApiVersion MaxSupportedApiVersion = ApiVersion.V1;
+	/// <summary>The open generic the factory claim is read from.</summary>
+	private static readonly Type FactoryAttributeOpenGeneric = typeof(PluginFactoryAttribute<>);
 
+	private readonly IFileSystem FileSystem;
+	private readonly IAssemblyLoader AssemblyLoader;
+	private readonly PluginToolFactory ToolFactory;
+	private readonly IPluginToolSink ToolSink;
+	private readonly PluginContext Context;
+	private readonly SolutionEventPublisher SolutionEvents;
+	private readonly LoadedPluginRegistry Loaded;
+	private readonly InstanceRegistry InstanceRegistry;
+	private readonly TimeSpan StartupBudget;
 	private readonly string? RuntimeDirectory;
+	private readonly ILogger<PluginLoader> Logger;
 
-	public PluginLoader(string? runtimeDirectory = null)
+	internal PluginLoader(
+		IFileSystem fileSystem,
+		IAssemblyLoader assemblyLoader,
+		PluginToolFactory toolFactory,
+		IPluginToolSink toolSink,
+		PluginContext context,
+		SolutionEventPublisher solutionEvents,
+		LoadedPluginRegistry loaded,
+		InstanceRegistry instanceRegistry,
+		TimeSpan? startupBudget = null,
+		string? runtimeDirectory = null,
+		ILogger<PluginLoader>? logger = null)
 	{
+		FileSystem = fileSystem;
+		AssemblyLoader = assemblyLoader;
+		ToolFactory = toolFactory;
+		ToolSink = toolSink;
+		Context = context;
+		SolutionEvents = solutionEvents;
+		Loaded = loaded;
+		InstanceRegistry = instanceRegistry;
+		StartupBudget = startupBudget ?? TimeSpan.FromSeconds(30);
 		RuntimeDirectory = runtimeDirectory ?? AppContext.BaseDirectory;
+		Logger = logger ?? NullLogger<PluginLoader>.Instance;
 	}
 
 	/// <summary>
-	/// Loads the candidate's entry assembly. A failure is reported, never thrown; the folder stays
-	/// in place and the next start re-examines it.
+	/// Runs the load pipeline for one candidate. Returns the loaded plugin, or null when the
+	/// candidate failed — every failure carries its own error-severity record.
 	/// </summary>
-	public PluginLoadResult Load(PluginCandidate candidate)
+	public async Task<LoadedPlugin?> LoadAsync(PluginCandidate candidate, CancellationToken cancellationToken)
 	{
-		var loadContext = new PluginLoadContext(candidate.PluginName, candidate.EntryAssemblyPath, RuntimeDirectory);
+		string pluginName = candidate.PluginName;
+		Stopwatch stopwatch = Stopwatch.StartNew();
+		bool success = false;
+		cancellationToken.ThrowIfCancellationRequested();
+
 		try
 		{
-			Assembly assembly = loadContext.LoadFromAssemblyPath(candidate.EntryAssemblyPath);
-			return PluginLoadResult.Succeeded(candidate.PluginName, assembly, loadContext);
+			LoadedPlugin? loaded = await LoadWithinBudgetAsync(candidate, pluginName, stopwatch, cancellationToken);
+			success = loaded is not null;
+			return loaded;
+		}
+		catch (StartupBudgetExceededException expiry)
+		{
+			RecordFailure(
+				pluginName,
+				candidate.PluginFolderPath,
+				stage: PluginFailureStage.StartupTimeout,
+				reason: $"Startup budget expired after the {expiry.Phase} stage: {expiry.Elapsed.TotalSeconds:0.#}s elapsed against a {StartupBudget.TotalSeconds:0.#}s budget; the remaining stages were skipped and the folder will be retried on the next daemon start",
+				entryAssemblyPath: candidate.EntryAssemblyPath,
+				factoryType: expiry.FactoryType,
+				referencedAssemblies: expiry.ReferencedAssemblies,
+				exception: null);
+			return null;
+		}
+		catch (OperationCanceledException)
+		{
+			throw;
+		}
+		catch (Exception exception)
+		{
+			// Any failure not covered by a named stage is recorded with its reason and no stage.
+			RecordFailure(
+				pluginName,
+				candidate.PluginFolderPath,
+				stage: null,
+				reason: $"The plugin could not be loaded: {exception.Message}",
+				entryAssemblyPath: candidate.EntryAssemblyPath,
+				factoryType: null,
+				referencedAssemblies: null,
+				exception: exception);
+			return null;
+		}
+		finally
+		{
+			stopwatch.Stop();
+			RoslynkMeter.RecordPluginStartupDuration(PluginNameRules.Normalize(pluginName), stopwatch.Elapsed, success);
+		}
+	}
+
+	private async Task<LoadedPlugin?> LoadWithinBudgetAsync(
+		PluginCandidate candidate,
+		string pluginName,
+		Stopwatch stopwatch,
+		CancellationToken cancellationToken)
+	{
+		// Stage 1: load the entry assembly into its own non-collectible ALC.
+		Assembly entry;
+		try
+		{
+			entry = AssemblyLoader.Load(pluginName, candidate.EntryAssemblyPath, RuntimeDirectory);
 		}
 		catch (BadImageFormatException exception)
 		{
-			return PluginLoadResult.Failed(candidate.PluginName, PluginDiscoveryStage.Malformed, $"The entry assembly could not be loaded: {exception.Message}");
+			RecordFailure(pluginName, candidate.PluginFolderPath, null,
+				$"The entry assembly could not be loaded: {exception.Message}", candidate.EntryAssemblyPath, null, null, exception);
+			return null;
 		}
 		catch (Exception exception) when (exception is FileNotFoundException or IOException or UnauthorizedAccessException)
 		{
-			return PluginLoadResult.Failed(candidate.PluginName, PluginDiscoveryStage.UnreadableOrLocked, $"The entry assembly could not be loaded: {exception.Message}");
+			RecordFailure(pluginName, candidate.PluginFolderPath, PluginFailureStage.UnreadableOrLocked,
+				$"The entry assembly could not be read: {exception.Message}", candidate.EntryAssemblyPath, null, null, exception);
+			return null;
 		}
+
+		string[] referencedAssemblies = ReadReferencedAssemblies(entry);
+		EnsureWithinBudget(stopwatch, "assembly load", pluginName, candidate.EntryAssemblyPath);
+
+		// Stage 2: scan the custom attributes for the open generic PluginFactoryAttribute<> and take T.
+		Type? factoryType = ReadFactoryType(entry, out string? factoryTypeError, out PluginFailureStage? readFailureStage);
+		EnsureWithinBudget(stopwatch, "factory attribute scan", pluginName, candidate.EntryAssemblyPath);
+		if (factoryType is null)
+		{
+			RecordFailure(pluginName, candidate.PluginFolderPath, readFailureStage,
+				factoryTypeError!, candidate.EntryAssemblyPath, null, referencedAssemblies, null);
+			return null;
+		}
+
+		// Stage 3: the guard for assemblies that never ran a compiler check — the attribute names a
+		// factory type that must implement IPluginFactory.
+		if (!typeof(IPluginFactory).IsAssignableFrom(factoryType))
+		{
+			RecordFailure(pluginName, candidate.PluginFolderPath, PluginFailureStage.FactoryTypeInvalid,
+				$"The [assembly: PluginFactory] type argument '{factoryType.AssemblyQualifiedName}' does not implement {nameof(IPluginFactory)}",
+				candidate.EntryAssemblyPath, factoryType, referencedAssemblies, null);
+			return null;
+		}
+
+		EnsureWithinBudget(stopwatch, "factory type guard", pluginName, candidate.EntryAssemblyPath);
+
+		// Stage 4: invoke the factory through the generic dispatch shim — never a name-based lookup.
+		IPlugin? instance;
+		try
+		{
+			instance = (IPlugin?)InvokeFactory(factoryType, Context);
+		}
+		catch (TargetInvocationException exception)
+		{
+			// The plugin's underlying exception, not the reflection invocation wrapper.
+			Exception cause = exception.InnerException ?? exception;
+			RecordFailure(pluginName, candidate.PluginFolderPath, PluginFailureStage.FactoryFailure,
+				$"The factory '{factoryType.AssemblyQualifiedName}' threw: {cause.Message}",
+				candidate.EntryAssemblyPath, factoryType, referencedAssemblies, cause);
+			return null;
+		}
+		catch (Exception exception)
+		{
+			RecordFailure(pluginName, candidate.PluginFolderPath, PluginFailureStage.FactoryFailure,
+				$"The factory '{factoryType.AssemblyQualifiedName}' could not be invoked: {exception.Message}",
+				candidate.EntryAssemblyPath, factoryType, referencedAssemblies, exception);
+			return null;
+		}
+
+		EnsureWithinBudget(stopwatch, "factory invocation", pluginName, candidate.EntryAssemblyPath);
+
+		// A null return is the plugin's own initialization failure, not a Roslynk failure.
+		if (instance is null)
+		{
+			RecordFailure(pluginName, candidate.PluginFolderPath, null,
+				$"The factory '{factoryType.AssemblyQualifiedName}' returned null; the plugin's initialization failed, so the plugin does not run and the next daemon start invokes the factory again",
+				candidate.EntryAssemblyPath, factoryType, referencedAssemblies, null);
+			return null;
+		}
+
+		// Stage 5: the returned instance must be IPlugin. Otherwise the instance is dropped and no
+		// references are kept — the loaded assemblies stay pinned until process exit, but the plugin
+		// does not run.
+		if (instance is not IPlugin plugin)
+		{
+			RecordFailure(pluginName, candidate.PluginFolderPath, null,
+				$"The factory '{factoryType.AssemblyQualifiedName}' returned a '{instance.GetType()}', which does not implement {nameof(IPlugin)}; the instance is dropped and no references are kept",
+				candidate.EntryAssemblyPath, factoryType, referencedAssemblies, null);
+			return null;
+		}
+
+		// Stage 6: discover and register the plugin's tools.
+		IReadOnlyList<McpServerTool> tools;
+		try
+		{
+			tools = ToolFactory.CreateTools(pluginName, plugin);
+		}
+		catch (Exception exception)
+		{
+			RecordFailure(pluginName, candidate.PluginFolderPath, null,
+				$"The plugin's tools could not be registered: {exception.Message}; partial registration was cleaned up and the plugin is discarded",
+				candidate.EntryAssemblyPath, factoryType, referencedAssemblies, exception);
+			return null;
+		}
+
+		foreach (McpServerTool tool in tools)
+			ToolSink.Add(tool);
+
+		EnsureWithinBudget(stopwatch, "tool registration", pluginName, candidate.EntryAssemblyPath, factoryType, referencedAssemblies, tools);
+
+		// Stage 7: subscribe the plugin to solution events.
+		try
+		{
+			await SolutionEvents.SubscribeAsync(plugin, PluginNameRules.Normalize(pluginName), RegistryStateCapture, cancellationToken);
+		}
+		catch (Exception exception)
+		{
+			foreach (McpServerTool tool in tools)
+				ToolSink.Remove(tool);
+
+			RecordFailure(pluginName, candidate.PluginFolderPath, PluginFailureStage.SubscriptionFailure,
+				$"The plugin could not be subscribed to solution events: {exception.Message}; partial registration was cleaned up and the plugin is discarded",
+				candidate.EntryAssemblyPath, factoryType, referencedAssemblies, exception);
+			return null;
+		}
+
+		EnsureWithinBudget(stopwatch, "subscription", pluginName, candidate.EntryAssemblyPath, factoryType, referencedAssemblies, tools);
+
+		var loadedPlugin = new LoadedPlugin(
+			PluginNameRules.Normalize(pluginName),
+			pluginName,
+			candidate.EntryAssemblyPath,
+			factoryType,
+			tools.Select(tool => tool.ProtocolTool.Name).ToArray());
+		Loaded.Add(loadedPlugin);
+
+		Logger.LogInformation(
+			"Roslynk plugin loaded: plugin={Plugin} folder={Folder} tools={ToolCount} elapsed={ElapsedSeconds:0.##}s",
+			pluginName, candidate.PluginFolderPath, tools.Count, stopwatch.Elapsed.TotalSeconds);
+		return loadedPlugin;
 	}
 
 	/// <summary>
-	/// Finds the single [RoslynkPluginFactory] method in the loaded assembly. Types that fail to
-	/// load are tolerated — except the one declaring the factory, whose absence is a hard failure.
+	/// The initial state every new subscription replays, captured through the registry — the same
+	/// path publications reach the pump through.
 	/// </summary>
-	public PluginFactoryResult FindFactory(PluginLoadResult loadResult)
+	private async Task<IReadOnlyList<ISolutionEvent>> RegistryStateCapture(CancellationToken cancellationToken)
 	{
-		if (!loadResult.IsSuccess)
-			return PluginFactoryResult.Failed(loadResult.PluginName, loadResult.Stage!.Value, loadResult.Reason!);
-
-		Assembly assembly = loadResult.Assembly!;
-		MethodInfo? factoryMethod = null;
-
-		IEnumerable<Type> loadableTypes = EnumerateLoadableTypes(assembly, out IReadOnlyList<string> unloadedTypeNames);
-		Type? factoryReturnType = null;
-		ParameterInfo[]? factoryParameters = null;
-		int unreachableFactories = 0;
-
-		foreach (Type type in loadableTypes)
+		var events = new List<ISolutionEvent>();
+		foreach (RoslynInstance instance in InstanceRegistry.LoadedInstances())
 		{
-			MethodInfo[] methods;
-			try
-			{
-				methods = type.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly);
-			}
-			catch (Exception exception) when (exception is FileNotFoundException or FileLoadException or BadImageFormatException)
-			{
-				// A type whose members reference a missing assembly cannot offer an invokable factory.
-				continue;
-			}
-
-			foreach (MethodInfo method in methods)
-			{
-				if (!method.IsDefined(typeof(RoslynkPluginFactoryAttribute), inherit: false))
-					continue;
-
-				if (factoryMethod is not null)
-					return PluginFactoryResult.Failed(loadResult.PluginName, PluginDiscoveryStage.FactoryFailure, $"{loadResult.PluginName} declares more than one [RoslynkPluginFactory] method");
-
-				if (!TryGetFactoryShape(method, out Type? returnType, out ParameterInfo[]? parameters))
-				{
-					// The attribute names a factory the host could never invoke; its signature
-					// references an assembly that is not deployed.
-					unreachableFactories++;
-					continue;
-				}
-
-				factoryMethod = method;
-				factoryReturnType = returnType;
-				factoryParameters = parameters;
-			}
+			SolutionModel model = await instance.ReadModelAsync(cancellationToken);
+			if (SolutionEventPublisher.EventFor(model, instance.Key) is { } solutionEvent)
+				events.Add(solutionEvent);
 		}
 
-		if (factoryMethod is null)
-		{
-			return unloadedTypeNames.Count > 0 || unreachableFactories > 0
-				// A failed type load is only fatal when it could be hiding the factory.
-				? PluginFactoryResult.Failed(loadResult.PluginName, PluginDiscoveryStage.DependencyUnresolved, $"{loadResult.PluginName} declares no [RoslynkPluginFactory] method the loader could reach; some types failed to load ({string.Join("; ", unloadedTypeNames)})")
-				: PluginFactoryResult.Failed(loadResult.PluginName, PluginDiscoveryStage.FactoryFailure, $"{loadResult.PluginName} declares no [RoslynkPluginFactory] method");
-		}
-
-		if (!IsPubliclyAccessible(factoryMethod.DeclaringType))
-			return PluginFactoryResult.Failed(loadResult.PluginName, PluginDiscoveryStage.FactoryFailure, $"The [RoslynkPluginFactory] method '{factoryMethod.Name}' must be declared in a public class, with public containing types");
-
-		if (factoryReturnType != typeof(IRoslynkPlugin))
-			return PluginFactoryResult.Failed(loadResult.PluginName, PluginDiscoveryStage.FactoryFailure, $"The [RoslynkPluginFactory] method '{factoryMethod.Name}' must return nullable {nameof(IRoslynkPlugin)}");
-
-		if (factoryParameters!.Length != 1 || factoryParameters[0].ParameterType != typeof(IPluginContext))
-			return PluginFactoryResult.Failed(loadResult.PluginName, PluginDiscoveryStage.FactoryFailure, $"The [RoslynkPluginFactory] method '{factoryMethod.Name}' must accept exactly one {nameof(IPluginContext)} parameter");
-
-		return PluginFactoryResult.Succeeded(loadResult.PluginName, factoryMethod);
+		return events;
 	}
 
-	/// <summary>True when the type and every type declaring it are public — the analyzer's RK0003 rule, re-checked at load time because a manually deployed assembly never ran the analyzer.</summary>
-	private static bool IsPubliclyAccessible(Type? type)
+	private static object? InvokeFactory(Type factoryType, IPluginContext context)
 	{
-		for (Type? current = type; current is not null; current = current.DeclaringType)
-		{
-			if (!current.IsPublic && !current.IsNestedPublic)
-				return false;
-		}
-
-		return true;
+		MethodInfo dispatch = typeof(PluginDispatcher)
+			.GetMethod(nameof(PluginDispatcher.Dispatch), BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)!
+			.MakeGenericMethod(factoryType);
+		return dispatch.Invoke(null, [context]);
 	}
 
-	/// <summary>
-	/// Reads a method's return type and parameters. A method whose signature references an assembly
-	/// that is not deployed cannot materialize its signature, and cannot be invoked by the host
-	/// either, so it does not qualify as the factory.
-	/// </summary>
-	private static bool TryGetFactoryShape(MethodInfo method, out Type? returnType, out ParameterInfo[]? parameters)
+	private static Type? ReadFactoryType(Assembly entry, out string? error, out PluginFailureStage? readFailureStage)
 	{
 		try
 		{
-			returnType = method.ReturnType;
-			parameters = method.GetParameters();
-			return true;
+			IList<CustomAttributeData> attributes = entry.GetCustomAttributesData();
+			List<CustomAttributeData> claims = attributes
+				.Where(attribute => attribute.AttributeType is { } type
+					&& type.IsGenericType
+					&& type.GetGenericTypeDefinition() == FactoryAttributeOpenGeneric)
+				.ToList();
+
+			readFailureStage = PluginFailureStage.FactoryTypeInvalid;
+			switch (claims.Count)
+			{
+				case 0:
+					error = "The entry assembly carries no [assembly: PluginFactory<...>] attribute; add the factory claim naming a type that implements IPluginFactory";
+					return null;
+				case > 1:
+					error = $"The entry assembly carries {claims.Count} [assembly: PluginFactory<...>] applications ({string.Join(", ", claims.Select(claim => claim.AttributeType.ToString()))}); exactly one factory claim is allowed";
+					return null;
+				default:
+					error = null;
+					return claims[0].AttributeType.GetGenericArguments()[0];
+			}
 		}
-		catch (Exception exception) when (exception is FileNotFoundException or FileLoadException or BadImageFormatException)
+		catch (FileNotFoundException exception)
 		{
-			returnType = null;
-			parameters = null;
-			return false;
+			// Resolving the claim needs the plugin's types; one sits in a dependency that the
+			// deployment does not carry, and the exception's message names it.
+			error = $"The entry assembly's factory attribute could not be read: {exception.Message}";
+			readFailureStage = PluginFailureStage.DependencyUnresolved;
+			return null;
+		}
+		catch (Exception exception)
+		{
+			error = $"The entry assembly's factory attribute could not be read: {exception.Message}";
+			readFailureStage = PluginFailureStage.FactoryTypeInvalid;
+			return null;
 		}
 	}
 
-	private static IEnumerable<Type> EnumerateLoadableTypes(Assembly assembly, out IReadOnlyList<string> unloadedTypeNames)
+	private static string[] ReadReferencedAssemblies(Assembly entry)
 	{
-		var loadable = new List<Type>();
-		var unloaded = new List<string>();
 		try
 		{
-			loadable.AddRange(assembly.GetTypes());
+			return entry.GetReferencedAssemblies().Select(name => name.FullName).ToArray();
 		}
-		catch (ReflectionTypeLoadException exception)
+		catch (Exception exception) when (exception is FileNotFoundException or BadImageFormatException)
 		{
-			foreach (Type? type in exception.Types)
-			{
-				if (type is not null)
-					loadable.Add(type);
-			}
-
-			unloaded.AddRange(exception
-				.LoaderExceptions
-				.Select(loaderException => loaderException?.Message ?? "unknown load failure"));
+			return [];
 		}
-
-		unloadedTypeNames = unloaded;
-		return loadable;
 	}
+
+	private void EnsureWithinBudget(
+		Stopwatch stopwatch,
+		string phase,
+		string pluginName,
+		string entryAssemblyPath,
+		Type? factoryType = null,
+		string[]? referencedAssemblies = null,
+		IReadOnlyList<McpServerTool>? registeredTools = null)
+	{
+		if (stopwatch.Elapsed <= StartupBudget)
+			return;
+
+		if (registeredTools is { Count: > 0 })
+			foreach (McpServerTool tool in registeredTools)
+				ToolSink.Remove(tool);
+
+		throw new StartupBudgetExceededException(phase, stopwatch.Elapsed, pluginName, entryAssemblyPath, factoryType, referencedAssemblies);
+	}
+
+	private void RecordFailure(
+		string pluginName,
+		string pluginFolder,
+		PluginFailureStage? stage,
+		string reason,
+		string? entryAssemblyPath,
+		Type? factoryType,
+		string[]? referencedAssemblies,
+		Exception? exception)
+	{
+		string factoryTypeText = factoryType?.AssemblyQualifiedName ?? "(attribute not read)";
+		Logger.LogError(
+			exception,
+			"Roslynk plugin load failed: {Reason} [stage={Stage}] plugin={Plugin} folder={Folder} entryAssembly={EntryAssembly} factoryType={FactoryType} referencedAssemblies={ReferencedAssemblies}",
+			reason,
+			stage?.ToStageToken() ?? "(none)",
+			pluginName,
+			pluginFolder,
+			entryAssemblyPath ?? "(unknown)",
+			factoryTypeText,
+			referencedAssemblies is { Length: > 0 } ? string.Join("; ", referencedAssemblies) : "(none)");
+	}
+
+	/// <summary>The per-plugin startup budget expired between stages. Not a kill switch: the stage that
+	/// was in flight completed; the remaining stages are skipped.</summary>
+	internal sealed class StartupBudgetExceededException : Exception
+	{
+		public string Phase { get; }
+		public TimeSpan Elapsed { get; }
+		public Type? FactoryType { get; }
+		public string[]? ReferencedAssemblies { get; }
+
+		public StartupBudgetExceededException(string phase, TimeSpan elapsed, string pluginName, string entryAssemblyPath, Type? factoryType, string[]? referencedAssemblies)
+			: base($"The startup budget for plugin '{pluginName}' expired after the {phase} stage ({elapsed.TotalSeconds:0.#}s).")
+		{
+			Phase = phase;
+			Elapsed = elapsed;
+			FactoryType = factoryType;
+			ReferencedAssemblies = referencedAssemblies;
+		}
+	}
+}
+
+/// <summary>A plugin that finished the load pipeline: registered tools, subscribed to solution events.</summary>
+public sealed record LoadedPlugin(
+	string NormalizedName,
+	string Name,
+	string EntryAssemblyPath,
+	Type FactoryType,
+	IReadOnlyList<string> ToolNames);
+
+/// <summary>The loaded plugins, keyed by normalized name. State for GET /plugins — never a failure
+/// registry: failures are OpenTelemetry records and nothing more.</summary>
+public sealed class LoadedPluginRegistry
+{
+	private readonly Dictionary<string, LoadedPlugin> Plugins = new(StringComparer.Ordinal);
+	private readonly Lock Gate = new();
+
+	public void Add(LoadedPlugin plugin)
+	{
+		lock (Gate)
+			Plugins[plugin.NormalizedName] = plugin;
+	}
+
+	public IReadOnlyList<LoadedPlugin> All()
+	{
+		lock (Gate)
+			return Plugins.Values.ToArray();
+	}
+}
+
+/// <summary>Where registered plugin tools go. The production sink is the MCP server's tool collection.</summary>
+public interface IPluginToolSink
+{
+	void Add(McpServerTool tool);
+
+	void Remove(McpServerTool tool);
 }
