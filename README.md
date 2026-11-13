@@ -40,14 +40,17 @@ dotnet tool install roslynk -g
 Roslynk runs in the background. You may observe its logging/OTEL like so...
 
 1. Open a PowerShell prompt
-2. `dotnet tool install -g Aspire.Cli`
-3. `aspire dashboard run --allow-anonymous`
-4. Open another PowerShell prompt
-5. `dotnet tool install roslynk -g`
-6. `$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4317"`
-7. `$env:OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"`
-8. `roslynk`
-
+```bash
+dotnet tool install -g Aspire.Cli
+aspire dashboard run --allow-anonymous
+```
+2. Open another PowerShell prompt
+```bash
+dotnet tool install roslynk -g
+$env:OTEL_EXPORTER_OTLP_ENDPOINT = "http://localhost:4317"
+$env:OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
+roslynk
+```
 
 ### Claude Desktop
 
