@@ -181,6 +181,28 @@ public static class TestPluginCompiler
 		}
 		""";
 
+	/// <summary>A plugin whose factory only touches a missing dependency when it runs: the claim and
+	/// the factory's shape are clean, so the load passes the attribute scan and the guard, and the
+	/// dispatch itself hits the JIT's bind failure.</summary>
+	public const string MissingDependencyAtCallSource = """
+		using System;
+		using Morris.Roslynk.Plugins.Abstractions;
+
+		[assembly: PluginFactory<PluginFactory>]
+
+		public sealed class PluginFactory : IPluginFactory
+		{
+			public static IPlugin? Create(IPluginContext context) => SomeLibrary.Helper.Missing();
+		}
+
+		public sealed class Plugin : IPlugin
+		{
+			public void OnCompleted() { }
+			public void OnError(Exception error) { }
+			public void OnNext(ISolutionEvent value) { }
+		}
+		""";
+
 	/// <summary>A factory that oversleeps any small startup budget; the budget is a stopwatch, not a kill switch, so the call completes before the next checkpoint fires.</summary>
 	public const string SlowFactorySource = """
 		using System.Threading;
@@ -386,13 +408,19 @@ public static class TestPluginCompiler
 		}
 		""";
 
-	/// <summary>A helper base type deployed as a separate assembly, so a plugin that references it but
-	/// deploys without it fails its load with a missing dependency.</summary>
+	/// <summary>A helper base type and a static helper deployed as a separate assembly, so a plugin that
+	/// references them but deploys without the assembly fails its load with a missing dependency — at
+	/// the factory's declaration (the base type) or at its invocation (the static helper).</summary>
 	public const string MissingDependencyLibrarySource = """
 		namespace SomeLibrary
 		{
 			public abstract class Base
 			{
+			}
+
+			public static class Helper
+			{
+				public static Morris.Roslynk.Plugins.Abstractions.IPlugin? Missing() => null;
 			}
 		}
 		""";

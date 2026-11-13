@@ -56,6 +56,7 @@ public static class ServicesRegistration
 		// first tool is registered — after the host composition has run AddMcpServer.
 		services.AddSingleton<PluginShutdownState>();
 		services.AddSingleton<PluginToolTracker>();
+		services.AddSingleton<PluginStartupGate>();
 		services.AddSingleton<SolutionEventPublisher>();
 		services.AddSingleton<LoadedPluginRegistry>();
 		services.AddSingleton<PluginToolFactory>();

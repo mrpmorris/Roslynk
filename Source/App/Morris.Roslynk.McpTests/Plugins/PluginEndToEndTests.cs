@@ -189,6 +189,8 @@ public class PluginEndToEndTests : IDisposable
 
 			WebApplication app = builder.Build();
 			app.UseMcpBodyValidation();
+			// MCP requests wait until plugin startup completes; the daemon endpoints answer during the window.
+			app.UsePluginStartupGate();
 			app.MapMcp();
 			app.MapDaemonEndpoints();
 

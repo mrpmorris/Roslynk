@@ -18,6 +18,11 @@ public static class DaemonEndpoints
 	public const string RestartPath = "/restart";
 	public const string PluginsPath = "/plugins";
 
+	/// <summary>Whether the request path is one of the daemon's own endpoints — the requests that must
+	/// keep working during the plugin startup window, when MCP requests are held by the startup gate.</summary>
+	public static bool IsDaemonEndpoint(PathString path) =>
+		path == VersionPath || path == ShutdownPath || path == RestartPath || path == PluginsPath;
+
 	/// <summary>
 	/// The query parameter naming the version of the bridge requesting shutdown. The daemon refuses the
 	/// request when that version matches its own: a concurrent bridge may already have replaced the

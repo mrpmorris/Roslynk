@@ -110,8 +110,10 @@ internal static class PluginDeployment
 			}
 		}
 
-		fileSystem.CopyDirectory(staging, target);
-		fileSystem.DeleteDirectory(staging);
+		// The staged folder and the target are siblings in the plugins root, so the rename stays on
+		// one volume and is atomic: a crash leaves either the previous deployment or the complete new
+		// one, never a partial copy.
+		fileSystem.RenameDirectory(staging, target);
 	}
 
 	/// <summary>
