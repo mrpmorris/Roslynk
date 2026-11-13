@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<AssemblyName>Morris.Roslynk.Plugins.Abstractions</AssemblyName>
+		<RootNamespace>Morris.Roslynk.Plugins.Abstractions</RootNamespace>
+		<PackageId>Morris.Roslynk.Plugins.Abstractions</PackageId>
+		<Version>1.0.0</Version>
+		<TargetFramework>net10.0</TargetFramework>
+		<IsPackable>true</IsPackable>
+		<Description>The Roslynk plugin contract: the interfaces, enums and the factory attribute a Roslynk plugin is built against, plus the convention analyzer that validates plugin conventions at build time.</Description>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/mrpmorris/Roslynk</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/mrpmorris/Roslynk</RepositoryUrl>
+		<PackageTags>roslyn;mcp;plugins</PackageTags>
+		<IncludeBuildOutput>true</IncludeBuildOutput>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<ProjectReference Include="..\Morris.Roslynk.Plugins.Abstractions.Analyzer\Morris.Roslynk.Plugins.Abstractions.Analyzer.csproj" />
+		<!-- The analyzer rides in the package under analyzers/dotnet/cs, so referencing the package
+		     applies it automatically to the consumer project. -->
+		<None Include="..\Morris.Roslynk.Plugins.Abstractions.Analyzer\bin\$(Configuration)\netstandard2.0\Morris.Roslynk.Plugins.Abstractions.Analyzer.dll"
+		      Pack="true"
+		      PackagePath="analyzers\dotnet\cs"
+		      CopyToOutputDirectory="PreserveNewest" />
+	</ItemGroup>
+
+</Project>
