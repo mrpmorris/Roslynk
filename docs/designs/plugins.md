@@ -3,7 +3,7 @@
 *   **Author:** Peter Morris
 *   **Status:** Draft (under Goldfish review)
 *   **Date:** 2026-11-12
-*   **Decision record:** [docs/designs/plugins-contract-simplification.md](../designs/plugins-contract-simplification.md)
+*   **Decision record:** [.dev/docs/plugins-contract-simplification.md](../../.dev/docs/plugins-contract-simplification.md) (working document, not committed)
 *   **Tracking issue:** [#199](https://github.com/mrpmorris/Roslynk/issues/199)
 
 ## Purpose
