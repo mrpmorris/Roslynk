@@ -5,17 +5,29 @@ name: Publish to NuGet
 # Publishing (GitHub OIDC, no stored API key): NuGet/login exchanges this workflow's identity for a
 # short-lived key. Requires a Trusted Publishing policy on nuget.org for this repository and this
 # workflow file, owned by the nuget.org username below (profile name, not email).
+
+#
+# Publishing a release (or running the workflow manually) also handles
+# Morris.Roslynk.Plugins.Abstractions: its version is hard-coded in the project file (major.minor;
+# 0.1 packs as 0.1.0), and the workflow publishes it only when that version is not yet on NuGet.org —
+# bump the minor there to release a new version of the contract package.
 on:
   push:
     tags:
       - "[0-9]*"
+  release:
+    types:
+      - published
+  workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
 
 jobs:
-  publish:
+  publish-mcp:
+    # The tag names the Roslynk package's version, so this job only means anything for a tag push.
+    if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,6 +58,64 @@ jobs:
       - name: Push
         run: >
           dotnet nuget push ./nupkgs/*.nupkg
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+  publish-abstractions:
+    # Publishing a release runs this job beside the Roslynk publish: the contract package's version
+    # comes from its project file, and the job publishes only when that version is not yet on
+    # NuGet.org — a release whose contract version is unchanged skips the pack and the push.
+    if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Read package version
+        run: |
+          VERSION=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Source/Plugins/Morris.Roslynk.Plugins.Abstractions/Morris.Roslynk.Plugins.Abstractions.csproj | tr -d '[:space:]')
+          # NuGet normalizes a version missing trailing components: 0.1 packs and publishes as 0.1.0.
+          PARTS=$(echo "$VERSION" | awk -F. '{print NF}')
+          while [ "$PARTS" -lt 3 ]; do VERSION="$VERSION.0"; PARTS=$((PARTS+1)); done
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Morris.Roslynk.Plugins.Abstractions version: $VERSION"
+
+      - name: Skip when the version is already published
+        run: |
+          PUBLISHED=$(curl -sf https://api.nuget.org/v3-flatcontainer/morris.roslynk.plugins.abstractions/index.json | jq -r '.versions[]' || true)
+          if echo "$PUBLISHED" | grep -qx "$VERSION"; then
+            echo "Version $VERSION is already on NuGet.org; nothing to publish."
+            echo "SKIP_PUSH=true" >> "$GITHUB_ENV"
+          else
+            echo "Version $VERSION is new; packing and pushing."
+          fi
+
+      - name: Test
+        if: env.SKIP_PUSH != 'true'
+        run: dotnet test Source/Morris.Roslynk.slnx --configuration Release
+
+      - name: Pack
+        if: env.SKIP_PUSH != 'true'
+        run: >
+          dotnet pack Source/Plugins/Morris.Roslynk.Plugins.Abstractions/Morris.Roslynk.Plugins.Abstractions.csproj
+          --configuration Release
+          --output ./abstractions-nupkgs
+
+      - name: NuGet login (Trusted Publishing)
+        if: env.SKIP_PUSH != 'true'
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: mrpmorris
+
+      - name: Push
+        if: env.SKIP_PUSH != 'true'
+        run: >
+          dotnet nuget push ./abstractions-nupkgs/*.nupkg
           --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
           --source https://api.nuget.org/v3/index.json
           --skip-duplicate
