@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO.Compression;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
 using Morris.Roslynk.Infrastructure.Workspaces;
@@ -63,6 +64,40 @@ public class SameAsMSBuildTests(ITestOutputHelper output) : MutatingTestBase
 		Assert.Equal(withLog.Projects.Count(project => project.Documents.Any()), captured.Arguments.Count);
 		Assert.All(captured.Arguments, arguments => Assert.NotNull(arguments.ProjectAssetsFile));
 		Assert.Single(captured.SdkFolders);
+	}
+
+	[Fact]
+	public async Task WhenTheLogHasACompatibleNewerFormat_ThenTheCapturedArgumentsArePreserved()
+	{
+		string solutionPath = Scratch(() => TestSolutions.CreateScratchFixture("SimpleSolution", "SimpleSolution.slnx"));
+		MsBuildRegistrar.EnsureRegistered();
+		string root = TestCaches.New().Root;
+		using CompilerArgumentCapture capture = CompilerArgumentCapture.Begin(root);
+		using MSBuildWorkspace workspace = MSBuildWorkspace.Create();
+		await capture.OpenSolutionAsync(workspace, solutionPath, new Progress<ProjectLoadProgress>(), CancellationToken.None);
+		CapturedLoad expected = capture.Read();
+		CapturedArguments expectedProject = Assert.Single(expected.Arguments);
+
+		string log = Assert.Single(Directory.EnumerateFiles(Path.Combine(root, "captures"), "*.binlog", SearchOption.AllDirectories));
+		using var content = new MemoryStream();
+		using (var input = new GZipStream(File.OpenRead(log), CompressionMode.Decompress))
+			input.CopyTo(content);
+		content.Position = 0;
+		using (var writer = new BinaryWriter(content, System.Text.Encoding.UTF8, leaveOpen: true))
+			writer.Write(int.MaxValue);
+		content.Position = 0;
+		using (var output = new GZipStream(File.Create(log), CompressionMode.Compress))
+			content.CopyTo(output);
+
+		CapturedLoad actual = capture.Read();
+		CapturedArguments actualProject = Assert.Single(actual.Arguments);
+		Assert.Equal(expectedProject.ProjectFile, actualProject.ProjectFile);
+		Assert.Equal(expectedProject.TargetFramework, actualProject.TargetFramework);
+		Assert.Equal(expectedProject.ProjectAssetsFile, actualProject.ProjectAssetsFile);
+		Assert.Equal(expectedProject.Arguments, actualProject.Arguments);
+		Assert.Equal(expected.SdkFolders.Order(), actual.SdkFolders.Order());
+		Assert.NotEmpty(actualProject.Arguments);
+		Assert.Single(actual.SdkFolders);
 	}
 
 	private async Task AssertCachedLoadMatchesAsync(string solutionPath)

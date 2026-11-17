@@ -1,5 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+	<PropertyGroup>
+		<TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+	</PropertyGroup>
+
 	<ItemGroup>
 		<InternalsVisibleTo Include="Morris.Roslynk.McpTests" />
 		<InternalsVisibleTo Include="Morris.Roslynk.Tests" />

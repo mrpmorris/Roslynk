@@ -11,7 +11,7 @@ using Morris.Roslynk.Infrastructure.Resolution;
 namespace Morris.Roslynk.Tests.Features.MultiTarget;
 
 /// <summary>
-/// The MultiTarget fixture's <c>Api.Accepts(Type)</c> parameter type binds in net8.0 but is an error type in
+/// The MultiTarget fixture's <c>Api.Accepts(Type)</c> parameter type binds in net10.0 but is an error type in
 /// netstandard2.0, so the two copies render different signatures. They are one declaration and must merge.
 /// </summary>
 public class MultiTargetMergeTests

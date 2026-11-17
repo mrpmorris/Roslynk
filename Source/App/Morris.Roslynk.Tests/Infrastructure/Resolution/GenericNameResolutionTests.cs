@@ -143,8 +143,14 @@ public class GenericNameResolutionTests
 		foreach (string name in new[] { "System.Collections.Generic.List`1", "System.Collections.Generic.List<T>" })
 		{
 			IReadOnlyList<ISymbol> matches = await resolver.FindByFullyQualifiedNameWithMetadataAsync(instance.CurrentSolution, name);
-			INamedTypeSymbol type = Assert.IsAssignableFrom<INamedTypeSymbol>(Assert.Single(matches));
-			Assert.Equal(1, type.Arity);
+			Assert.NotEmpty(matches);
+			Assert.All(matches, match =>
+			{
+				INamedTypeSymbol type = Assert.IsAssignableFrom<INamedTypeSymbol>(match);
+				Assert.Equal("System.Collections.Generic.List<T>", SymbolResolver.FullyQualifiedName(type));
+				Assert.Equal(1, type.Arity);
+				Assert.All(type.Locations, location => Assert.True(location.IsInMetadata));
+			});
 		}
 	}
 

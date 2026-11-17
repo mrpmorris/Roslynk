@@ -204,8 +204,8 @@ internal static class TestSolutions
 	public static string Conditional => ConditionalSolutionPath.Value;
 
 	/// <summary>
-	/// A multi-targeted (net8.0, netstandard2.0) library whose <c>Api.Accepts(Type)</c> parameter type binds in
-	/// net8.0 only.
+	/// A multi-targeted (net10.0, netstandard2.0) library whose <c>Api.Accepts(Type)</c> parameter type binds in
+	/// net10.0 only.
 	/// </summary>
 	public static string MultiTarget => MultiTargetSolutionPath.Value;
 
@@ -357,13 +357,20 @@ internal static class TestSolutions
 			RedirectStandardError = true,
 			UseShellExecute = false
 		};
+		startInfo.Environment.Remove("MSBUILD_EXE_PATH");
+		startInfo.Environment.Remove("MSBuildExtensionsPath");
+		startInfo.Environment.Remove("MSBuildSDKsPath");
+		startInfo.Environment.Remove("DOTNET_MSBUILD_SDK_RESOLVER_SDKS_DIR");
 
 		using Process process = Process.Start(startInfo)
 			?? throw new InvalidOperationException($"Failed to start 'dotnet {verb}'.");
+		Task<string> standardOutput = process.StandardOutput.ReadToEndAsync();
+		Task<string> standardError = process.StandardError.ReadToEndAsync();
 		process.WaitForExit();
+		string[] output = Task.WhenAll(standardOutput, standardError).GetAwaiter().GetResult();
 
 		if (process.ExitCode != 0)
-			throw new InvalidOperationException($"'dotnet {verb}' on '{path}' failed:\n{process.StandardOutput.ReadToEnd()}\n{process.StandardError.ReadToEnd()}");
+			throw new InvalidOperationException($"'dotnet {verb}' on '{path}' failed:\n{output[0]}\n{output[1]}");
 	}
 
 	/// <summary>
@@ -441,7 +448,7 @@ internal static class TestSolutions
 	/// <summary>
 	/// Two Razor projects, the dependent one listed first: App's Page.razor uses Lib's Widget component, whose
 	/// <c>Count</c> parameter and a <c>StateHasChanged</c> call live in the code-behind Widget.razor.cs. Lib is
-	/// multi-targeted (net8.0;net11.0) and has an _Imports.razor.
+	/// multi-targeted (net10.0;net11.0) and has an _Imports.razor.
 	/// </summary>
 	public static string RazorMultiProject => RazorMultiProjectSolutionPath.Value;
 
@@ -497,7 +504,7 @@ internal static class TestSolutions
 	public static string CreateScratchFixture(string fixtureName, string solutionFile) => CreateScratch(fixtureName, solutionFile);
 
 	/// <summary>
-	/// A two-project solution written to a fresh temp directory and restored, not built: Lib targets net8.0 and
+	/// A two-project solution written to a fresh temp directory and restored, not built: Lib targets net10.0 and
 	/// net11.0, with RootNamespace Linked.Library, and App (net11.0) references it and compiles Shared/Shared.cs,
 	/// outside its folder, linked as Common/Shared.cs. With
 	/// <paramref name="withNoTargetsProject"/>, a third project uses the Microsoft.Build.NoTargets SDK, which compiles
@@ -517,7 +524,7 @@ internal static class TestSolutions
 		Write("Lib/Lib.csproj", """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-				<TargetFrameworks>net8.0;net11.0</TargetFrameworks>
+				<TargetFrameworks>net10.0;net11.0</TargetFrameworks>
 				<Nullable>enable</Nullable>
 				<RootNamespace>Linked.Library</RootNamespace>
 			  </PropertyGroup>

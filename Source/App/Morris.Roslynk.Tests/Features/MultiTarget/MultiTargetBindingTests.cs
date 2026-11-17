@@ -14,7 +14,7 @@ namespace Morris.Roslynk.Tests.Features.MultiTarget;
 
 /// <summary>
 /// The MultiTarget fixture's <c>Legacy</c> member binds only in netstandard2.0 (its <c>using</c> sits under
-/// <c>#if !NET8_0_OR_GREATER</c>), so the copy discovered first — net8.0, per the fixture's TFM order — is
+/// <c>#if !NET10_0_OR_GREATER</c>), so the copy discovered first — net10.0, per the fixture's TFM order — is
 /// the one whose parameter types fail to bind. That is the load-order dependence the best-bound
 /// representative rule removes: every discriminating test keeps the fixture's own precondition as a guard,
 /// so a future TFM-order or Roslyn change cannot make them pass vacuously.
@@ -126,12 +126,12 @@ public class MultiTargetBindingTests : MutatingTestBase
 		string sourcePath = Path.Combine(Path.GetDirectoryName(TestSolutions.MultiTarget)!, "Multi", "Legacy.cs");
 		(int declarationLine, int declarationColumn, int typeLine, int typeColumn) = Locate(sourcePath, "Wide(Int32");
 
-		// The declaration token: net8.0's copy is found first but its parameter is unresolved, so the bound
+		// The declaration token: net10.0's copy is found first but its parameter is unresolved, so the bound
 		// copy from the second TFM must speak.
 		string declaration = await subject.FindDefinition(TestSolutions.MultiTarget, sourcePath, declarationLine, declarationColumn);
 		Assert.Contains("fullName=Repro.Legacy.Wide(int)", declaration);
 
-		// The type token itself does not bind in net8.0 at all; it resolves through the second TFM.
+		// The type token itself does not bind in net10.0 at all; it resolves through the second TFM.
 		string type = await subject.FindDefinition(TestSolutions.MultiTarget, sourcePath, typeLine, typeColumn);
 		Assert.Contains("fullName=System.Int32", type);
 	}

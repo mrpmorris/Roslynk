@@ -8,7 +8,7 @@ namespace Morris.Roslynk.Tests.Features.Callers.GetCalleesTests;
 /// <summary>
 /// C# 14 extension blocks: a member is reported as declared inside its <c>extension(...)</c> block, so its
 /// parameter list does not include the receiver (unlike a classic <c>this</c> extension method). The scratch
-/// SimpleSolution targets net8.0, so the test raises its LangVersion to 14.
+/// SimpleSolution targets net10.0, so the test raises its LangVersion to 14.
 /// </summary>
 public class GetCalleesExtensionBlockTests : MutatingTestBase
 {

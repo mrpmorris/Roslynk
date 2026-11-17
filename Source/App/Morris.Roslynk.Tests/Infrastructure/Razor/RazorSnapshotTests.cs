@@ -17,7 +17,7 @@ public class RazorSnapshotTests : MutatingTestBase
 	private static readonly string GeneratedSubPath = Path.Combine(
 		"obj",
 		"Debug",
-		"net8.0",
+		"net10.0",
 		"generated",
 		"Microsoft.CodeAnalysis.Razor.Compiler",
 		"Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator");
@@ -84,7 +84,7 @@ public class RazorSnapshotTests : MutatingTestBase
 	public async Task WhenOnlyAnotherConfigurationHasASnapshot_ThenNoSnapshotIsFound()
 	{
 		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
-		string releaseDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "obj", "Release", "net8.0", "generated",
+		string releaseDir = Path.Combine(Path.GetDirectoryName(solutionPath)!, "RazorLib", "obj", "Release", "net10.0", "generated",
 			"Microsoft.CodeAnalysis.Razor.Compiler", "Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator");
 		Directory.CreateDirectory(releaseDir);
 		File.WriteAllText(Path.Combine(releaseDir, "Counter_razor.g.cs"), "// release build");
