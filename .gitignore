@@ -49,3 +49,6 @@ Benchmarks/use-cases/**/benchmark-audit.md
 ## Issue #71 fixture: generated at fixture-prepare time, never committed
 Source/TestFixtures/LargeTypeSolution/LargeTypeLib/Big.cs
 Source/TestFixtures/LargeTypeSolution/LargeTypeLib/LongLine.cs
+
+## EGM intermediate artifacts (concepts_brief, review reports, issue context): workflow scratch, never committed
+.dev/
