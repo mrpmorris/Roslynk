@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<PropertyGroup>
-		<TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+		<TargetFramework>net11.0</TargetFramework>
 		<!-- The Web SDK defaults IsPackable to false; this project ships as a dotnet tool. -->
 		<IsPackable>true</IsPackable>
 		<PackAsTool>true</PackAsTool>

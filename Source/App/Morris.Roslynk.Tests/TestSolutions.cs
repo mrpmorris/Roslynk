@@ -524,7 +524,7 @@ internal static class TestSolutions
 		Write("Lib/Lib.csproj", """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-				<TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+				<TargetFramework>net11.0</TargetFramework>
 				<Nullable>enable</Nullable>
 				<RootNamespace>Linked.Library</RootNamespace>
 			  </PropertyGroup>
