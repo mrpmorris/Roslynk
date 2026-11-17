@@ -110,8 +110,12 @@ internal static class RazorSnapshot
 
 				string hintName = string.Join('/', segments);
 				string fileName = segments[^1];
-				if (!fileName.EndsWith("_razor.g.cs", StringComparison.OrdinalIgnoreCase) &&
-					!fileName.EndsWith("_cshtml.g.cs", StringComparison.OrdinalIgnoreCase))
+				bool declarationOutput = fileName.EndsWith(".decl.g.cs", StringComparison.OrdinalIgnoreCase);
+				string sourceHintName = declarationOutput
+					? fileName[..^".decl.g.cs".Length] + ".g.cs"
+					: fileName;
+				if (!sourceHintName.EndsWith("_razor.g.cs", StringComparison.OrdinalIgnoreCase) &&
+					!sourceHintName.EndsWith("_cshtml.g.cs", StringComparison.OrdinalIgnoreCase))
 				{
 					// Not a razor/cshtml output; keep it.
 					files.Add((file, hintName));
@@ -119,9 +123,9 @@ internal static class RazorSnapshot
 				}
 
 				string? source = sourcesByHintKey.GetValueOrDefault(
-					string.Concat(System.IO.Path.Combine(segments[..^1]), "|", fileName));
+					string.Concat(System.IO.Path.Combine(segments[..^1]), "|", sourceHintName));
 				if (source is null && segments.Length == 1)
-					source = sourcesByHintKey.GetValueOrDefault(string.Concat("|", fileName));
+					source = sourcesByHintKey.GetValueOrDefault(string.Concat("|", sourceHintName));
 
 				// An orphan: its source was deleted after the last build.
 				if (source is not null)

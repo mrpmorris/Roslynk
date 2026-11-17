@@ -99,7 +99,7 @@ public class RazorPlacementTests
 
 		// The premise of the bug: the tree is the virtual generated document, while the position comes from
 		// the #line mapping into Counter.razor.
-		Assert.EndsWith("_razor.g.cs", location.SourceTree!.FilePath);
+		Assert.True(RazorMapping.IsRazorGeneratedPath(location.SourceTree!.FilePath));
 		Assert.EndsWith("Counter.razor", location.GetDisplaySpan().Path);
 
 		var root = new SymbolNode();

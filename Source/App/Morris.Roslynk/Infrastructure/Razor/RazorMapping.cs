@@ -26,7 +26,9 @@ public static class RazorMapping
 	public static bool IsRazorGeneratedPath(string filePath)
 	{
 		if (!filePath.EndsWith("_razor.g.cs", StringComparison.OrdinalIgnoreCase)
-			&& !filePath.EndsWith("_cshtml.g.cs", StringComparison.OrdinalIgnoreCase))
+			&& !filePath.EndsWith("_cshtml.g.cs", StringComparison.OrdinalIgnoreCase)
+			&& !filePath.EndsWith("_razor.decl.g.cs", StringComparison.OrdinalIgnoreCase)
+			&& !filePath.EndsWith("_cshtml.decl.g.cs", StringComparison.OrdinalIgnoreCase))
 			return false;
 
 		// Pre-generated files loaded from a prior dotnet build (under the generator's own folder, wherever

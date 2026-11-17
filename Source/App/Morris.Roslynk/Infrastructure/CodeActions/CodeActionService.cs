@@ -105,9 +105,9 @@ public sealed class CodeActionService
 		return null;
 	}
 
-	public static string EncodeId(string documentPath, TextSpan span, DiscoveredAction action)
+	public static string EncodeId(string documentPath, TextSpan span, DiscoveredAction action, string? generatedDocumentName = null)
 	{
-		var actionRef = new ActionRef(documentPath, span.Start, span.Length, action.Kind, KeyOf(action.Action));
+		var actionRef = new ActionRef(documentPath, span.Start, span.Length, action.Kind, KeyOf(action.Action), generatedDocumentName);
 		return Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(actionRef));
 	}
 

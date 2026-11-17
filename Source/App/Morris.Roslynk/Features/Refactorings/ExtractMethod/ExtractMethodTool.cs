@@ -114,6 +114,7 @@ public sealed class ExtractMethodTool
 			return Failure(Error.Invalid(invalid!));
 		if (await source.MapToDocumentAsync(sourceSpan, cancellationToken) is not TextSpan span)
 			return Failure(Error.NotSupported($"The selection {line}:{column}-{endLine}:{endColumn} is not inside C# code (an @code block or expression) in '{filePath}'."));
+		document = source.Document;
 
 		CodeAction? action = await FindActionAsync(document, span, asLocalFunction ? ExtractLocalFunctionKey : ExtractMethodKey, cancellationToken);
 		if (action is null)

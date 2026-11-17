@@ -7,7 +7,7 @@ It is self-contained: it carries its own solution file, projects and shared buil
 | Path | Contents |
 | --- | --- |
 | `TestSolution.slnx` | The solution: `Warehouse.Core`, `Warehouse.Cli`, `Warehouse.Reporting`. |
-| `Directory.Build.props` | Shared build settings (net10.0, latest C#, nullable and implicit usings). |
+| `Directory.Build.props` | Shared build settings (net11.0, latest C#, nullable and implicit usings). |
 | `Source/Warehouse.Core/` | Inventory and pricing model. |
 | `Source/Warehouse.Cli/` | Console entry point and commands. |
 | `Source/Warehouse.Reporting/` | Report and stock-take helpers. |

@@ -1,7 +1,8 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.6.4">
+<Project Sdk="Aspire.AppHost.Sdk/13.6.5">
 
 	<PropertyGroup>
 		<OutputType>Exe</OutputType>
+		<AspireUseCliBundle>true</AspireUseCliBundle>
 		<UserSecretsId>7a5a8fb5-0c4e-4730-a410-4bb0a099f444</UserSecretsId>
 		<!--
 			Dev-only orchestration host. Audit our own (direct) packages but not Aspire's transitive

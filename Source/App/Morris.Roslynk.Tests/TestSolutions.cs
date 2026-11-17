@@ -441,7 +441,7 @@ internal static class TestSolutions
 	/// <summary>
 	/// Two Razor projects, the dependent one listed first: App's Page.razor uses Lib's Widget component, whose
 	/// <c>Count</c> parameter and a <c>StateHasChanged</c> call live in the code-behind Widget.razor.cs. Lib is
-	/// multi-targeted (net8.0;net10.0) and has an _Imports.razor.
+	/// multi-targeted (net8.0;net11.0) and has an _Imports.razor.
 	/// </summary>
 	public static string RazorMultiProject => RazorMultiProjectSolutionPath.Value;
 
@@ -498,7 +498,7 @@ internal static class TestSolutions
 
 	/// <summary>
 	/// A two-project solution written to a fresh temp directory and restored, not built: Lib targets net8.0 and
-	/// net10.0, with RootNamespace Linked.Library, and App (net10.0) references it and compiles Shared/Shared.cs,
+	/// net11.0, with RootNamespace Linked.Library, and App (net11.0) references it and compiles Shared/Shared.cs,
 	/// outside its folder, linked as Common/Shared.cs. With
 	/// <paramref name="withNoTargetsProject"/>, a third project uses the Microsoft.Build.NoTargets SDK, which compiles
 	/// nothing.
@@ -517,9 +517,9 @@ internal static class TestSolutions
 		Write("Lib/Lib.csproj", """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
-			    <Nullable>enable</Nullable>
-			    <RootNamespace>Linked.Library</RootNamespace>
+				<TargetFrameworks>net8.0;net11.0</TargetFrameworks>
+				<Nullable>enable</Nullable>
+				<RootNamespace>Linked.Library</RootNamespace>
 			  </PropertyGroup>
 			</Project>
 			""");
@@ -527,9 +527,9 @@ internal static class TestSolutions
 		Write("App/App.csproj", """
 			<Project Sdk="Microsoft.NET.Sdk">
 			  <PropertyGroup>
-			    <TargetFramework>net10.0</TargetFramework>
-			    <OutputType>Exe</OutputType>
-			    <ImplicitUsings>enable</ImplicitUsings>
+				<TargetFramework>net11.0</TargetFramework>
+				<OutputType>Exe</OutputType>
+				<ImplicitUsings>enable</ImplicitUsings>
 			  </PropertyGroup>
 			  <ItemGroup>
 			    <ProjectReference Include="../Lib/Lib.csproj" />

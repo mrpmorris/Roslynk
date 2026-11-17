@@ -93,10 +93,23 @@ public sealed class ApplyCodeFixTool
 			return Failure(error);
 		if (source is null)
 			return Failure(Error.NotFound($"'{filePath}' is not a solution-compiled .cs, .razor or .cshtml document."));
-		Document document = source.Document;
 
 		var position = new LinePosition(line - 1, column - 1);
 		string notFound = $"No {diagnosticId} diagnostic was found at {line}:{column} in '{filePath}'.";
+		if (source.IsRazor && !UnnecessaryImportIds.Contains(diagnosticId))
+		{
+			SourceText sourceText = await source.GetSourceTextAsync(cancellationToken);
+			if (position.Line < sourceText.Lines.Count)
+			{
+				TextLine sourceLine = sourceText.Lines[position.Line];
+				if (position.Character <= sourceLine.End - sourceLine.Start)
+				{
+					int sourcePosition = sourceLine.Start + position.Character;
+					await source.MapToDocumentAsync(new TextSpan(sourcePosition, 0), cancellationToken);
+				}
+			}
+		}
+		Document document = source.Document;
 
 		string title;
 		Solution? changed;
@@ -130,7 +143,7 @@ public sealed class ApplyCodeFixTool
 				// A Razor action is re-resolved through its .razor/.cshtml source, not the generated document's path.
 				string actionPath = source.RazorPath ?? document.FilePath!;
 				string[] candidates = fixes
-					.Select(fix => $"{CodeActionService.EncodeId(actionPath, span, fix)},{fix.Kind},{diagnosticId} {fix.Action.Title}")
+					.Select(fix => $"{CodeActionService.EncodeId(actionPath, span, fix, source.IsRazor ? document.Name : null)},{fix.Kind},{diagnosticId} {fix.Action.Title}")
 					.ToArray();
 				return Failure(Error.Conflict(
 					$"{diagnosticId} at {line}:{column} has {fixes.Length} fixes; apply the chosen candidate's actionId with apply_code_action.",

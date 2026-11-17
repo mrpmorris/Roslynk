@@ -25,7 +25,7 @@ All operating directly on the projects compiled in a loaded solution!
 
 ## Connect an MCP client (all platforms)
 
-Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download) on `PATH`. The `stdio` verb is a
+Requires the [.NET 11 SDK](https://dotnet.microsoft.com/download) on `PATH`. The `stdio` verb is a
 self-launching bridge: the MCP client spawns it, it starts the shared HTTP daemon on
 `localhost:6502` if one isn't already running, and pipes the session through. Nothing to launch or
 babysit by hand.

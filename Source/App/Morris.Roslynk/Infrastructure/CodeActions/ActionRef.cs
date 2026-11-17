@@ -12,13 +12,15 @@ public sealed class ActionRef
 	public int SpanLength { get; }
 	public string Kind { get; }
 	public string Key { get; }
+	public string? GeneratedDocumentName { get; }
 
-	public ActionRef(string documentPath, int spanStart, int spanLength, string kind, string key)
+	public ActionRef(string documentPath, int spanStart, int spanLength, string kind, string key, string? generatedDocumentName = null)
 	{
 		DocumentPath = documentPath;
 		SpanStart = spanStart;
 		SpanLength = spanLength;
 		Kind = kind;
 		Key = key;
+		GeneratedDocumentName = generatedDocumentName;
 	}
 }

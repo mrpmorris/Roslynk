@@ -28,12 +28,16 @@ public class RazorSnapshotTests : MutatingTestBase
 		// An orphan: its Ghost.razor source was deleted after the last build.
 		string solutionPath = Scratch(() => TestSolutions.CreateScratchRazorSolution());
 		PlantGeneratedFile(solutionPath, "RazorLib", "Counter_razor.g.cs");
+		PlantGeneratedFile(solutionPath, "RazorLib", "Counter_razor.decl.g.cs");
 		PlantGeneratedFile(solutionPath, "RazorLib", "Ghost_razor.g.cs");
+		PlantGeneratedFile(solutionPath, "RazorLib", "Ghost_razor.decl.g.cs");
 
 		IReadOnlyList<string> files = await SnapshotFileNamesAsync(solutionPath);
 
 		Assert.Contains("Counter_razor.g.cs", files);
+		Assert.Contains("Counter_razor.decl.g.cs", files);
 		Assert.DoesNotContain("Ghost_razor.g.cs", files);
+		Assert.DoesNotContain("Ghost_razor.decl.g.cs", files);
 	}
 
 	[Fact]

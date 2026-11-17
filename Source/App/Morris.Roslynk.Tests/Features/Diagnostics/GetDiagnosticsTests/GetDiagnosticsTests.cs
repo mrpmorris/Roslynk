@@ -189,7 +189,7 @@ public class GetDiagnosticsTests : MutatingTestBase
 	public async Task WhenFilteredByProjectName_ThenEveryTargetFrameworkIsIncluded()
 	{
 		// The scratch copy keeps both target frameworks: under Source/, Directory.Build.props forces the
-		// committed fixture to a single net10.0 target framework.
+		// committed fixture to a single net11.0 target framework.
 		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchMultiTargetSolution());
 		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 

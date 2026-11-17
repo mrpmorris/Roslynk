@@ -15,7 +15,7 @@ namespace Morris.Roslynk.Infrastructure.Razor;
 public sealed class RazorSourceDocument
 {
 	/// <summary>The document Roslyn operates on: the .cs file itself, or the Razor-generated C#.</summary>
-	public Document Document { get; }
+	public Document Document { get; private set; }
 
 	/// <summary>The Razor source path, or null for an ordinary .cs document.</summary>
 	public string? RazorPath { get; }
@@ -62,7 +62,8 @@ public sealed class RazorSourceDocument
 		Solution solution,
 		string path,
 		string? notFoundMessage,
-		CancellationToken cancellationToken = default)
+		CancellationToken cancellationToken = default,
+		string? generatedDocumentName = null)
 	{
 		DocumentPathResolution resolution = DocumentPathResolution.Of(
 			solution,
@@ -71,13 +72,17 @@ public sealed class RazorSourceDocument
 		if (resolution.Error is not null)
 			return (null, resolution.Error);
 
-		RazorSourceDocument? source = await ResolveResolvedAsync(solution, resolution.Resolved!, cancellationToken);
+		RazorSourceDocument? source = await ResolveResolvedAsync(solution, resolution.Resolved!, cancellationToken, generatedDocumentName);
 		return source is null
 			? (null, notFoundMessage is null ? null : Error.NotFound(notFoundMessage))
 			: (source, null);
 	}
 
-	private static async Task<RazorSourceDocument?> ResolveResolvedAsync(Solution solution, ResolvedDocumentPath resolved, CancellationToken cancellationToken)
+	private static async Task<RazorSourceDocument?> ResolveResolvedAsync(
+		Solution solution,
+		ResolvedDocumentPath resolved,
+		CancellationToken cancellationToken,
+		string? generatedDocumentName = null)
 	{
 		if (!IsRazorSourcePath(resolved.AbsolutePath))
 		{
@@ -91,7 +96,8 @@ public sealed class RazorSourceDocument
 		if (razor?.FilePath is not string razorPath)
 			return null;
 
-		Document? generated = await FindGeneratedDocumentAsync(solution.GetProject(razor.Project.Id)!, razorPath, cancellationToken);
+		Document? generated = await FindGeneratedDocumentAsync(
+			solution.GetProject(razor.Project.Id)!, razorPath, cancellationToken, generatedDocumentName);
 		if (generated is null)
 			return null;
 
@@ -117,22 +123,35 @@ public sealed class RazorSourceDocument
 		if (RazorPath is null || RazorText is null)
 			return sourceSpan;
 
-		SyntaxTree? tree = await Document.GetSyntaxTreeAsync(cancellationToken);
-		if (tree is null)
-			return null;
-		SourceText generatedText = await tree.GetTextAsync(cancellationToken);
+		Document original = Document;
+		IEnumerable<Document> candidates = original.Project.Documents
+			.Where(RazorMapping.IsRazorGeneratedDocument)
+			.OrderBy(candidate => ReferenceEquals(candidate, original) ? 0 : 1);
+		foreach (Document candidate in candidates)
+		{
+			if (await candidate.GetSyntaxTreeAsync(cancellationToken) is not SyntaxTree tree)
+				continue;
 
-		int? start = MapPosition(tree, generatedText, RazorPath, RazorText, sourceSpan.Start, cancellationToken);
-		if (start is null)
-			return null;
-		if (sourceSpan.IsEmpty)
-			return new TextSpan(start.Value, 0);
+			SourceText generatedText = await tree.GetTextAsync(cancellationToken);
+			int? start = MapPosition(tree, generatedText, RazorPath, RazorText, sourceSpan.Start, cancellationToken);
+			if (start is null)
+				continue;
 
-		int? end = MapPosition(tree, generatedText, RazorPath, RazorText, sourceSpan.End, cancellationToken);
-		if (end is null || end.Value < start.Value)
-			return null;
+			if (sourceSpan.IsEmpty)
+			{
+				Document = candidate;
+				return new TextSpan(start.Value, 0);
+			}
 
-		return TextSpan.FromBounds(start.Value, end.Value);
+			int? end = MapPosition(tree, generatedText, RazorPath, RazorText, sourceSpan.End, cancellationToken);
+			if (end is null || end.Value < start.Value)
+				continue;
+
+			Document = candidate;
+			return TextSpan.FromBounds(start.Value, end.Value);
+		}
+
+		return null;
 	}
 
 	/// <summary>True when <paramref name="location"/> in the generated document maps into this Razor file.</summary>
@@ -153,7 +172,11 @@ public sealed class RazorSourceDocument
 	/// falling back to any generated document whose #line directives map into it. Imports files such as
 	/// <c>_Imports.razor</c> are mapped into every component, so the name match is preferred.
 	/// </summary>
-	private static async Task<Document?> FindGeneratedDocumentAsync(Project project, string razorPath, CancellationToken cancellationToken)
+	private static async Task<Document?> FindGeneratedDocumentAsync(
+		Project project,
+		string razorPath,
+		CancellationToken cancellationToken,
+		string? generatedDocumentName = null)
 	{
 		string expectedSuffix = Path.GetFileNameWithoutExtension(razorPath) + "_" + Path.GetExtension(razorPath).TrimStart('.') + ".g.cs";
 		Document? fallback = null;
@@ -166,6 +189,12 @@ public sealed class RazorSourceDocument
 			SyntaxTree? tree = await document.GetSyntaxTreeAsync(cancellationToken);
 			if (tree is null || !tree.GetLineMappings(cancellationToken).Any(mapping => !mapping.IsHidden && SamePath(mapping.MappedSpan.Path, razorPath)))
 				continue;
+
+			if (generatedDocumentName is not null
+				&& string.Equals(document.Name, generatedDocumentName, StringComparison.OrdinalIgnoreCase))
+			{
+				return document;
+			}
 
 			if (path.EndsWith(expectedSuffix, StringComparison.OrdinalIgnoreCase))
 				return document;

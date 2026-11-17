@@ -68,7 +68,8 @@ public sealed class ApplyCodeActionTool
 			solution,
 			actionRef.DocumentPath,
 			$"'{actionRef.DocumentPath}' is no longer a solution document.",
-			cancellationToken);
+			cancellationToken,
+			actionRef.GeneratedDocumentName);
 		if (pathError is Error error)
 			return Failure(error);
 		if (source is null)
