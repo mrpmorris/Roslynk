@@ -27,6 +27,9 @@ Source/WindowsServiceInstaller/*.wixpdb
 _ReSharper*/
 *.DotSettings.user
 
+## CodeAlta local state
+.alta/
+
 ## Test / coverage
 TestResults/
 coverage*.json
