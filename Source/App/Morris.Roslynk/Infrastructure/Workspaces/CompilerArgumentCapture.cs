@@ -55,7 +55,14 @@ internal sealed class CompilerArgumentCapture : IDisposable
 		foreach (string log in Directory.EnumerateFiles(Folder, "*.binlog").Order(StringComparer.Ordinal))
 		{
 			var targetFrameworks = new Dictionary<int, string>();
-			var replay = new BinaryLogReplayEventSource();
+			var replay = new BinaryLogReplayEventSource { AllowForwardCompatibility = true };
+			replay.RecoverableReadError += error =>
+			{
+				// Unknown unrelated events are safe to skip, but incomplete capture records cannot be cached.
+				if (error.ErrorType == ReaderErrorType.UnknownFormatOfEventData
+					|| error.RecordKind is BinaryLogRecordKind.ProjectStarted or BinaryLogRecordKind.TaskStarted or BinaryLogRecordKind.TaskParameter)
+					throw new InvalidDataException(error.GetFormattedMessage());
+			};
 			replay.AnyEventRaised += (_, e) =>
 			{
 				switch (e)

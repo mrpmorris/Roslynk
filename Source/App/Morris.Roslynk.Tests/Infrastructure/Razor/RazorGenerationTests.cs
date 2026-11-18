@@ -91,7 +91,7 @@ public class RazorGenerationTests
 	[InlineData("C:/src/App/obj/RoslynkRazorGenerated/Views/Home/Index_cshtml.g.cs", true)]
 	[InlineData("C:/src/App/obj/RoslynkRazorGenerated/Counter_razor.decl.g.cs", true)]
 	[InlineData("C:/src/App/obj/RoslynkRazorGenerated/Views/Home/Index_cshtml.decl.g.cs", true)]
-	[InlineData("C:\\src\\App\\obj\\Debug\\net8.0\\generated\\Microsoft.CodeAnalysis.Razor.Compiler\\Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator\\Counter_razor.g.cs", true)]
+	[InlineData("C:\\src\\App\\obj\\Debug\\net10.0\\generated\\Microsoft.CodeAnalysis.Razor.Compiler\\Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator\\Counter_razor.g.cs", true)]
 	[InlineData("C:/src/App/Gen/Microsoft.CodeAnalysis.Razor.Compiler/Microsoft.NET.Sdk.Razor.SourceGenerators.RazorSourceGenerator/Counter_razor.g.cs", true)]
 	[InlineData("C:/src/App/Counter_razor.g.cs", false)]
 	[InlineData("C:/src/App/obj/RoslynkRazorGenerated/Helper.g.cs", false)]

@@ -188,15 +188,14 @@ public class GetDiagnosticsTests : MutatingTestBase
 	[Fact]
 	public async Task WhenFilteredByProjectName_ThenEveryTargetFrameworkIsIncluded()
 	{
-		// The scratch copy keeps both target frameworks: under Source/, Directory.Build.props forces the
-		// committed fixture to a single net11.0 target framework.
+		// The scratch copy keeps the fixture's explicit net10.0/netstandard2.0 targets.
 		var (_, solutionPath) = await ScratchAsync(() => TestSolutions.CreateScratchMultiTargetSolution());
 		var subject = new GetDiagnosticsTool(Registry, new DiagnosticsService());
 
 		string result = await subject.GetDiagnostics(
 			solutionPath, includeErrors: true, includeAnalyzers: false, projectName: "Multi");
 
-		// Legacy.cs fails to bind in net8.0 (two CS0246 'Int32' parameters plus two CS1503 call sites) on
+		// Legacy.cs fails to bind in net10.0 (two CS0246 'Int32' parameters plus two CS1503 call sites) on
 		// top of Api.cs's CS0246 'Type', which is reported against netstandard2.0 only.
 		Assert.Contains("errors=5", result);
 		Assert.Contains("filter=projectName:Multi", result);

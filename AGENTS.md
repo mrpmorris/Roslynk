@@ -32,7 +32,7 @@ This is a source-based implementation guide for future changes. Paths below are 
 | `Benchmarks` | Reproducible AI benchmark suite: self-contained `TestSolution`, use-case prompts, `run.md` run instructions, and `benchmark-results.md`. |
 | `README.md`, `releases.md` | Setup/tool guidance and release history. |
 
-`Source/Directory.Build.props` sets .NET 11, latest C#, nullable and implicit usings, and warnings as errors. Package versions are central in `Source/Directory.Packages.props`; do not add local versions to individual project references. `Source/.editorconfig` specifies tabs (width 4), Allman braces, file-scoped namespaces, CRLF for C#/VB, and usings outside namespaces. Existing classes commonly use PascalCase private fields and explicit constructor injection; follow nearby code without unrelated formatting churn.
+`Source/Directory.Build.props` sets latest C#, nullable and implicit usings, and warnings as errors. Projects declare their own target frameworks; the product and test projects target .NET 11. Package versions are central in `Source/Directory.Packages.props`; do not add local versions to individual project references. `Source/.editorconfig` specifies tabs (width 4), Allman braces, file-scoped namespaces, CRLF for C#/VB, and usings outside namespaces. Existing classes commonly use PascalCase private fields and explicit constructor injection; follow nearby code without unrelated formatting churn.
 
 Feature tools live in `Features/<Area>/<Operation>/<Operation>Tool.cs` (MultiQuery is a flatter slice). Shared mechanisms live under `Infrastructure`. Namespace structure follows directories. Both test assemblies have access to core internals via `InternalsVisibleTo`.
 
