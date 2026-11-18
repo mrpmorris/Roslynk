@@ -28,6 +28,9 @@ public sealed class RoslynkSettings
 	/// <summary>Seconds a solution-scoped tool waits for an initial load; absent means 30 seconds.</summary>
 	public double? LoadWaitSeconds { get; set; }
 
+	/// <summary>Seconds one plugin's startup (load through subscription) is budgeted; absent means 30 seconds.</summary>
+	public double? PluginStartupTimeout { get; set; }
+
 	/// <summary>Minutes a solution may sit unused before eviction; absent means 30, zero or less disables eviction.</summary>
 	public double? IdleEvictionMinutes { get; set; }
 
@@ -72,6 +75,10 @@ public sealed class RoslynkSettings
 
 	/// <summary>The configured load wait as the engine's plain value.</summary>
 	public LoadWaitTimeout EffectiveLoadWaitTimeout => new(EffectiveLoadWaitSeconds);
+
+	/// <summary>The configured per-plugin startup budget, or 30 seconds when absent; negative values clamp to zero.</summary>
+	public TimeSpan EffectivePluginStartupTimeout =>
+		TimeSpan.FromSeconds(Math.Max(0, PluginStartupTimeout ?? 30));
 
 	/// <summary>The configured idle window, or 30 minutes when absent; zero or less disables eviction.</summary>
 	public TimeSpan EffectiveIdleEvictionTimeout =>

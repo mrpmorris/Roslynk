@@ -32,4 +32,9 @@
 		<PackageReference Include="ModelContextProtocol" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<!-- The contract package the host implements and loads plugins against. -->
+		<ProjectReference Include="..\..\Plugins\Morris.Roslynk.Plugins.Abstractions\Morris.Roslynk.Plugins.Abstractions.csproj" />
+	</ItemGroup>
+
 </Project>

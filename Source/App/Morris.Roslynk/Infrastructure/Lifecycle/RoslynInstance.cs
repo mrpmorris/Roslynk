@@ -40,6 +40,8 @@ public sealed class RoslynInstance : IDisposable
 	private readonly Channel<WorkItem> Work = Channel.CreateUnbounded<WorkItem>(new UnboundedChannelOptions { SingleReader = true, SingleWriter = false });
 	private readonly CancellationTokenSource Shutdown = new();
 	private readonly Task Consumer;
+	private ISolutionPublicationListener? PublicationListener;
+	private volatile bool ClosedField;
 
 	private readonly Lock RebuildGate = new();
 	private Task RebuildInFlight = Task.CompletedTask;
@@ -75,6 +77,9 @@ public sealed class RoslynInstance : IDisposable
 
 	/// <summary>When the instance was last handed out, used by the registry to idle-evict unused solutions.</summary>
 	private int EnqueuedWritesField;
+
+	/// <summary>True once the instance was closed (idle eviction, a dirty-reload replacement, or disposal); a closed instance is never in the registry again.</summary>
+	internal bool IsClosed => ClosedField;
 
 	/// <summary>Writes enqueued so far (lets tests order a write against one already queued).</summary>
 	internal int EnqueuedWrites => Volatile.Read(ref EnqueuedWritesField);
@@ -135,7 +140,7 @@ public sealed class RoslynInstance : IDisposable
 			SolutionSnapshot? holder = Volatile.Read(ref SolutionSnapshotField);
 			return holder is null
 				|| !ReferenceEquals(holder.Solution, current)
-				|| holder.Tasks.Count == 0;
+				|| holder.Tasks.Values.All(task => !SolutionSnapshot.IsReusable(task));
 		}
 	}
 
@@ -396,14 +401,6 @@ public sealed class RoslynInstance : IDisposable
 	}
 
 	/// <summary>
-	/// The snapshot-bound computation for one analyzer mode: the first request creates the task and starts
-	/// the work, later requests join the same task in flight or receive the completed result. The compute
-	/// runs with <see cref="CancellationToken.None"/> — one caller giving up must not cancel a shared
-	/// computation — and a faulted or cancelled slot is cleared so the next request starts afresh. The
-	/// entry holds the <see cref="Solution"/> it is keyed to; as a <see cref="ConditionalWeakTable"/>
-	/// value it dies with the snapshot, matching the decided retention policy.
-	/// </summary>
-	/// <summary>
 	/// One publication's diagnostics state: the solution it was built from, a reusable computation task
 	/// per project, and the Razor diagnostics captured when it was published. Replaced at every
 	/// publication; tasks keyed by project instance carry forward wherever the project object is
@@ -468,6 +465,14 @@ public sealed class RoslynInstance : IDisposable
 	}
 
 	/// <summary>
+	/// Sets the publication listener, which every subsequent model swap notifies (the plugin host's
+	/// solution-event pump). Call once, before <see cref="BeginInitialLoad"/> — the same thread that
+	/// created the instance, so no publication can race the assignment.
+	/// </summary>
+	internal void SetPublicationListener(ISolutionPublicationListener listener) =>
+		PublicationListener = listener;
+
+	/// <summary>
 	/// Starts the initial background load. The model stays <see cref="SolutionStatus.Building"/> with no
 	/// snapshot until the workspace loads, then flips to <see cref="SolutionStatus.Ready"/>; a load failure
 	/// flips it to <see cref="SolutionStatus.Faulted"/>. <paramref name="onReady"/> runs once the snapshot
@@ -479,6 +484,10 @@ public sealed class RoslynInstance : IDisposable
 			throw new ArgumentNullException(nameof(loader));
 		if (onReady is null)
 			throw new ArgumentNullException(nameof(onReady));
+
+		// The initial Building state never passes through Swap (the constructor assigned the model
+		// directly), so the in-flight load is published to the event pump here, before the load runs.
+		Volatile.Read(ref PublicationListener)?.OnPublished(Key, CurrentModel, CurrentModel);
 
 		var tracker = new ProjectLoadTracker();
 		Volatile.Write(ref LoadTrackerField, tracker);
@@ -691,11 +700,17 @@ public sealed class RoslynInstance : IDisposable
 		Volatile.Write(ref SolutionSnapshotField, new SolutionSnapshot(model.Solution, previous, razor));
 	}
 
-	private void Swap(SolutionModel model) => Volatile.Write(ref CurrentModelField, model);
+	private void Swap(SolutionModel model)
+	{
+		SolutionModel previous = CurrentModelField;
+		Volatile.Write(ref CurrentModelField, model);
+		Volatile.Read(ref PublicationListener)?.OnPublished(Key, model, previous);
+	}
 
 
 	public void Dispose()
 	{
+		ClosedField = true;
 		Work.Writer.TryComplete();
 		Shutdown.Cancel();
 		DisposeWatcher(close: true);

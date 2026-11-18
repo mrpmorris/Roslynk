@@ -1,5 +1,9 @@
 # Releases
 
+## Unreleased
+
+- Plugins: independently developed extensions run inside the daemon, share its in-memory solution snapshots and expose their tools through the same MCP connection, prefixed `{plugin}__{tool}`. The contract ships as `Morris.Roslynk.Plugins.Abstractions` — a plugin claims its factory with `[assembly: PluginFactory<T>]` where `T : IPluginFactory` with a `static abstract Create`, so wrong shapes are compile errors in the plugin author's build; `roslynk plugin add|remove|list` deploy, remove and report loaded plugins, and every load failure is an error-severity OpenTelemetry record naming its stage (Fixes #199)
+
 ## 3.0.0
 
 - Target .NET 11, update compatible dependencies, and support newer MSBuild binary logs (Fixes #205)
